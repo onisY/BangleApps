@@ -1,0 +1,50 @@
+{
+  "id": "actremplus",
+  "name": "Activity Reminder+",
+  "shortName": "ActRem+",
+  "author": "onisY",
+  "description": "Activity reminder with selectable step or barometric stair-climb tracking",
+  "version": "0.01",
+  "type": "app",
+  "tags": "tool,activity,health",
+  "supports": [
+    "BANGLEJS2"
+  ],
+  "storage": [
+    {
+      "name": "actremplus.app.js",
+      "url": "app.js"
+    },
+    {
+      "name": "actremplus.boot.js",
+      "url": "boot.js"
+    },
+    {
+      "name": "actremplus.settings.js",
+      "url": "settings.js"
+    },
+    {
+      "name": "actremplus.alert.js",
+      "url": "alert.js"
+    },
+    {
+      "name": "actremplus",
+      "url": "lib.js"
+    },
+    {
+      "name": "actremplus.stairs",
+      "url": "stairs.js"
+    }
+  ],
+  "data": [
+    {
+      "name": "actremplus.s.json"
+    },
+    {
+      "name": "actremplus.data.json",
+      "storageFile": true
+    }
+  ],
+  "icon": "app.png",
+  "readme": "README.md"
+}
