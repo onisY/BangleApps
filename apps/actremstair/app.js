@@ -20,26 +20,29 @@
   }
 
   function drawInfo() {
+    settings = activityreminder.loadSettings();
     var health = Bangle.getHealthStatus("day");
     var raw = rawDelta(data.stepsOnDate, health.steps);
     var effective = Math.max(0, raw + data.stairCorrection);
-    var h = 16;
-    var y = 28;
+    var eqPerM = activityreminder.getStairStepPerMeter(settings);
+    var h = 15;
+    var y = 27;
 
     g.setColor(g.theme.fg);
     g.setFont("Vector", h);
     g.setFontAlign(-1, -1);
 
     g.drawString("Current Cycle", 8, y);
-    y += 22;
-    drawData("Start", getHoursMins(data.stepsDate), y); y += 20;
-    drawData("Activity eq", Math.round(effective) + "/" + settings.minSteps, y); y += 20;
-    drawData("Raw steps", raw, y); y += 20;
-    drawData("Stair rise", data.stairHeightCycle.toFixed(1) + "m", y); y += 20;
-    drawData("Today stairs", data.stairHeightDay.toFixed(1) + "m", y);
+    y += 20;
+    drawData("Start", getHoursMins(data.stepsDate), y); y += 18;
+    drawData("Activity eq", Math.round(effective) + "/" + settings.minSteps, y); y += 18;
+    drawData("Raw steps", raw, y); y += 18;
+    drawData("Stair rise", data.stairHeightCycle.toFixed(1) + "m", y); y += 18;
+    drawData("Today stairs", data.stairHeightDay.toFixed(1) + "m", y); y += 18;
+    drawData("Eq/m", eqPerM.toFixed(1), y);
 
     g.setFont("6x8", 1).setFontAlign(0, 1);
-    g.drawString("Stairs replace their raw steps", W / 2, g.getHeight() - 3);
+    g.drawString("Stair ascent replaces its raw steps", W / 2, g.getHeight() - 3);
   }
 
   function run() {
