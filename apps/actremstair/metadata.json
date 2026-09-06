@@ -1,0 +1,25 @@
+{
+  "id": "actremstair",
+  "name": "Activity Reminder +stair",
+  "shortName": "ActRem +stair",
+  "author": "onisY",
+  "description": "Activity Reminder with automatic stair-climb detection. Flat walking counts as normal steps. During detected stair ascent, raw stair steps are replaced by a barometric height-to-step equivalent.",
+  "version": "0.01",
+  "type": "app",
+  "tags": "tool,activity,health",
+  "supports": ["BANGLEJS2"],
+  "readme": "README.md",
+  "storage": [
+    {"name": "actremstair.app.js", "url": "app.js"},
+    {"name": "actremstair.boot.js", "url": "boot.js"},
+    {"name": "actremstair.settings.js", "url": "settings.js"},
+    {"name": "actremstair.alert.js", "url": "alert.js"},
+    {"name": "actremstair", "url": "lib.js"},
+    {"name": "actremstair.stairs", "url": "stairs.js"},
+    {"name": "actremstair.img", "url": "app-icon.js", "evaluate": true}
+  ],
+  "data": [
+    {"name": "actremstair.s.json"},
+    {"name": "actremstair.data.json", "storageFile": true}
+  ]
+}
