@@ -1,0 +1,5 @@
+0.01: Forked from LCARS Clock 0.34 as LCARSi.
+0.01: Added iOS Integration and Weather app dependencies.
+0.01: Weather data now comes from the official Weather module, enabling the
+      iOS BangleDumpWeather -> ANCS -> iOS Integration -> Weather path.
+0.01: Renamed app/settings IDs to lcarsi so LCARS and LCARSi can coexist.
