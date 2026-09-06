@@ -1,4 +1,11 @@
 exports.loadSettings = function () {
+  var stored = require("Storage").readJSON("actremstair.s.json", true) || {};
+
+  // v0.01 migration: if the user changed the old direct steps/m value,
+  // preserve it as the new base calibration value.
+  if (stored.stairStepPerMeter !== undefined && stored.stairBaseStepPerMeter === undefined)
+    stored.stairBaseStepPerMeter = stored.stairStepPerMeter;
+
   return Object.assign({
     enabled: true,
     startHour: 9,
@@ -9,14 +16,35 @@ exports.loadSettings = function () {
     minSteps: 50,
     tempThreshold: 27,
     unlock: false,
-    stairStepPerMeter: 28.6,
+
+    // Energy-equivalence model. 28.6 eq steps/m was the v0.01
+    // calibration at Walking MET=3.8 and Stair MET=6.8.
+    walkMet: 3.8,
+    stairMet: 6.8,
+    stairBaseStepPerMeter: 28.6,
+    baseWalkMet: 3.8,
+    baseStairMet: 6.8,
+
+    // Stair classifier
     stairMinRiseM: 1.5,
     stairStartRiseM: 0.6,
     stairDescentCloseM: 0.8,
     stairSampleSec: 2,
     stairMotionHoldSec: 10,
     stairMaxSpeedMps: 1.0
-  }, require("Storage").readJSON("actremstair.s.json", true) || {});
+  }, stored);
+};
+
+exports.getStairStepPerMeter = function (settings) {
+  var walkMet = Math.max(0.1, settings.walkMet || 3.8);
+  var stairMet = Math.max(0.1, settings.stairMet || 6.8);
+  var baseWalkMet = Math.max(0.1, settings.baseWalkMet || 3.8);
+  var baseStairMet = Math.max(0.1, settings.baseStairMet || 6.8);
+  var base = settings.stairBaseStepPerMeter || settings.stairStepPerMeter || 28.6;
+
+  // Preserve the original 28.6 steps/m calibration at the default METs,
+  // then scale the conversion by the relative MET ratio.
+  return base * (stairMet / baseStairMet) * (baseWalkMet / walkMet);
 };
 
 exports.writeSettings = function (settings) {
