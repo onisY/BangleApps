@@ -679,7 +679,7 @@ let getWeather = function(){
     };
 
     if (result.temp !== undefined)
-      result.temp = locale.temp(result.temp-273.15).replace('°', '\\'');
+      result.temp = locale.temp(result.temp-273.15).replace("°", "'");
     else result.temp = " ? ";
 
     result.hum = result.hum !== undefined ? result.hum + "%" : " ? ";
