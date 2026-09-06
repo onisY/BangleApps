@@ -4,6 +4,10 @@ A Bangle.js 2 modification of Activity Reminder that automatically combines flat
 
 Based on the original Activity Reminder by Stiralbios in espruino/BangleApps.
 
+## Important before installing
+
+Do not run the original **Activity Reminder** and **Activity Reminder +stair** at the same time, because both install background reminder code and could generate duplicate checks/alerts. Disable or uninstall the original Activity Reminder before enabling this version.
+
 ## Behaviour
 
 There is no Steps/Stairs mode switch.
@@ -46,10 +50,12 @@ Because it uses barometric altitude, this version supports Bangle.js 2 only.
 
 ## Installation from this fork
 
-If GitHub Pages is enabled for this BangleApps fork, open:
+Enable GitHub Pages for this BangleApps fork if it is not already enabled, then open:
 
 https://onisY.github.io/BangleApps/
 
-Search for Activity Reminder +stair and install it.
+Search for **Activity Reminder +stair**, connect your Bangle.js 2, and press Install.
+
+After installation, restart the watch so the bootloader includes the new background `.boot.js` code.
 
 For Web IDE development, use Save on Send = RAM. Do not use Flash.
