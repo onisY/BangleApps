@@ -1,1 +1,2 @@
+0.02: Add editable Walking MET and Stair MET values, preserve a separate base steps/m calibration, derive stair-equivalent steps/m from the MET ratio, migrate v0.01 custom conversion, and ensure only ascent steps up to the detected high point are replaced.
 0.01: Initial version. Automatic barometric stair detection and substitution of stair raw steps with height-equivalent steps.
