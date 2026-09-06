@@ -12,6 +12,7 @@ exports.start = function (settings, data, saveData, isDuringAlertHours, isNotWor
   var baseAlt;
   var highAlt;
   var startRaw;
+  var highRaw;
   var lastAlt;
   var lastAltMs = 0;
 
@@ -22,6 +23,13 @@ exports.start = function (settings, data, saveData, isDuringAlertHours, isNotWor
 
   function getRawSteps() {
     return Bangle.getHealthStatus("day").steps;
+  }
+
+  function currentEqStepsPerMeter() {
+    // Read current MET values from Storage so later changes in Settings
+    // immediately affect new/live stair credit without requiring a reinstall.
+    var AR = require("actremstair");
+    return AR.getStairStepPerMeter(AR.loadSettings());
   }
 
   function median3(a) {
@@ -41,12 +49,13 @@ exports.start = function (settings, data, saveData, isDuringAlertHours, isNotWor
     baseAlt = undefined;
     highAlt = undefined;
     startRaw = undefined;
+    highRaw = undefined;
   }
 
   function addCommittedRise(rise, stairRaw) {
     if (rise < settings.stairMinRiseM) return;
 
-    var equivalent = rise * settings.stairStepPerMeter;
+    var equivalent = rise * currentEqStepsPerMeter();
     data.stairCorrection += equivalent - stairRaw;
     data.stairHeightCycle += rise;
     data.stairRawStepsCycle += stairRaw;
@@ -60,14 +69,17 @@ exports.start = function (settings, data, saveData, isDuringAlertHours, isNotWor
     saveData();
   }
 
-  function commitCandidate(rawNow) {
-    if (!candidate || !confirmed || baseAlt === undefined || highAlt === undefined || startRaw === undefined)
+  function commitCandidate() {
+    if (!candidate || !confirmed || baseAlt === undefined || highAlt === undefined ||
+        startRaw === undefined || highRaw === undefined)
       return false;
 
     var rise = highAlt - baseAlt;
     if (rise < settings.stairMinRiseM) return false;
 
-    addCommittedRise(rise, rawDelta(startRaw, rawNow));
+    // Only replace steps recorded up to the highest point. Steps taken after
+    // the top (descent or flat walking) remain ordinary walking steps.
+    addCommittedRise(rise, rawDelta(startRaw, highRaw));
     return true;
   }
 
@@ -106,6 +118,7 @@ exports.start = function (settings, data, saveData, isDuringAlertHours, isNotWor
         baseAlt = stableAlt;
         highAlt = f;
         startRaw = stableRaw;
+        highRaw = rawNow;
       } else {
         stableAlt = 0.75 * stableAlt + 0.25 * f;
         stableRaw = rawNow;
@@ -113,7 +126,10 @@ exports.start = function (settings, data, saveData, isDuringAlertHours, isNotWor
       return;
     }
 
-    if (f > highAlt) highAlt = f;
+    if (f > highAlt) {
+      highAlt = f;
+      highRaw = rawNow;
+    }
 
     if (!confirmed && highAlt - baseAlt >= settings.stairMinRiseM)
       confirmed = true;
@@ -124,7 +140,7 @@ exports.start = function (settings, data, saveData, isDuringAlertHours, isNotWor
     }
 
     if (confirmed && highAlt - f >= settings.stairDescentCloseM) {
-      commitCandidate(rawNow);
+      commitCandidate();
       resetCandidate(f, rawNow);
     }
   }
@@ -141,10 +157,8 @@ exports.start = function (settings, data, saveData, isDuringAlertHours, isNotWor
       stopTimer = undefined;
     }
 
-    if (commit && confirmed) {
-      var rawNow = getRawSteps();
-      commitCandidate(rawNow);
-    }
+    if (commit && confirmed)
+      commitCandidate();
 
     baroOn = false;
     Bangle.setBarometerPower(false, APPID);
@@ -157,6 +171,7 @@ exports.start = function (settings, data, saveData, isDuringAlertHours, isNotWor
     baseAlt = undefined;
     highAlt = undefined;
     startRaw = undefined;
+    highRaw = undefined;
     lastAlt = undefined;
     lastAltMs = 0;
   }
@@ -207,23 +222,24 @@ exports.start = function (settings, data, saveData, isDuringAlertHours, isNotWor
     if (!baroOn) startBarometer();
   }
 
-  function getLiveCorrection(rawNow) {
-    if (!candidate || !confirmed || baseAlt === undefined || highAlt === undefined || startRaw === undefined)
+  function getLiveCorrection() {
+    if (!candidate || !confirmed || baseAlt === undefined || highAlt === undefined ||
+        startRaw === undefined || highRaw === undefined)
       return 0;
 
     var rise = highAlt - baseAlt;
-    var equivalent = rise * settings.stairStepPerMeter;
-    return equivalent - rawDelta(startRaw, rawNow);
+    var equivalent = rise * currentEqStepsPerMeter();
+    return equivalent - rawDelta(startRaw, highRaw);
   }
 
   function getEffectiveSteps(rawNow, cycleRawStart) {
     var raw = rawDelta(cycleRawStart, rawNow);
-    return raw + data.stairCorrection + getLiveCorrection(rawNow);
+    return raw + data.stairCorrection + getLiveCorrection();
   }
 
   function closeForCycleReset(rawNow) {
     if (candidate && confirmed)
-      commitCandidate(rawNow);
+      commitCandidate();
 
     if (lastAlt !== undefined) resetCandidate(lastAlt, rawNow);
     else resetCandidate(undefined, rawNow);
