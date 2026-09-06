@@ -5,20 +5,39 @@
   "icon": "app.png",
   "version": "0.01",
   "readme": "README.md",
-  "supports": ["BANGLEJS2"],
+  "supports": [
+    "BANGLEJS2"
+  ],
   "description": "LCARS Clock adapted for iPhone/iOS using the official iOS Integration and Weather apps.",
   "type": "clock",
   "tags": "clock,ios,apple,weather",
   "author": "peerdavid; iOS adaptation by onisY",
   "dependencies": {
     "ios": "app",
-    "weather": "app"
+    "weather": "app",
+    "messages": "module",
+    "mylocation": "app",
+    "sched": "module"
   },
   "allow_emulator": true,
   "storage": [
-    {"name":"lcarsi.app.js","url":"app.js"},
-    {"name":"lcarsi.img","url":"icon.js","evaluate":true},
-    {"name":"lcarsi.settings.js","url":"settings.js"}
+    {
+      "name": "lcarsi.app.js",
+      "url": "app.js"
+    },
+    {
+      "name": "lcarsi.img",
+      "url": "icon.js",
+      "evaluate": true
+    },
+    {
+      "name": "lcarsi.settings.js",
+      "url": "settings.js"
+    }
   ],
-  "data":[{"name":"lcarsi.setting.json"}]
+  "data": [
+    {
+      "name": "lcarsi.setting.json"
+    }
+  ]
 }
