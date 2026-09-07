@@ -58,3 +58,13 @@ Default location: Tokyo / Tokyo.
 - Prefecture and place are shown as two right-aligned lines at the lower-right.
 - Earth size can now be increased up to 40 px radius.
 - The Moon orbit expands with Earth and Moon size so it remains outside the Earth.
+
+
+## Version 0.08 day/night and hold controls
+
+- Earth now uses the same day/night hemisphere style as the Moon: the Sun-facing half is light blue, the far half is black, and the whole Earth keeps a light-blue outline.
+- The top header background is green only at the real current time. Any manually shifted time or lunar-event time uses a red background.
+- Holding the left edge continuously moves the displayed scene backward one hour at a time and redraws after every step.
+- Holding the right edge continuously moves the displayed scene forward one hour at a time and redraws after every step.
+- A short edge tap still moves only one hour.
+- Releasing the finger stops the continuous time movement.
