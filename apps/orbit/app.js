@@ -1,6 +1,5 @@
 (function () {
   var Storage = require("Storage");
-  var LOCS = require("orbitloc").prefs;
   var FILE = "orbit.json";
   var W = g.getWidth(), H = g.getHeight();
   var PI = Math.PI, TAU = PI*2, RAD = PI/180;
@@ -13,19 +12,18 @@
   var MOON_ORBIT_R = 29;
   var SLIDER_X0 = 10, SLIDER_X1 = W-10, SLIDER_Y = H-8;
 
-  var def = {pref:12,place:0,sunSize:10,earthSize:12,moonSize:6,markerSize:2};
+  var def = {
+    locPref:"Tokyo",locName:"Tokyo",lat:35.681,lon:139.767,
+    sunSize:10,earthSize:12,moonSize:6,markerSize:2
+  };
   var settings = Storage.readJSON(FILE,1) || {};
   Object.keys(def).forEach(function(k){ if (settings[k]===undefined) settings[k]=def[k]; });
-  if (settings.pref<0 || settings.pref>=LOCS.length) settings.pref=12;
-  if (settings.place<0 || settings.place>=LOCS[settings.pref][1].length) settings.place=0;
-
-  var place = LOCS[settings.pref][1][settings.place];
-  var loc = {name:place[0],lat:place[1],lon:place[2],pref:LOCS[settings.pref][0]};
+  var loc = {name:settings.locName,lat:settings.lat,lon:settings.lon,pref:settings.locPref};
 
   var C = {bg:"#000",fg:"#fff",sun:"#f22",flare:"#f80",earth:"#5cf",earthEdge:"#9ef",
            marker:"#f00",horizon:"#a4f",moon:"#fd4",orbit:"#555",rise:"#ff0",set:"#f80",
            noon:"#ccc",penumbra:"#631",slider:"#777"};
-  var events = [], sliderIndex = 0, dragActive = false, tickTimer;
+  var events = null, sliderIndex = 0, dragActive = false, tickTimer;
 
   function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
   function norm(a){a%=TAU;return a<0?a+TAU:a;}
@@ -178,7 +176,7 @@
   }
 
   function drawSlider(){
-    var n=events.length,frac=n?sliderIndex/n:0;
+    var n=events?events.length:0,frac=n?sliderIndex/n:0;
     var x=Math.round(SLIDER_X0+frac*(SLIDER_X1-SLIDER_X0));
     g.setColor(C.slider).drawLine(SLIDER_X0,SLIDER_Y,SLIDER_X1,SLIDER_Y);
     g.drawLine(SLIDER_X0,SLIDER_Y-3,SLIDER_X0,SLIDER_Y+3);
@@ -206,6 +204,7 @@
   }
 
   function setSliderFromX(x){
+    if(!events) generateEvents();
     if(!events.length){sliderIndex=0;draw();return;}
     var idx=Math.round(clamp((x-SLIDER_X0)/(SLIDER_X1-SLIDER_X0),0,1)*events.length);
     if(idx!==sliderIndex){sliderIndex=idx;draw();}
@@ -238,6 +237,5 @@
   Bangle.on("lcdPower",onLCD);
 
   draw();
-  setTimeout(function(){generateEvents();draw();},30);
   queueTick();
 })();
