@@ -36,7 +36,7 @@
       },
       "Selected":function(){applyLocation();E.showAlert(s.locPref+"\n"+s.locName,"Orbit location").then(show);},
       "Sun size":{value:s.sunSize,min:6,max:15,step:1,onchange:function(v){s.sunSize=v;save();}},
-      "Earth size":{value:s.earthSize,min:8,max:24,step:1,onchange:function(v){s.earthSize=v;save();}},
+      "Earth size":{value:s.earthSize,min:8,max:40,step:1,onchange:function(v){s.earthSize=v;save();}},
       "Moon size":{value:s.moonSize,min:3,max:9,step:1,onchange:function(v){s.moonSize=v;save();}},
       "Marker size":{value:s.markerSize,min:1,max:4,step:1,onchange:function(v){s.markerSize=v;save();}}
     });
