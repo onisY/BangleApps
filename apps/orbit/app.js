@@ -1,3 +1,4 @@
+try {
 (function () {
   var Storage = require("Storage");
   var FILE = "orbit.json";
@@ -239,3 +240,13 @@
   draw();
   queueTick();
 })();
+
+} catch (e) {
+  try { require("Storage").write("orbit.err", String(e)); } catch (x) {}
+  try {
+    g.reset().clear();
+    g.setFont("6x8",2).setFontAlign(0,0).drawString("Orbit error",g.getWidth()/2,65);
+    g.setFont("6x8",1).drawString(String(e).substr(0,42),g.getWidth()/2,90);
+    Bangle.setUI({mode:"clock"});
+  } catch (x2) {}
+}
