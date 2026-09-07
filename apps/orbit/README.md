@@ -39,3 +39,11 @@ Default location: Tokyo / Tokyo.
 - Time/battery header: every minute.
 - Sun/Earth/Moon geometry: every five minutes.
 - LCD off: timers are suspended.
+
+## Version 0.06 display changes
+
+- Corrects the observer marker using local apparent solar time, including longitude offset from the JST meridian and equation of time.
+- Enlarges the top date/time/battery text to 2x system font and splits it across two rows.
+- Raises the event slider for easier finger dragging.
+- Earth radius can be set up to 24 px (twice the original 12 px default).
+- Moon orbit radius expands automatically with Earth/Moon sizes so the Moon remains outside the Earth with a 10 px gap.
