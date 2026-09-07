@@ -35,7 +35,8 @@ try {
            marker:"#f00",horizon:"#a4f",moon:"#fd4",orbit:"#555",rise:"#ff0",set:"#f80",
            noon:"#ccc",penumbra:"#631",slider:"#777",nowBg:"#0f0",shiftBg:"#f00",zenith:"#0f0"};
   var events = null, sliderIndex = 0, dragActive = false, tickTimer, timeOffsetMs = 0, lastCenterTap = 0;
-  var holdTimer, holdDir = 0, lastLeftTap = 0, lastRightTap = 0;
+  var holdTimer, holdStartTimer, holdDir = 0, edgeDownDir = 0, edgeDownAt = 0;
+  var edgeTapTimer, pendingEdgeDir = 0;
   var interactive = false, idleTimer;
 
   function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
@@ -48,7 +49,7 @@ try {
     return y>=2019 ? "R"+(y-2018) : ""+y;
   }
   function headerText(d){
-    return eraYear(d)+"/"+f2(d.getMonth()+1)+"/"+f2(d.getDate())+" "+f2(d.getHours())+":"+f2(d.getMinutes())+" B"+E.getBattery()+"%";
+    return eraYear(d)+"/"+f2(d.getMonth()+1)+"/"+f2(d.getDate())+" "+f2(d.getHours())+":"+f2(d.getMinutes())+" \u2022"+E.getBattery();
   }
   var FONT3={
     "0":[7,5,5,5,5,5,7],"1":[2,6,2,2,2,2,7],"2":[7,1,1,7,4,4,7],
@@ -333,12 +334,12 @@ try {
   function goIdle(){
     if(idleTimer){ clearTimeout(idleTimer); idleTimer=undefined; }
     stopHold();
+    cancelPendingEdgeTap();
+    edgeDownDir=0;
     interactive=false;
     sliderIndex=0;
     timeOffsetMs=0;
     lastCenterTap=0;
-    lastLeftTap=0;
-    lastRightTap=0;
     try { Bangle.setBacklight(false); } catch(e) {}
     try { Bangle.setLocked(true); } catch(e) {}
     draw();
@@ -355,26 +356,88 @@ try {
     timeOffsetMs += dir*3600000;
     draw();
   }
+  function cancelPendingEdgeTap(){
+    if(edgeTapTimer){ clearTimeout(edgeTapTimer); edgeTapTimer=undefined; }
+    pendingEdgeDir=0;
+  }
   function stopHold(){
     holdDir=0;
+    if(holdStartTimer){ clearTimeout(holdStartTimer); holdStartTimer=undefined; }
     if(holdTimer){ clearTimeout(holdTimer); holdTimer=undefined; }
   }
   function repeatHold(){
-    if(!holdDir)return;
+    if(!holdDir || edgeDownDir!==holdDir) return;
+    // Safety valve: never allow a lost release event to fast-forward forever.
+    if(Date.now()-edgeDownAt>30000){
+      stopHold();
+      edgeDownDir=0;
+      return;
+    }
     armIdle();
     stepHour(holdDir);
-    holdTimer=setTimeout(repeatHold,220);
+    holdTimer=setTimeout(repeatHold,700);
   }
   function startHold(dir){
-    startInteraction();
+    if(edgeDownDir!==dir) return;
+    cancelPendingEdgeTap();
     stopHold();
     holdDir=dir;
+    armIdle();
     stepHour(dir);
-    holdTimer=setTimeout(repeatHold,450);
+    holdTimer=setTimeout(repeatHold,700);
+  }
+  function beginEdgePress(dir,isLong){
+    startInteraction();
+    edgeDownDir=dir;
+    edgeDownAt=Date.now();
+    stopHold();
+    if(isLong){
+      startHold(dir);
+    } else {
+      holdStartTimer=setTimeout(function(){
+        holdStartTimer=undefined;
+        startHold(dir);
+      },520);
+    }
+  }
+  function finishEdgePress(){
+    var dir=edgeDownDir;
+    var wasHolding=!!holdDir;
+    edgeDownDir=0;
+    stopHold();
+    if(!dir || wasHolding) return;
+    registerEdgeTap(dir);
+  }
+  function registerEdgeTap(dir){
+    armIdle();
+    if(pendingEdgeDir===dir && edgeTapTimer){
+      clearTimeout(edgeTapTimer);
+      edgeTapTimer=undefined;
+      pendingEdgeDir=0;
+      timeOffsetMs += dir*DAY;
+      draw();
+      return;
+    }
+    if(pendingEdgeDir && edgeTapTimer){
+      var oldDir=pendingEdgeDir;
+      clearTimeout(edgeTapTimer);
+      edgeTapTimer=undefined;
+      pendingEdgeDir=0;
+      stepHour(oldDir);
+    }
+    pendingEdgeDir=dir;
+    edgeTapTimer=setTimeout(function(){
+      edgeTapTimer=undefined;
+      var d=pendingEdgeDir;
+      pendingEdgeDir=0;
+      if(d) stepHour(d);
+    },420);
   }
 
   function setSliderFromX(x){
     startInteraction();
+    cancelPendingEdgeTap();
+    edgeDownDir=0;
     stopHold();
     if(!events) generateEvents();
     if(!events.length){sliderIndex=0;draw();return;}
@@ -385,50 +448,41 @@ try {
     if(e.b) armIdle();
     if(!e.b){
       dragActive=false;
-      stopHold();
+      finishEdgePress();
       return;
     }
     if(dragActive || e.y>=H-44){
+      edgeDownDir=0;
       stopHold();
       dragActive=true;
       setSliderFromX(e.x);
       return;
     }
-    if(holdDir){
-      if((holdDir<0 && e.x>=W*0.35) || (holdDir>0 && e.x<=W*0.65)) stopHold();
+    if(edgeDownDir){
+      if((edgeDownDir<0 && e.x>=W*0.35) || (edgeDownDir>0 && e.x<=W*0.65)){
+        edgeDownDir=0;
+        stopHold();
+      }
     }
-  }
-  function edgePress(dir){
-    var now=Date.now();
-    var last=dir<0?lastLeftTap:lastRightTap;
-    if(now-last<420){
-      stopHold();
-      // First tap already moved one hour; add 23 more so the pair equals one day.
-      timeOffsetMs += dir*23*3600000;
-      if(dir<0) lastLeftTap=0; else lastRightTap=0;
-      draw();
-      return;
-    }
-    if(dir<0) lastLeftTap=now; else lastRightTap=now;
-    startHold(dir);
   }
 
   function onTouch(zone,e){
     if(!e)return;
     startInteraction();
     if(e.y>=H-44){
-      stopHold();
       setSliderFromX(e.x);
       return;
     }
     if(e.x<W*0.28){
-      edgePress(-1);
+      beginEdgePress(-1,e.type===2);
       return;
     }
     if(e.x>W*0.72){
-      edgePress(1);
+      beginEdgePress(1,e.type===2);
       return;
     }
+    cancelPendingEdgeTap();
+    edgeDownDir=0;
     stopHold();
     var now=Date.now();
     if(now-lastCenterTap<450){
@@ -470,6 +524,8 @@ try {
   }
   function cleanup(){
     stopHold();
+    cancelPendingEdgeTap();
+    edgeDownDir=0;
     if(idleTimer)clearTimeout(idleTimer);
     if(tickTimer)clearTimeout(tickTimer);
     Bangle.removeListener("drag",onDrag);
