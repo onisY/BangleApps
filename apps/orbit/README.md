@@ -135,3 +135,21 @@ Default location: Tokyo / Tokyo.
 - Moon visibility uses the lunar upper limb, so a partially risen Moon counts as geometrically visible.
 - Daylight is not a visibility veto: if the Moon is geometrically above the local horizon in daytime, the white observer-to-Moon line is drawn.
 - Atmospheric refraction, local mountains/buildings and weather are not included.
+
+
+## Version 0.16 automatic and manual location modes
+
+Orbit settings now provide two location modes:
+
+- **Place**: choose a prefecture and place. Orbit automatically stores that place's latitude, longitude and elevation together.
+- **Manual**: directly edit latitude, longitude and elevation without using the place list.
+
+The offline place table now contains latitude, longitude and DEM elevation for all 141 stored Japanese locations. The watch does not need network access to use these values.
+
+Tokyo entries are:
+
+- Chiyoda-ku: 35.694 N, 139.754 E, 16 m
+- Machida-shi: 35.547 N, 139.439 E, 83 m
+- Okutama-machi: 35.809 N, 139.096 E, 337 m
+
+Manual mode stores the final selected values in `orbit.json` as `Manual / Custom`, and the Moon-horizon calculation uses those manual values exactly.
