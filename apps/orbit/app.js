@@ -33,8 +33,9 @@ try {
 
   var C = {bg:"#000",fg:"#fff",sun:"#f22",flare:"#f80",earth:"#5cf",earthEdge:"#9ef",
            marker:"#f00",horizon:"#a4f",moon:"#fd4",orbit:"#555",rise:"#ff0",set:"#f80",
-           noon:"#ccc",penumbra:"#631",slider:"#777"};
+           noon:"#ccc",penumbra:"#631",slider:"#777",nowBg:"#0f0",shiftBg:"#f00"};
   var events = null, sliderIndex = 0, dragActive = false, tickTimer, timeOffsetMs = 0, lastCenterTap = 0;
+  var holdTimer, holdDir = 0;
 
   function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
   function norm(a){a%=TAU;return a<0?a+TAU:a;}
@@ -157,8 +158,8 @@ try {
   }
 
   function drawHeader(date){
-    var ev=sliderIndex>0;
-    drawTallBoldString(headerText(date),1,ev?C.bg:C.fg,ev?C.fg:C.bg);
+    var isNow=(sliderIndex===0 && timeOffsetMs===0);
+    drawTallBoldString(headerText(date),1,isNow?C.bg:C.fg,isNow?C.nowBg:C.shiftBg);
   }
 
   function drawSun(){
@@ -188,8 +189,21 @@ try {
 
   function drawEarth(date,ref){
     var r=settings.earthSize;
-    g.setColor(C.earth).fillCircle(EX,EY,r);
+    var ux=SX-EX, uy=SY-EY, len=Math.sqrt(ux*ux+uy*uy)||1;
+    ux/=len; uy/=len;
+
+    // Night hemisphere black, Sun-facing hemisphere light blue.
+    g.setColor(C.bg).fillCircle(EX,EY,r);
+    g.setColor(C.earth);
+    var yy,xx,xmax;
+    for(yy=-r;yy<=r;yy++){
+      xmax=Math.floor(Math.sqrt(Math.max(0,r*r-yy*yy)));
+      for(xx=-xmax;xx<=xmax;xx++){
+        if(xx*ux+yy*uy>=0) g.setPixel(EX+xx,EY+yy);
+      }
+    }
     g.setColor(C.earthEdge).drawCircle(EX,EY,r);
+
     var ha=localSolarHourAngle(date);
     var a=ref.sunAng+ha;
     var d=r*Math.cos(loc.lat*RAD);
@@ -262,28 +276,65 @@ try {
     drawSlider();
   }
 
+  function stepHour(dir){
+    timeOffsetMs += dir*3600000;
+    draw();
+  }
+  function stopHold(){
+    holdDir=0;
+    if(holdTimer){ clearTimeout(holdTimer); holdTimer=undefined; }
+  }
+  function repeatHold(){
+    if(!holdDir)return;
+    stepHour(holdDir);
+    holdTimer=setTimeout(repeatHold,220);
+  }
+  function startHold(dir){
+    stopHold();
+    holdDir=dir;
+    stepHour(dir);
+    holdTimer=setTimeout(repeatHold,450);
+  }
+
   function setSliderFromX(x){
+    stopHold();
     if(!events) generateEvents();
     if(!events.length){sliderIndex=0;draw();return;}
     var idx=Math.round(clamp((x-SLIDER_X0)/(SLIDER_X1-SLIDER_X0),0,1)*events.length);
     if(idx!==sliderIndex){sliderIndex=idx;timeOffsetMs=0;draw();}
   }
   function onDrag(e){
-    if(e.b&&(dragActive||e.y>=H-44)){dragActive=true;setSliderFromX(e.x);}else if(!e.b)dragActive=false;
+    if(!e.b){
+      dragActive=false;
+      stopHold();
+      return;
+    }
+    if(dragActive || e.y>=H-44){
+      stopHold();
+      dragActive=true;
+      setSliderFromX(e.x);
+      return;
+    }
+    if(holdDir){
+      if((holdDir<0 && e.x>=W*0.35) || (holdDir>0 && e.x<=W*0.65)) stopHold();
+    }
   }
   function onTouch(zone,e){
     if(!e)return;
-    if(e.y>=H-44){ setSliderFromX(e.x); return; }
+    if(e.y>=H-44){
+      stopHold();
+      setSliderFromX(e.x);
+      return;
+    }
     if(e.x<W*0.28){
-      timeOffsetMs-=3600000;
-      draw();
+      startHold(-1);
       return;
     }
     if(e.x>W*0.72){
-      timeOffsetMs+=3600000;
-      draw();
+      startHold(1);
       return;
     }
+    stopHold();
     var now=Date.now();
     if(now-lastCenterTap<450){
       sliderIndex=0;
@@ -304,8 +355,9 @@ try {
       queueTick();
     },wait);
   }
-  function onLCD(on){if(on){draw();queueTick();}else if(tickTimer){clearTimeout(tickTimer);tickTimer=undefined;}}
+  function onLCD(on){if(on){draw();queueTick();}else{stopHold();if(tickTimer){clearTimeout(tickTimer);tickTimer=undefined;}}}
   function cleanup(){
+    stopHold();
     if(tickTimer)clearTimeout(tickTimer);
     Bangle.removeListener("drag",onDrag);
     Bangle.removeListener("touch",onTouch);
