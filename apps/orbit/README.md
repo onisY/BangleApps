@@ -87,3 +87,12 @@ Default location: Tokyo / Tokyo.
 - Moon illumination uses the same scanline method.
 - Lunar-eclipse penumbra/umbra are rendered with circle/scanline intersections instead of per-pixel distance tests.
 - These changes are intended to substantially improve redraw speed, especially with a large Earth setting.
+
+
+## Version 0.11 rendering optimization
+
+- The observer zenith line is green, 2 px thick, starts exactly at the red observer point, and extends outward away from Earth's centre.
+- Earth and Moon illuminated halves use scanline fills instead of per-pixel double loops.
+- Lunar-eclipse shadow intersections use scanline spans instead of testing every Moon pixel.
+- Sun and Moon astronomical positions are calculated once per frame and reused by all drawing stages.
+- These changes substantially reduce full-frame redraw work, especially while holding an edge to scrub time.
