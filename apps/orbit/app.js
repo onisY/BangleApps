@@ -25,7 +25,7 @@ try {
 
   var def = {
     locPref:"Tokyo",locName:"Tokyo",lat:35.681,lon:139.767,
-    sunSize:10,earthSize:12,moonSize:6,markerSize:2
+    sunSize:6,earthSize:30,moonSize:9,markerSize:2
   };
   var settings = Storage.readJSON(FILE,1) || {};
   Object.keys(def).forEach(function(k){ if (settings[k]===undefined) settings[k]=def[k]; });
@@ -35,7 +35,7 @@ try {
            marker:"#f00",horizon:"#a4f",moon:"#fd4",orbit:"#555",rise:"#ff0",set:"#f80",
            noon:"#ccc",penumbra:"#631",slider:"#777",nowBg:"#0f0",shiftBg:"#f00"};
   var events = null, sliderIndex = 0, dragActive = false, tickTimer, timeOffsetMs = 0, lastCenterTap = 0;
-  var holdTimer, holdDir = 0;
+  var holdTimer, holdDir = 0, lastLeftTap = 0, lastRightTap = 0;
 
   function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
   function norm(a){a%=TAU;return a<0?a+TAU:a;}
@@ -187,7 +187,7 @@ try {
     return {sunAng:sunAng,eq:eq};
   }
 
-  function drawEarth(date,ref){
+  function drawEarth(date,ref,moonOrbitR){
     var r=settings.earthSize;
     var ux=SX-EX, uy=SY-EY, len=Math.sqrt(ux*ux+uy*uy)||1;
     ux/=len; uy/=len;
@@ -211,6 +211,14 @@ try {
     var half=Math.sqrt(Math.max(0,r*r-d*d));
     var vx=-Math.sin(a),vy=Math.cos(a);
     g.setColor(C.horizon).drawLine(Math.round(px-half*vx),Math.round(py-half*vy),Math.round(px+half*vx),Math.round(py+half*vy));
+
+    // Local zenith: extend outward from Earth's centre through the observer marker.
+    var radial=Math.sqrt((px-EX)*(px-EX)+(py-EY)*(py-EY)) || 1;
+    var zx=(px-EX)/radial, zy=(py-EY)/radial;
+    var toOrbit=Math.max(4,moonOrbitR-radial);
+    var zenLen=2*toOrbit;
+    g.setColor(C.marker).drawLine(Math.round(px),Math.round(py),
+      Math.round(px+zx*zenLen),Math.round(py+zy*zenLen));
     g.setColor(C.marker).fillCircle(Math.round(px),Math.round(py),settings.markerSize);
   }
 
@@ -268,7 +276,7 @@ try {
     g.setColor(C.orbit).drawCircle(EX,EY,moonOrbitR);
     var ref=solarReference(date);
     drawSun();
-    drawEarth(date,ref);
+    drawEarth(date,ref,moonOrbitR);
     drawMoon(mx,my,date);
     g.setColor(C.fg).setFont("6x8",1).setFontAlign(1,0);
     g.drawString(loc.pref,W-3,H-43);
@@ -319,6 +327,21 @@ try {
       if((holdDir<0 && e.x>=W*0.35) || (holdDir>0 && e.x<=W*0.65)) stopHold();
     }
   }
+  function edgePress(dir){
+    var now=Date.now();
+    var last=dir<0?lastLeftTap:lastRightTap;
+    if(now-last<420){
+      stopHold();
+      // First tap already moved one hour; add 23 more so the pair equals one day.
+      timeOffsetMs += dir*23*3600000;
+      if(dir<0) lastLeftTap=0; else lastRightTap=0;
+      draw();
+      return;
+    }
+    if(dir<0) lastLeftTap=now; else lastRightTap=now;
+    startHold(dir);
+  }
+
   function onTouch(zone,e){
     if(!e)return;
     if(e.y>=H-44){
@@ -327,11 +350,11 @@ try {
       return;
     }
     if(e.x<W*0.28){
-      startHold(-1);
+      edgePress(-1);
       return;
     }
     if(e.x>W*0.72){
-      startHold(1);
+      edgePress(1);
       return;
     }
     stopHold();
