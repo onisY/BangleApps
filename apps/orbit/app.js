@@ -35,7 +35,7 @@ try {
            marker:"#f00",horizon:"#a4f",moon:"#fd4",orbit:"#555",rise:"#ff0",set:"#f80",
            noon:"#ccc",penumbra:"#631",slider:"#777",nowBg:"#0f0",shiftBg:"#f00",zenith:"#0f0"};
   var events = null, sliderIndex = 0, dragActive = false, tickTimer, timeOffsetMs = 0, lastCenterTap = 0;
-  var holdTimer, holdStartTimer, holdDir = 0, edgeDownDir = 0, edgeDownAt = 0;
+  var holdTimer, holdDir = 0, edgeDownDir = 0, edgeDownAt = 0;
   var edgeTapTimer, pendingEdgeDir = 0;
   var interactive = false, idleTimer;
 
@@ -49,7 +49,7 @@ try {
     return y>=2019 ? "R"+(y-2018) : ""+y;
   }
   function headerText(d){
-    return eraYear(d)+"/"+f2(d.getMonth()+1)+"/"+f2(d.getDate())+" "+f2(d.getHours())+":"+f2(d.getMinutes())+" \u2022"+E.getBattery();
+    return eraYear(d)+"/"+f2(d.getMonth()+1)+"/"+f2(d.getDate())+" "+f2(d.getHours())+":"+f2(d.getMinutes())+" ."+E.getBattery();
   }
   var FONT3={
     "0":[7,5,5,5,5,5,7],"1":[2,6,2,2,2,2,7],"2":[7,1,1,7,4,4,7],
@@ -362,7 +362,6 @@ try {
   }
   function stopHold(){
     holdDir=0;
-    if(holdStartTimer){ clearTimeout(holdStartTimer); holdStartTimer=undefined; }
     if(holdTimer){ clearTimeout(holdTimer); holdTimer=undefined; }
   }
   function repeatHold(){
@@ -386,26 +385,20 @@ try {
     stepHour(dir);
     holdTimer=setTimeout(repeatHold,700);
   }
-  function beginEdgePress(dir,isLong){
+  function handleEdgeTouch(dir,type){
     startInteraction();
-    edgeDownDir=dir;
-    edgeDownAt=Date.now();
-    stopHold();
-    if(isLong){
+    // Firmware classifies short touches as type 0 and long touches as type 2.
+    if(type===2){
+      cancelPendingEdgeTap();
+      edgeDownDir=dir;
+      edgeDownAt=Date.now();
       startHold(dir);
-    } else {
-      holdStartTimer=setTimeout(function(){
-        holdStartTimer=undefined;
-        startHold(dir);
-      },520);
+      return;
     }
-  }
-  function finishEdgePress(){
-    var dir=edgeDownDir;
-    var wasHolding=!!holdDir;
+    // Swift touch: wait briefly before committing one hour, so a second
+    // swift touch can turn the pair into exactly one day.
     edgeDownDir=0;
     stopHold();
-    if(!dir || wasHolding) return;
     registerEdgeTap(dir);
   }
   function registerEdgeTap(dir){
@@ -448,7 +441,8 @@ try {
     if(e.b) armIdle();
     if(!e.b){
       dragActive=false;
-      finishEdgePress();
+      edgeDownDir=0;
+      stopHold();
       return;
     }
     if(dragActive || e.y>=H-44){
@@ -474,11 +468,11 @@ try {
       return;
     }
     if(e.x<W*0.28){
-      beginEdgePress(-1,e.type===2);
+      handleEdgeTouch(-1,e.type);
       return;
     }
     if(e.x>W*0.72){
-      beginEdgePress(1,e.type===2);
+      handleEdgeTouch(1,e.type);
       return;
     }
     cancelPendingEdgeTap();
