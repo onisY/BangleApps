@@ -20,7 +20,7 @@ try {
   var PHASE_ANCHOR = utc(2000,0,6,18,14,0);
 
   var SX = 145, SY = 50;
-  var EX = 68, EY = 104;
+  var EX = 74, EY = 101;
 
   var def = {
     locPref:"Tokyo",locName:"Tokyo",lat:35.681,lon:139.767,
