@@ -29,6 +29,13 @@ try {
   };
   var settings = Storage.readJSON(FILE,1) || {};
   Object.keys(def).forEach(function(k){ if (settings[k]===undefined) settings[k]=def[k]; });
+  // Migrate old Tokyo default to the new Chiyoda-ku entry.
+  if(settings.locPref==="Tokyo" && settings.locName==="Tokyo"){
+    settings.locName="Chiyoda-ku";
+    settings.lat=35.694;
+    settings.lon=139.754;
+    Storage.writeJSON(FILE,settings);
+  }
   var loc = {name:settings.locName,lat:settings.lat,lon:settings.lon,pref:settings.locPref};
 
   var C = {bg:"#000",fg:"#fff",sun:"#f22",flare:"#f80",earth:"#5cf",earthEdge:"#9ef",
