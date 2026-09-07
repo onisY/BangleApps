@@ -4,7 +4,7 @@
   var FILE = "orbit.json";
   var d = {
     pref:12, place:0,
-    locPref:"Tokyo", locName:"Tokyo", lat:35.681, lon:139.767,
+    locPref:"Tokyo", locName:"Chiyoda-ku", lat:35.694, lon:139.754,
     sunSize:6, earthSize:30, moonSize:9, markerSize:2
   };
   var s = Storage.readJSON(FILE,1) || {};
