@@ -23,7 +23,8 @@ try {
   var EX = 74, EY = 101;
 
   var def = {
-    locPref:"Tokyo",locName:"Tokyo",lat:35.681,lon:139.767,
+    locationMode:0,
+    locPref:"Tokyo",locName:"Chiyoda-ku",lat:35.694,lon:139.754,elevationM:16,
     sunSize:6,earthSize:30,moonSize:9,markerSize:2
   };
   var settings = Storage.readJSON(FILE,1) || {};
@@ -33,6 +34,12 @@ try {
     settings.locName="Chiyoda-ku";
     settings.lat=35.694;
     settings.lon=139.754;
+    settings.elevationM=16;
+    Storage.writeJSON(FILE,settings);
+  }
+  if(settings.locationMode!==1 && settings.locPref==="Tokyo" &&
+     settings.locName==="Chiyoda-ku" && (!isFinite(settings.elevationM) || settings.elevationM===0)){
+    settings.elevationM=16;
     Storage.writeJSON(FILE,settings);
   }
   var loc = {name:settings.locName,lat:settings.lat,lon:settings.lon,
