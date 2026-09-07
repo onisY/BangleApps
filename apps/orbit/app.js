@@ -19,8 +19,8 @@ try {
   }
   var PHASE_ANCHOR = utc(2000,0,6,18,14,0);
 
-  var SX = 140, SY = 59;
-  var EX = 55, EY = 108;
+  var SX = 143, SY = 55;
+  var EX = 62, EY = 96;
   var SLIDER_X0 = 10, SLIDER_X1 = W-10, SLIDER_Y = H-16;
 
   var def = {
@@ -34,14 +34,44 @@ try {
   var C = {bg:"#000",fg:"#fff",sun:"#f22",flare:"#f80",earth:"#5cf",earthEdge:"#9ef",
            marker:"#f00",horizon:"#a4f",moon:"#fd4",orbit:"#555",rise:"#ff0",set:"#f80",
            noon:"#ccc",penumbra:"#631",slider:"#777"};
-  var events = null, sliderIndex = 0, dragActive = false, tickTimer;
+  var events = null, sliderIndex = 0, dragActive = false, tickTimer, timeOffsetMs = 0, lastCenterTap = 0;
 
   function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
   function norm(a){a%=TAU;return a<0?a+TAU:a;}
   function wrapPi(a){a=norm(a);return a>PI?a-TAU:a;}
   function toDays(date){return date.valueOf()/DAY-0.5+J1970-J2000;}
   function f2(n){return ("0"+n).substr(-2);}
-  function formatDate(d){return d.getFullYear()+"/"+f2(d.getMonth()+1)+"/"+f2(d.getDate())+" "+f2(d.getHours())+":"+f2(d.getMinutes());}
+  function eraYear(d){
+    var y=d.getFullYear();
+    return y>=2019 ? "R"+(y-2018) : ""+y;
+  }
+  function headerText(d){
+    return eraYear(d)+"/"+f2(d.getMonth()+1)+"/"+f2(d.getDate())+" "+f2(d.getHours())+":"+f2(d.getMinutes())+" B"+E.getBattery()+"%";
+  }
+  var FONT3={
+    "0":[7,5,5,5,5,5,7],"1":[2,6,2,2,2,2,7],"2":[7,1,1,7,4,4,7],
+    "3":[7,1,1,7,1,1,7],"4":[5,5,5,7,1,1,1],"5":[7,4,4,7,1,1,7],
+    "6":[7,4,4,7,5,5,7],"7":[7,1,1,2,2,2,2],"8":[7,5,5,7,5,5,7],
+    "9":[7,5,5,7,1,1,7],"R":[6,5,5,6,5,5,5],"B":[6,5,5,6,5,5,6],
+    "/":[1,1,1,2,4,4,4],":":[0,2,2,0,2,2,0],"%":[5,1,2,2,4,4,5]," ":[0,0,0,0,0,0,0],
+    "-":[0,0,0,7,0,0,0],"+":[0,2,2,7,2,2,0],"H":[5,5,5,7,5,5,5]
+  };
+  function drawTallBoldString(str,y,fg,bg){
+    var adv=8, pw=2, ph=3, total=str.length*adv-2;
+    var x=Math.floor((W-total)/2);
+    g.setColor(bg).fillRect(0,y-1,W-1,y+21);
+    g.setColor(fg);
+    for(var i=0;i<str.length;i++){
+      var rows=FONT3[str[i]]||FONT3[" "];
+      for(var ry=0;ry<7;ry++){
+        var bits=rows[ry];
+        for(var rx=0;rx<3;rx++) if(bits&(4>>rx)){
+          var px=x+i*adv+rx*pw, py=y+ry*ph;
+          g.fillRect(px,py,px+pw-1,py+ph-1);
+        }
+      }
+    }
+  }
 
   function sunLon(date){
     var d=toDays(date), M=RAD*(357.5291+0.98560028*d);
@@ -116,18 +146,19 @@ try {
     if(sliderIndex>events.length)sliderIndex=events.length;
   }
 
-  function sceneDate(){return sliderIndex?new Date(events[sliderIndex-1].t):new Date();}
-  function currentLabel(){return sliderIndex?events[sliderIndex-1].label:"NOW";}
+  function sceneDate(){
+    var base=sliderIndex?events[sliderIndex-1].t:Date.now();
+    return new Date(base+timeOffsetMs);
+  }
+  function currentLabel(){
+    if(sliderIndex) return events[sliderIndex-1].label;
+    if(timeOffsetMs) return (timeOffsetMs>0?"+":"")+Math.round(timeOffsetMs/3600000)+"H";
+    return "NOW";
+  }
 
   function drawHeader(date){
     var ev=sliderIndex>0;
-    var dateOnly=date.getFullYear()+"/"+f2(date.getMonth()+1)+"/"+f2(date.getDate());
-    var timeOnly=f2(date.getHours())+":"+f2(date.getMinutes());
-    g.setColor(ev?C.fg:C.bg).fillRect(0,0,W-1,33);
-    g.setColor(ev?C.bg:C.fg).setFont("6x8",2);
-    g.setFontAlign(0,0).drawString(dateOnly,W/2,8);
-    g.setFontAlign(-1,0).drawString(timeOnly,2,24);
-    g.setFontAlign(1,0).drawString("B"+E.getBattery()+"%",W-2,24);
+    drawTallBoldString(headerText(date),1,ev?C.bg:C.fg,ev?C.fg:C.bg);
   }
 
   function drawSun(){
@@ -213,19 +244,21 @@ try {
     var date=sceneDate();
     var phase=phaseAngle(date);
     var sunAng=Math.atan2(SY-EY,SX-EX);
-    var moonOrbitR=settings.earthSize+settings.moonSize+10;
+    var moonOrbitR=settings.earthSize+settings.moonSize+5;
     var ma=sunAng+phase;
     var mx=Math.round(EX+moonOrbitR*Math.cos(ma));
     var my=Math.round(EY+moonOrbitR*Math.sin(ma));
     g.setBgColor(C.bg).setColor(C.bg).clear();
     drawHeader(date);
-    g.setFont("6x8",1).setFontAlign(0,-1).setColor(sliderIndex?C.moon:C.fg).drawString(currentLabel(),W/2,35);
+    g.setFont("6x8",1).setFontAlign(0,-1).setColor(sliderIndex?C.moon:C.fg).drawString(currentLabel(),W/2,24);
     g.setColor(C.orbit).drawCircle(EX,EY,moonOrbitR);
     var ref=solarReference(date);
     drawSun();
     drawEarth(date,ref);
     drawMoon(mx,my,date);
-    g.setColor(C.fg).setFont("6x8",1).setFontAlign(-1,0).drawString(loc.pref+"/"+loc.name,2,47);
+    g.setColor(C.fg).setFont("6x8",1).setFontAlign(1,0);
+    g.drawString(loc.pref,W-3,H-43);
+    g.drawString(loc.name,W-3,H-34);
     drawSlider();
   }
 
@@ -233,12 +266,34 @@ try {
     if(!events) generateEvents();
     if(!events.length){sliderIndex=0;draw();return;}
     var idx=Math.round(clamp((x-SLIDER_X0)/(SLIDER_X1-SLIDER_X0),0,1)*events.length);
-    if(idx!==sliderIndex){sliderIndex=idx;draw();}
+    if(idx!==sliderIndex){sliderIndex=idx;timeOffsetMs=0;draw();}
   }
   function onDrag(e){
     if(e.b&&(dragActive||e.y>=H-44)){dragActive=true;setSliderFromX(e.x);}else if(!e.b)dragActive=false;
   }
-  function onTouch(zone,e){if(e&&e.y>=H-44)setSliderFromX(e.x);}
+  function onTouch(zone,e){
+    if(!e)return;
+    if(e.y>=H-44){ setSliderFromX(e.x); return; }
+    if(e.x<W*0.28){
+      timeOffsetMs-=3600000;
+      draw();
+      return;
+    }
+    if(e.x>W*0.72){
+      timeOffsetMs+=3600000;
+      draw();
+      return;
+    }
+    var now=Date.now();
+    if(now-lastCenterTap<450){
+      sliderIndex=0;
+      timeOffsetMs=0;
+      lastCenterTap=0;
+      draw();
+    } else {
+      lastCenterTap=now;
+    }
+  }
 
   function queueTick(){
     if(tickTimer)clearTimeout(tickTimer);
