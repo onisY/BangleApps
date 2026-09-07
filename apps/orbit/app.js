@@ -36,6 +36,7 @@ try {
            noon:"#ccc",penumbra:"#631",slider:"#777",nowBg:"#0f0",shiftBg:"#f00",zenith:"#0f0"};
   var events = null, sliderIndex = 0, dragActive = false, tickTimer, timeOffsetMs = 0, lastCenterTap = 0;
   var holdTimer, holdDir = 0, lastLeftTap = 0, lastRightTap = 0;
+  var interactive = false, idleTimer;
 
   function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
   function norm(a){a%=TAU;return a<0?a+TAU:a;}
@@ -268,7 +269,9 @@ try {
   }
 
   function drawMoon(mx,my,m,s){
-    var r=settings.moonSize, ux=SX-mx,uy=SY-my,len=Math.sqrt(ux*ux+uy*uy)||1;
+    // Sun is effectively at infinity on the Earth-Moon scale:
+    // use one parallel sunlight direction for both Earth and Moon.
+    var r=settings.moonSize, ux=SX-EX,uy=SY-EY,len=Math.sqrt(ux*ux+uy*uy)||1;
     ux/=len;uy/=len;
 
     g.setColor(C.bg).fillCircle(mx,my,r);
@@ -316,6 +319,38 @@ try {
     drawSlider();
   }
 
+  function armIdle(){
+    if(idleTimer) clearTimeout(idleTimer);
+    if(!interactive) return;
+    idleTimer=setTimeout(goIdle,8000);
+  }
+  function startInteraction(){
+    interactive=true;
+    try { Bangle.setLocked(false); } catch(e) {}
+    try { Bangle.setBacklight(true); } catch(e) {}
+    armIdle();
+  }
+  function goIdle(){
+    if(idleTimer){ clearTimeout(idleTimer); idleTimer=undefined; }
+    stopHold();
+    interactive=false;
+    sliderIndex=0;
+    timeOffsetMs=0;
+    lastCenterTap=0;
+    lastLeftTap=0;
+    lastRightTap=0;
+    try { Bangle.setBacklight(false); } catch(e) {}
+    try { Bangle.setLocked(true); } catch(e) {}
+    draw();
+    queueTick();
+  }
+  function onFaceUp(up){
+    if(up){
+      startInteraction();
+      draw();
+    }
+  }
+
   function stepHour(dir){
     timeOffsetMs += dir*3600000;
     draw();
@@ -326,10 +361,12 @@ try {
   }
   function repeatHold(){
     if(!holdDir)return;
+    armIdle();
     stepHour(holdDir);
     holdTimer=setTimeout(repeatHold,220);
   }
   function startHold(dir){
+    startInteraction();
     stopHold();
     holdDir=dir;
     stepHour(dir);
@@ -337,6 +374,7 @@ try {
   }
 
   function setSliderFromX(x){
+    startInteraction();
     stopHold();
     if(!events) generateEvents();
     if(!events.length){sliderIndex=0;draw();return;}
@@ -344,6 +382,7 @@ try {
     if(idx!==sliderIndex){sliderIndex=idx;timeOffsetMs=0;draw();}
   }
   function onDrag(e){
+    if(e.b) armIdle();
     if(!e.b){
       dragActive=false;
       stopHold();
@@ -376,6 +415,7 @@ try {
 
   function onTouch(zone,e){
     if(!e)return;
+    startInteraction();
     if(e.y>=H-44){
       stopHold();
       setSliderFromX(e.x);
@@ -403,27 +443,49 @@ try {
 
   function queueTick(){
     if(tickTimer)clearTimeout(tickTimer);
-    var wait=60000-(Date.now()%60000)+20;
+    var step=5*60000;
+    var wait=step-(Date.now()%step)+20;
     tickTimer=setTimeout(function(){
       tickTimer=undefined;
-      if(!sliderIndex && (new Date()).getMinutes()%5!==0)drawHeader(new Date()); else draw();
+      if(!interactive){
+        sliderIndex=0;
+        timeOffsetMs=0;
+        draw();
+      }
       queueTick();
     },wait);
   }
-  function onLCD(on){if(on){draw();queueTick();}else{stopHold();if(tickTimer){clearTimeout(tickTimer);tickTimer=undefined;}}}
+  function onLCD(on){
+    if(on){
+      draw();
+      queueTick();
+    } else {
+      stopHold();
+      if(idleTimer){clearTimeout(idleTimer);idleTimer=undefined;}
+      interactive=false;
+      sliderIndex=0;
+      timeOffsetMs=0;
+      if(tickTimer){clearTimeout(tickTimer);tickTimer=undefined;}
+    }
+  }
   function cleanup(){
     stopHold();
+    if(idleTimer)clearTimeout(idleTimer);
     if(tickTimer)clearTimeout(tickTimer);
     Bangle.removeListener("drag",onDrag);
     Bangle.removeListener("touch",onTouch);
     Bangle.removeListener("lcdPower",onLCD);
+    Bangle.removeListener("faceUp",onFaceUp);
   }
 
   Bangle.setUI({mode:"clock",remove:cleanup});
   Bangle.on("drag",onDrag);
   Bangle.on("touch",onTouch);
   Bangle.on("lcdPower",onLCD);
+  Bangle.on("faceUp",onFaceUp);
 
+  try { Bangle.setBacklight(false); } catch(e) {}
+  try { Bangle.setLocked(true); } catch(e) {}
   draw();
   queueTick();
 })();
