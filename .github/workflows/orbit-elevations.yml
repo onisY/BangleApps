@@ -1,0 +1,64 @@
+name: Populate Orbit elevations
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/orbit-elevations.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  populate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add DEM elevations to Orbit locations
+        run: |
+          python3 - <<'PY'
+          import json, urllib.parse, urllib.request
+          from pathlib import Path
+
+          path = Path("apps/orbit/locations.js")
+          text = path.read_text()
+          prefix = "exports.prefs = "
+          raw = text.strip()
+          if not raw.startswith(prefix) or not raw.endswith(";"):
+              raise SystemExit("Unexpected locations.js format")
+          prefs = json.loads(raw[len(prefix):-1])
+
+          refs = []
+          for pref in prefs:
+              for p in pref[1]:
+                  refs.append(p)
+
+          for start in range(0, len(refs), 100):
+              batch = refs[start:start+100]
+              params = urllib.parse.urlencode({
+                  "latitude": ",".join(str(p[1]) for p in batch),
+                  "longitude": ",".join(str(p[2]) for p in batch),
+              })
+              url = "https://api.open-meteo.com/v1/elevation?" + params
+              with urllib.request.urlopen(url, timeout=30) as r:
+                  data = json.load(r)
+              elevations = data["elevation"]
+              if len(elevations) != len(batch):
+                  raise SystemExit("Elevation count mismatch")
+              for p, elev in zip(batch, elevations):
+                  elev = int(round(elev))
+                  if len(p) >= 4:
+                      p[3] = elev
+                  else:
+                      p.append(elev)
+
+          path.write_text("exports.prefs = " + json.dumps(prefs, separators=(",",":")) + ";\n")
+          PY
+      - name: Commit generated elevations
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/orbit/locations.js
+          git diff --cached --quiet && exit 0
+          git commit -m "Add DEM elevations to Orbit locations"
+          git push
