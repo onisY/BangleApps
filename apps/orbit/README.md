@@ -116,3 +116,10 @@ Default location: Tokyo / Tokyo.
 - A 30-second safety cutoff prevents runaway scrubbing if a release event is ever lost.
 - Tokyo locations are now Chiyoda-ku, Machida-shi and Okutama-machi.
 - Battery text is shown visually as `•85` rather than `B85%`.
+
+
+## Version 0.14 Moon visibility line
+
+- Orbit computes the Moon's topocentric horizon altitude from the selected location, current/displayed time, and the Moon's equatorial coordinates.
+- When the Moon is above the local horizon (altitude > 0 degrees), a white line is drawn from the observer's red point to the Moon centre.
+- When the Moon is below the horizon, that white line is not drawn.
