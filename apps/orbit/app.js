@@ -33,7 +33,7 @@ try {
 
   var C = {bg:"#000",fg:"#fff",sun:"#f22",flare:"#f80",earth:"#5cf",earthEdge:"#9ef",
            marker:"#f00",horizon:"#a4f",moon:"#fd4",orbit:"#555",rise:"#ff0",set:"#f80",
-           noon:"#ccc",penumbra:"#631",slider:"#777",nowBg:"#0f0",shiftBg:"#f00"};
+           noon:"#ccc",penumbra:"#631",slider:"#777",nowBg:"#0f0",shiftBg:"#f00",zenith:"#0f0"};
   var events = null, sliderIndex = 0, dragActive = false, tickTimer, timeOffsetMs = 0, lastCenterTap = 0;
   var holdTimer, holdDir = 0, lastLeftTap = 0, lastRightTap = 0;
 
@@ -187,21 +187,53 @@ try {
     return {sunAng:sunAng,eq:eq};
   }
 
+  // Fast scanline fill: O(radius) draw calls instead of O(radius^2) setPixel calls.
+  function fillLitHalf(cx,cy,r,ux,uy,color){
+    g.setColor(color);
+    for(var yy=-r;yy<=r;yy++){
+      var xmax=Math.floor(Math.sqrt(Math.max(0,r*r-yy*yy)));
+      var x0=-xmax, x1=xmax;
+      if(Math.abs(ux)<0.0001){
+        if(yy*uy<0) continue;
+      } else {
+        var cut=-yy*uy/ux;
+        if(ux>0) x0=Math.max(x0,Math.ceil(cut));
+        else x1=Math.min(x1,Math.floor(cut));
+      }
+      if(x0<=x1) g.drawLine(cx+x0,cy+yy,cx+x1,cy+yy);
+    }
+  }
+
+  function fillDiskIntersection(cx,cy,r,ox,oy,sr,color){
+    if(sr<=0)return;
+    g.setColor(color);
+    for(var yy=-r;yy<=r;yy++){
+      var mh=Math.floor(Math.sqrt(Math.max(0,r*r-yy*yy)));
+      var sy=yy-oy;
+      if(Math.abs(sy)>sr) continue;
+      var sh=Math.sqrt(Math.max(0,sr*sr-sy*sy));
+      var x0=Math.max(-mh,Math.ceil(ox-sh));
+      var x1=Math.min(mh,Math.floor(ox+sh));
+      if(x0<=x1) g.drawLine(cx+x0,cy+yy,cx+x1,cy+yy);
+    }
+  }
+
+  function drawThickLine2(x0,y0,x1,y1){
+    var dx=x1-x0,dy=y1-y0;
+    var l=Math.sqrt(dx*dx+dy*dy)||1;
+    var ox=Math.round(-dy/l),oy=Math.round(dx/l);
+    g.drawLine(x0,y0,x1,y1);
+    g.drawLine(x0+ox,y0+oy,x1+ox,y1+oy);
+  }
+
   function drawEarth(date,ref,moonOrbitR){
     var r=settings.earthSize;
     var ux=SX-EX, uy=SY-EY, len=Math.sqrt(ux*ux+uy*uy)||1;
     ux/=len; uy/=len;
 
-    // Night hemisphere black, Sun-facing hemisphere light blue.
+    // Fast day/night disk: night black, Sun-facing half light blue.
     g.setColor(C.bg).fillCircle(EX,EY,r);
-    g.setColor(C.earth);
-    var yy,xx,xmax;
-    for(yy=-r;yy<=r;yy++){
-      xmax=Math.floor(Math.sqrt(Math.max(0,r*r-yy*yy)));
-      for(xx=-xmax;xx<=xmax;xx++){
-        if(xx*ux+yy*uy>=0) g.setPixel(EX+xx,EY+yy);
-      }
-    }
+    fillLitHalf(EX,EY,r,ux,uy,C.earth);
     g.setColor(C.earth).drawCircle(EX,EY,r);
 
     var ha=localSolarHourAngle(date);
@@ -210,16 +242,21 @@ try {
     var px=EX+d*Math.cos(a), py=EY+d*Math.sin(a);
     var half=Math.sqrt(Math.max(0,r*r-d*d));
     var vx=-Math.sin(a),vy=Math.cos(a);
-    g.setColor(C.horizon).drawLine(Math.round(px-half*vx),Math.round(py-half*vy),Math.round(px+half*vx),Math.round(py+half*vy));
+    g.setColor(C.horizon).drawLine(Math.round(px-half*vx),Math.round(py-half*vy),
+      Math.round(px+half*vx),Math.round(py+half*vy));
 
-    // Local zenith: extend outward from Earth's centre through the observer marker.
-    var radial=Math.sqrt((px-EX)*(px-EX)+(py-EY)*(py-EY)) || 1;
-    var zx=(px-EX)/radial, zy=(py-EY)/radial;
+    // Local zenith: starts at the observer and extends strictly outward from Earth.
+    var rx=px-EX, ry=py-EY;
+    var radial=Math.sqrt(rx*rx+ry*ry) || 1;
+    var zx=rx/radial, zy=ry/radial;
     var toOrbit=Math.max(4,moonOrbitR-radial);
     var zenLen=2*toOrbit;
-    g.setColor(C.marker).drawLine(Math.round(px),Math.round(py),
-      Math.round(px+zx*zenLen),Math.round(py+zy*zenLen));
-    g.setColor(C.marker).fillCircle(Math.round(px),Math.round(py),settings.markerSize);
+    var x0=Math.round(px), y0=Math.round(py);
+    var x1=Math.round(px+zx*zenLen), y1=Math.round(py+zy*zenLen);
+    g.setColor(C.zenith);
+    drawThickLine2(x0,y0,x1,y1);
+
+    g.setColor(C.marker).fillCircle(x0,y0,settings.markerSize);
   }
 
   function shadowGeometry(date,r){
@@ -234,22 +271,15 @@ try {
   function drawMoon(mx,my,date){
     var r=settings.moonSize, ux=SX-mx,uy=SY-my,len=Math.sqrt(ux*ux+uy*uy)||1;
     ux/=len;uy/=len;
+
     g.setColor(C.bg).fillCircle(mx,my,r);
-    g.setColor(C.moon);
-    var yy,xx,xmax;
-    for(yy=-r;yy<=r;yy++){
-      xmax=Math.floor(Math.sqrt(Math.max(0,r*r-yy*yy)));
-      for(xx=-xmax;xx<=xmax;xx++)if(xx*ux+yy*uy>=0)g.setPixel(mx+xx,my+yy);
-    }
+    fillLitHalf(mx,my,r,ux,uy,C.moon);
+
+    // Eclipse shadow using scanline-circle intersections instead of per-pixel tests.
     var sh=shadowGeometry(date,r);
-    for(yy=-r;yy<=r;yy++){
-      xmax=Math.floor(Math.sqrt(Math.max(0,r*r-yy*yy)));
-      for(xx=-xmax;xx<=xmax;xx++){
-        var ds=(xx-sh.ox)*(xx-sh.ox)+(yy-sh.oy)*(yy-sh.oy);
-        if(ds<=sh.ur*sh.ur)g.setColor(C.bg).setPixel(mx+xx,my+yy);
-        else if(ds<=sh.pr*sh.pr)g.setColor(C.penumbra).setPixel(mx+xx,my+yy);
-      }
-    }
+    fillDiskIntersection(mx,my,r,sh.ox,sh.oy,sh.pr,C.penumbra);
+    fillDiskIntersection(mx,my,r,sh.ox,sh.oy,sh.ur,C.bg);
+
     g.setColor(C.moon).drawCircle(mx,my,r);
   }
 
