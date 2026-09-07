@@ -79,8 +79,8 @@ try {
     var cc=RAD*(1.9148*Math.sin(M)+0.02*Math.sin(2*M)+0.0003*Math.sin(3*M));
     return norm(M+cc+RAD*102.9372+PI);
   }
-  function sunEqu(date){
-    var l=sunLon(date), e=RAD*23.4397;
+  function sunEquFromLon(l){
+    var e=RAD*23.4397;
     return {ra:Math.atan2(Math.sin(l)*Math.cos(e),Math.cos(l)),dec:Math.asin(Math.sin(e)*Math.sin(l))};
   }
   function dayOfYear(date){
@@ -172,8 +172,8 @@ try {
     g.setColor(C.flare).fillCircle(SX-Math.round(settings.sunSize/3),SY-Math.round(settings.sunSize/3),Math.max(1,Math.round(settings.sunSize/4)));
   }
 
-  function solarReference(date){
-    var eq=sunEqu(date), lat=loc.lat*RAD;
+  function solarReference(date,eq){
+    var lat=loc.lat*RAD;
     var sunAng=Math.atan2(SY-EY,SX-EX);
     var c=-Math.tan(lat)*Math.tan(eq.dec);
     var h0=Math.acos(clamp(c,-1,1));
@@ -259,8 +259,7 @@ try {
     g.setColor(C.marker).fillCircle(x0,y0,settings.markerSize);
   }
 
-  function shadowGeometry(date,r){
-    var m=moonGeo(date), s=sunLon(date);
+  function shadowGeometry(m,s,r){
     var dx=wrapPi(m.lon-norm(s+PI)),dy=m.lat;
     var moonAng=Math.asin(1737.4/m.dist);
     var ru=6378.1-m.dist*(696340-6378.1)/149597870;
@@ -268,7 +267,7 @@ try {
     return {ox:-dx/moonAng*r,oy:dy/moonAng*r,ur:Math.max(0,Math.atan(ru/m.dist)/moonAng*r),pr:Math.atan(rp/m.dist)/moonAng*r};
   }
 
-  function drawMoon(mx,my,date){
+  function drawMoon(mx,my,m,s){
     var r=settings.moonSize, ux=SX-mx,uy=SY-my,len=Math.sqrt(ux*ux+uy*uy)||1;
     ux/=len;uy/=len;
 
@@ -276,7 +275,7 @@ try {
     fillLitHalf(mx,my,r,ux,uy,C.moon);
 
     // Eclipse shadow using scanline-circle intersections instead of per-pixel tests.
-    var sh=shadowGeometry(date,r);
+    var sh=shadowGeometry(m,s,r);
     fillDiskIntersection(mx,my,r,sh.ox,sh.oy,sh.pr,C.penumbra);
     fillDiskIntersection(mx,my,r,sh.ox,sh.oy,sh.ur,C.bg);
 
@@ -294,7 +293,10 @@ try {
 
   function draw(){
     var date=sceneDate();
-    var phase=phaseAngle(date);
+    var sLon=sunLon(date);
+    var mGeo=moonGeo(date);
+    var phase=norm(mGeo.lon-sLon);
+    var eq=sunEquFromLon(sLon);
     var sunAng=Math.atan2(SY-EY,SX-EX);
     var moonOrbitR=settings.earthSize+settings.moonSize+5;
     var ma=sunAng+phase;
@@ -304,10 +306,10 @@ try {
     drawHeader(date);
     g.setFont("6x8",1).setFontAlign(0,-1).setColor(sliderIndex?C.moon:C.fg).drawString(currentLabel(),W/2,24);
     g.setColor(C.orbit).drawCircle(EX,EY,moonOrbitR);
-    var ref=solarReference(date);
+    var ref=solarReference(date,eq);
     drawSun();
     drawEarth(date,ref,moonOrbitR);
-    drawMoon(mx,my,date);
+    drawMoon(mx,my,mGeo,sLon);
     g.setColor(C.fg).setFont("6x8",1).setFontAlign(1,0);
     g.drawString(loc.pref,W-3,H-43);
     g.drawString(loc.name,W-3,H-34);
