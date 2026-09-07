@@ -105,3 +105,14 @@ Default location: Tokyo / Tokyo.
 - Any touch/drag interaction refreshes an 8-second inactivity timer.
 - After 8 seconds without interaction, Orbit returns to the real current time, clears event/manual time offsets, turns the backlight off, locks touch input, and resumes low-duty clock mode.
 - In idle clock mode, the full scene redraws only on 5-minute boundaries.
+
+
+## Version 0.13 input reliability and Tokyo locations
+
+- Edge single-tap is now deferred for 420 ms so a second swift tap can be recognized as a true double-tap before the one-hour action is committed.
+- Edge double-tap moves exactly one day.
+- Long press uses the Bangle.js 2 touch `type=2` classification directly, rather than inferring a hold from a timer.
+- Continuous hour scrubbing is slowed to 700 ms per step and stops on the drag-release event (`b=0`).
+- A 30-second safety cutoff prevents runaway scrubbing if a release event is ever lost.
+- Tokyo locations are now Chiyoda-ku, Machida-shi and Okutama-machi.
+- Battery text is shown visually as `•85` rather than `B85%`.
