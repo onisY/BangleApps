@@ -96,3 +96,12 @@ Default location: Tokyo / Tokyo.
 - Lunar-eclipse shadow intersections use scanline spans instead of testing every Moon pixel.
 - Sun and Moon astronomical positions are calculated once per frame and reused by all drawing stages.
 - These changes substantially reduce full-frame redraw work, especially while holding an edge to scrub time.
+
+
+## Version 0.12 sunlight and interaction mode
+
+- Moon illumination now uses parallel sunlight at Earth-Moon scale. The illuminated half no longer points toward the Moon's rendered screen position of the Sun; instead the same incoming solar-ray direction is used for Earth and Moon, approximating the Sun as effectively infinitely distant.
+- Raising the wrist (`faceUp`) enters interaction mode: the watch unlocks touch input and turns the backlight on.
+- Any touch/drag interaction refreshes an 8-second inactivity timer.
+- After 8 seconds without interaction, Orbit returns to the real current time, clears event/manual time offsets, turns the backlight off, locks touch input, and resumes low-duty clock mode.
+- In idle clock mode, the full scene redraws only on 5-minute boundaries.
