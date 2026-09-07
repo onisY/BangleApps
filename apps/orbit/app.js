@@ -19,9 +19,8 @@ try {
   }
   var PHASE_ANCHOR = utc(2000,0,6,18,14,0);
 
-  var SX = 143, SY = 55;
-  var EX = 62, EY = 96;
-  var SLIDER_X0 = 10, SLIDER_X1 = W-10, SLIDER_Y = H-16;
+  var SX = 145, SY = 50;
+  var EX = 68, EY = 104;
 
   var def = {
     locPref:"Tokyo",locName:"Tokyo",lat:35.681,lon:139.767,
@@ -36,12 +35,13 @@ try {
     settings.lon=139.754;
     Storage.writeJSON(FILE,settings);
   }
-  var loc = {name:settings.locName,lat:settings.lat,lon:settings.lon,pref:settings.locPref};
+  var loc = {name:settings.locName,lat:settings.lat,lon:settings.lon,
+    elevationM:settings.elevationM||0,pref:settings.locPref};
 
   var C = {bg:"#000",fg:"#fff",sun:"#f22",flare:"#f80",earth:"#5cf",earthEdge:"#9ef",
            marker:"#f00",horizon:"#a4f",moon:"#fd4",orbit:"#555",rise:"#ff0",set:"#f80",
            noon:"#ccc",penumbra:"#631",slider:"#777",nowBg:"#0f0",shiftBg:"#f00",zenith:"#0f0"};
-  var events = null, sliderIndex = 0, dragActive = false, tickTimer, timeOffsetMs = 0, lastCenterTap = 0;
+  var dragActive = false, tickTimer, timeOffsetMs = 0, lastCenterTap = 0;
   var holdTimer, holdDir = 0, edgeDownDir = 0, edgeDownAt = 0;
   var edgeTapTimer, pendingEdgeDir = 0;
   var interactive = false, idleTimer;
@@ -98,21 +98,46 @@ try {
     return norm((280.46061837+360.98564736629*(jd-2451545.0)+
       0.000387933*T*T-T*T*T/38710000)*RAD);
   }
-  function moonEqu(m){
-    var e=RAD*23.4397;
-    var sl=Math.sin(m.lon),cl=Math.cos(m.lon);
-    var sb=Math.sin(m.lat),cb=Math.cos(m.lat);
-    return {
-      ra:Math.atan2(sl*Math.cos(e)-Math.tan(m.lat)*Math.sin(e),cl),
-      dec:Math.asin(sb*Math.cos(e)+cb*Math.sin(e)*sl)
-    };
+  // Geometric topocentric Moon altitude. This includes lunar parallax and
+  // observer elevation. Atmospheric refraction and terrain are intentionally excluded.
+  function moonTopocentricAltitude(date,m){
+    var eps=23.4397*RAD;
+    var cb=Math.cos(m.lat), sb=Math.sin(m.lat);
+    var cl=Math.cos(m.lon), sl=Math.sin(m.lon);
+    var xe=m.dist*cb*cl;
+    var ye=m.dist*cb*sl;
+    var ze=m.dist*sb;
+    // Ecliptic -> equatorial geocentric Moon vector (km)
+    var mx=xe;
+    var my=ye*Math.cos(eps)-ze*Math.sin(eps);
+    var mz=ye*Math.sin(eps)+ze*Math.cos(eps);
+
+    // WGS84 observer position in equatorial Earth-fixed geometry, rotated by LST.
+    var phi=loc.lat*RAD;
+    var theta=gmst(date)+loc.lon*RAD;
+    var sp=Math.sin(phi), cp=Math.cos(phi);
+    var st=Math.sin(theta), ct=Math.cos(theta);
+    var a=6378.137, e2=0.00669437999;
+    var h=(loc.elevationM||0)/1000;
+    var N=a/Math.sqrt(1-e2*sp*sp);
+    var ox=(N+h)*cp*ct;
+    var oy=(N+h)*cp*st;
+    var oz=(N*(1-e2)+h)*sp;
+
+    var dx=mx-ox, dy=my-oy, dz=mz-oz;
+    var east=-st*dx+ct*dy;
+    var north=-sp*ct*dx-sp*st*dy+cp*dz;
+    var up=cp*ct*dx+cp*st*dy+sp*dz;
+    return Math.atan2(up,Math.sqrt(east*east+north*north));
   }
-  function moonAltitude(date,m){
-    var q=moonEqu(m);
-    var Hh=wrapPi(gmst(date)+loc.lon*RAD-q.ra);
-    var lat=loc.lat*RAD;
-    return Math.asin(Math.sin(lat)*Math.sin(q.dec)+
-      Math.cos(lat)*Math.cos(q.dec)*Math.cos(Hh));
+  function horizonDip(){
+    var h=Math.max(0,loc.elevationM||0)/1000;
+    if(!h)return 0;
+    var R=6378.137;
+    return Math.acos(R/(R+h));
+  }
+  function moonVisible(date,m){
+    return moonTopocentricAltitude(date,m) > -horizonDip();
   }
   function dayOfYear(date){
     var jan1=new Date(date.getFullYear(),0,1,0,0,0,0);
@@ -143,53 +168,14 @@ try {
   }
   function phaseAngle(date){return norm(moonGeo(date).lon-sunLon(date));}
 
-  var eclipseTable=[
-    [utc(2027,1,6,16,0,48),"SOL ANNULAR","solar"],
-    [utc(2027,1,20,23,14,6),"LUN PENUMBRAL","lunar"],
-    [utc(2027,6,18,16,4,9),"LUN PENUMBRAL","lunar"],
-    [utc(2027,7,2,10,7,50),"SOL TOTAL","solar"],
-    [utc(2027,7,17,7,14,59),"LUN PENUMBRAL","lunar"],
-    [utc(2028,0,12,4,14,13),"LUN PARTIAL","lunar"]
-  ];
-  var midAutumn={2026:[8,25],2027:[8,15],2028:[9,3]};
-
-  function generateEvents(){
-    var start=Date.now(), endDate=new Date(start); endDate.setFullYear(endDate.getFullYear()+1);
-    var end=endDate.getTime(), qms=SYNODIC*DAY/4;
-    var k0=Math.floor((start-PHASE_ANCHOR)/qms)-1;
-    var names=["NEW MOON","FIRST QUARTER","FULL MOON","LAST QUARTER"], tmp=[];
-    var k,idx,t;
-    for(k=k0;k<k0+56;k++){
-      idx=((k%4)+4)%4; t=PHASE_ANCHOR+k*qms;
-      if(t>=start && t<=end) tmp.push({t:t,label:names[idx],kind:"phase",phase:idx});
-    }
-    eclipseTable.forEach(function(e){
-      if(e[0]<start||e[0]>end)return;
-      tmp=tmp.filter(function(x){return !(x.kind==="phase"&&(x.phase===0||x.phase===2)&&Math.abs(x.t-e[0])<24*3600000);});
-      tmp.push({t:e[0],label:e[1],kind:e[2]});
-    });
-    var y0=new Date(start).getFullYear(),y1=new Date(end).getFullYear();
-    for(var y=y0;y<=y1;y++){
-      var md=midAutumn[y]; if(!md)continue;
-      t=new Date(y,md[0],md[1],20,0,0,0).getTime();
-      if(t>=start&&t<=end)tmp.push({t:t,label:"MID-AUTUMN",kind:"culture"});
-    }
-    tmp.sort(function(a,b){return a.t-b.t;}); events=tmp;
-    if(sliderIndex>events.length)sliderIndex=events.length;
-  }
-
-  function sceneDate(){
-    var base=sliderIndex?events[sliderIndex-1].t:Date.now();
-    return new Date(base+timeOffsetMs);
-  }
+  function sceneDate(){ return new Date(Date.now()+timeOffsetMs); }
   function currentLabel(){
-    if(sliderIndex) return events[sliderIndex-1].label;
     if(timeOffsetMs) return (timeOffsetMs>0?"+":"")+Math.round(timeOffsetMs/3600000)+"H";
     return "NOW";
   }
 
   function drawHeader(date){
-    var isNow=(sliderIndex===0 && timeOffsetMs===0);
+    var isNow=(timeOffsetMs===0);
     drawTallBoldString(headerText(date),1,isNow?C.bg:C.fg,isNow?C.nowBg:C.shiftBg);
   }
 
@@ -316,15 +302,6 @@ try {
     g.setColor(C.moon).drawCircle(mx,my,r);
   }
 
-  function drawSlider(){
-    var n=events?events.length:0,frac=n?sliderIndex/n:0;
-    var x=Math.round(SLIDER_X0+frac*(SLIDER_X1-SLIDER_X0));
-    g.setColor(C.slider).drawLine(SLIDER_X0,SLIDER_Y,SLIDER_X1,SLIDER_Y);
-    g.drawLine(SLIDER_X0,SLIDER_Y-3,SLIDER_X0,SLIDER_Y+3);
-    g.drawLine(SLIDER_X1,SLIDER_Y-3,SLIDER_X1,SLIDER_Y+3);
-    g.setColor(sliderIndex?C.moon:C.fg).fillCircle(x,SLIDER_Y,4);
-  }
-
   function draw(){
     var date=sceneDate();
     var sLon=sunLon(date);
@@ -338,19 +315,18 @@ try {
     var my=Math.round(EY+moonOrbitR*Math.sin(ma));
     g.setBgColor(C.bg).setColor(C.bg).clear();
     drawHeader(date);
-    g.setFont("6x8",1).setFontAlign(0,-1).setColor(sliderIndex?C.moon:C.fg).drawString(currentLabel(),W/2,24);
+    g.setFont("6x8",1).setFontAlign(0,-1).setColor(C.fg).drawString(currentLabel(),W/2,24);
     g.setColor(C.orbit).drawCircle(EX,EY,moonOrbitR);
     var ref=solarReference(date,eq);
     drawSun();
     var observer=drawEarth(date,ref,moonOrbitR);
-    if(observer && moonAltitude(date,mGeo)>0){
+    if(observer && moonVisible(date,mGeo)){
       g.setColor(C.fg).drawLine(observer.x,observer.y,mx,my);
     }
     drawMoon(mx,my,mGeo,sLon);
     g.setColor(C.fg).setFont("6x8",1).setFontAlign(1,0);
     g.drawString(loc.pref,W-3,H-43);
     g.drawString(loc.name,W-3,H-34);
-    drawSlider();
   }
 
   function armIdle(){
@@ -370,7 +346,6 @@ try {
     cancelPendingEdgeTap();
     edgeDownDir=0;
     interactive=false;
-    sliderIndex=0;
     timeOffsetMs=0;
     lastCenterTap=0;
     try { Bangle.setBacklight(false); } catch(e) {}
@@ -460,29 +435,12 @@ try {
     },420);
   }
 
-  function setSliderFromX(x){
-    startInteraction();
-    cancelPendingEdgeTap();
-    edgeDownDir=0;
-    stopHold();
-    if(!events) generateEvents();
-    if(!events.length){sliderIndex=0;draw();return;}
-    var idx=Math.round(clamp((x-SLIDER_X0)/(SLIDER_X1-SLIDER_X0),0,1)*events.length);
-    if(idx!==sliderIndex){sliderIndex=idx;timeOffsetMs=0;draw();}
-  }
   function onDrag(e){
     if(e.b) armIdle();
     if(!e.b){
       dragActive=false;
       edgeDownDir=0;
       stopHold();
-      return;
-    }
-    if(dragActive || e.y>=H-44){
-      edgeDownDir=0;
-      stopHold();
-      dragActive=true;
-      setSliderFromX(e.x);
       return;
     }
     if(edgeDownDir){
@@ -496,10 +454,6 @@ try {
   function onTouch(zone,e){
     if(!e)return;
     startInteraction();
-    if(e.y>=H-44){
-      setSliderFromX(e.x);
-      return;
-    }
     if(e.x<W*0.28){
       handleEdgeTouch(-1,e.type);
       return;
@@ -513,7 +467,6 @@ try {
     stopHold();
     var now=Date.now();
     if(now-lastCenterTap<450){
-      sliderIndex=0;
       timeOffsetMs=0;
       lastCenterTap=0;
       draw();
@@ -529,7 +482,6 @@ try {
     tickTimer=setTimeout(function(){
       tickTimer=undefined;
       if(!interactive){
-        sliderIndex=0;
         timeOffsetMs=0;
         draw();
       }
@@ -544,8 +496,7 @@ try {
       stopHold();
       if(idleTimer){clearTimeout(idleTimer);idleTimer=undefined;}
       interactive=false;
-      sliderIndex=0;
-      timeOffsetMs=0;
+            timeOffsetMs=0;
       if(tickTimer){clearTimeout(tickTimer);tickTimer=undefined;}
     }
   }
