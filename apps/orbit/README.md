@@ -123,3 +123,15 @@ Default location: Tokyo / Tokyo.
 - Orbit computes the Moon's topocentric horizon altitude from the selected location, current/displayed time, and the Moon's equatorial coordinates.
 - When the Moon is above the local horizon (altitude > 0 degrees), a white line is drawn from the observer's red point to the Moon centre.
 - When the Moon is below the horizon, that white line is not drawn.
+
+
+## Version 0.15 Moon horizon geometry and slider removal
+
+- The event slider has been removed.
+- The freed lower-screen area is reused for a larger orbital diagram.
+- Earth size can now be increased to 48 px radius.
+- Moon visibility is now topocentric: lunar parallax is calculated from the selected latitude/longitude, Moon distance, Earth ellipsoid and observer elevation.
+- The observer elevation is entered as `Elevation m` in Orbit settings and is included both in observer position and geometric horizon dip.
+- Moon visibility uses the lunar upper limb, so a partially risen Moon counts as geometrically visible.
+- Daylight is not a visibility veto: if the Moon is geometrically above the local horizon in daytime, the white observer-to-Moon line is drawn.
+- Atmospheric refraction, local mountains/buildings and weather are not included.
