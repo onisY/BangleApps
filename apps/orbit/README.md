@@ -1,50 +1,38 @@
-# Orbit
+# Orbit 0.02
 
-**Orbit** is a Bangle.js 2 Sun-Earth-Moon orrery that redraws on 5-minute boundaries.
-It is designed as a readable orbital diagram rather than a physically scaled solar-system view.
+Orbit is now a Bangle.js 2 **clock** and does not use GPS.
 
-## Display
+## Layout
 
-- Top: local date/time and battery percentage.
-- Main view: the Sun in the centre, Earth's orbit, Earth, and an enlarged Moon orbit, viewed schematically from above Earth's north side.
-- Sun: red disk with a small flare corona.
-- Earth: light-blue disk. Your latitude/longitude is shown as a red point.
-- Purple line: a schematic projected local-horizon line through the position marker.
-- Moon: the hemisphere facing the Sun is gold; the far hemisphere is black with a gold outline.
-- During lunar-eclipse alignment, Earth's umbral shadow progressively blacks out the lit part. Penumbral shading is shown more softly/dark-brown.
-- Bottom: event slider.
+- Sun is fixed in the upper-right.
+- Earth is fixed in the lower-left.
+- Moon revolves around Earth according to the current lunar elongation.
+- The top line shows date/time and battery percentage.
+- A white Earth-Sun center line is the solar-noon reference.
+- Yellow/orange rays from Earth show the sunrise/sunset meridians for the selected Japanese location and current solar declination.
+- Earth remains light blue; the selected location is a red dot and its projected local horizon is purple.
+- The Moon keeps the gold Sun-facing hemisphere and black far side. Lunar-eclipse shadowing is retained.
+- The bottom slider selects lunar events up to one year ahead; the far-left position returns to NOW.
 
-The orbital radii and body sizes are deliberately not to scale, so the geometry remains visible on the 176 x 176 display.
+## Location
 
-## Event slider
+Orbit 0.02 contains an offline Japan location table. There is no GPS access and no network access.
 
-Drag or tap the bottom slider:
+Open **Settings -> App/Widget Settings -> Orbit** and choose:
 
-- Far left (`0`) = **NOW**. Date/time and positions update every 5 minutes.
-- Moving right selects lunar events from now through one year ahead.
-- The header is inverted (black text on white) whenever an event is selected.
-- New Moon, First Quarter, Full Moon, and Last Quarter are calculated on the watch.
-- Solar/lunar eclipse maxima for 2026-2030 use NASA catalog UTC times and are converted to the watch's local time.
-- Mid-Autumn Moon dates use the National Astronomical Observatory of Japan calendar. Since Mid-Autumn Moon is a cultural date rather than one exact astronomical instant, Orbit uses **20:00 local time** as the representative snapshot.
+1. Prefecture
+2. Place
 
-Eclipse entries are global astronomical events. Orbit does not claim that every listed eclipse is visible from the stored observer location.
+All 47 prefectures are included with at least three places each. Place names are written in Roman letters because the standard Bangle.js system font does not contain a full Japanese kanji font.
 
-## Location and privacy
+Default location: Tokyo / Tokyo.
 
-Settings -> App/Widget Settings -> **Orbit** offers:
+## Startup change
 
-- **Auto GPS** (default): uses the Bangle's GPS briefly when Orbit opens, saves the most recent fix locally in `orbit.json`, then powers GPS off. This avoids leaving GPS on continuously.
-- **My Location**: reads `mylocation.json` if you use the Bangle.js My Location app.
-- **Manual**: use the latitude/longitude entered in Orbit settings.
+Version 0.01 refined roughly one year of lunar phase events with repeated trigonometric calculations before the first screen draw. On Bangle.js 2 this could leave the launcher showing `Loading...` for a long time. Version 0.02 draws immediately and builds the event list with a lightweight mean-synodic calculation. Exact eclipse maxima remain stored explicitly for the relevant catalog events.
 
-Orbit does not send the position to a phone, server, or web service.
+## Clock updating
 
-## Size settings
-
-You can change Sun, Earth, Moon, and observer-marker sizes from the Orbit settings menu. GPS acquisition timeout is also configurable.
-
-## Astronomy model
-
-The normal orbital drawing uses compact low-cost solar/lunar ecliptic approximations suitable for a watch display. Phase-event times are numerically refined from those equations. Eclipse maximum times in the bundled 2026-2030 table are taken from NASA eclipse catalogs; Mid-Autumn dates are from NAOJ.
-
-This is a visualization app, not a navigation or eclipse-safety tool.
+- The current clock header refreshes each minute.
+- Solar/lunar geometry is refreshed on five-minute boundaries.
+- When the LCD is off, update timers are suspended and the screen is redrawn when it wakes.
