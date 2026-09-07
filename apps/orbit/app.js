@@ -19,10 +19,9 @@ try {
   }
   var PHASE_ANCHOR = utc(2000,0,6,18,14,0);
 
-  var SX = 137, SY = 51;
-  var EX = 50, EY = 117;
-  var MOON_ORBIT_R = 29;
-  var SLIDER_X0 = 10, SLIDER_X1 = W-10, SLIDER_Y = H-8;
+  var SX = 140, SY = 59;
+  var EX = 50, EY = 108;
+  var SLIDER_X0 = 10, SLIDER_X1 = W-10, SLIDER_Y = H-16;
 
   var def = {
     locPref:"Tokyo",locName:"Tokyo",lat:35.681,lon:139.767,
@@ -53,9 +52,19 @@ try {
     var l=sunLon(date), e=RAD*23.4397;
     return {ra:Math.atan2(Math.sin(l)*Math.cos(e),Math.cos(l)),dec:Math.asin(Math.sin(e)*Math.sin(l))};
   }
-  function gmst(date){
-    var jd=date.valueOf()/DAY+2440587.5, T=(jd-2451545.0)/36525;
-    return norm((280.46061837+360.98564736629*(jd-2451545.0)+0.000387933*T*T-T*T*T/38710000)*RAD);
+  function dayOfYear(date){
+    var jan1=new Date(date.getFullYear(),0,1,0,0,0,0);
+    return Math.floor((date.valueOf()-jan1.valueOf())/DAY)+1;
+  }
+  // Local apparent-solar hour angle for Japanese standard time.
+  // At local solar noon this is 0, so the red location marker lies on the Sun-facing meridian.
+  function localSolarHourAngle(date){
+    var n=dayOfYear(date);
+    var b=TAU*(n-81)/364;
+    var eot=9.87*Math.sin(2*b)-7.53*Math.cos(b)-1.5*Math.sin(b); // minutes
+    var civilMin=date.getHours()*60+date.getMinutes()+date.getSeconds()/60;
+    var solarMin=civilMin + 4*(loc.lon-135) + eot; // JST standard meridian = 135E
+    return wrapPi((solarMin-720)*0.25*RAD);
   }
 
   function moonGeo(date){
@@ -112,9 +121,13 @@ try {
 
   function drawHeader(date){
     var ev=sliderIndex>0;
-    g.setColor(ev?C.fg:C.bg).fillRect(0,0,W-1,17);
-    g.setColor(ev?C.bg:C.fg).setFont("6x8",1).setFontAlign(-1,0).drawString(formatDate(date),2,8);
+    var dateOnly=date.getFullYear()+"/"+f2(date.getMonth()+1)+"/"+f2(date.getDate());
+    var timeOnly=f2(date.getHours())+":"+f2(date.getMinutes());
+    g.setColor(ev?C.fg:C.bg).fillRect(0,0,W-1,33);
+    g.setColor(ev?C.bg:C.fg).setFont("6x8",2);
+    g.setFontAlign(-1,0).drawString(dateOnly,2,8);
     g.setFontAlign(1,0).drawString("B"+E.getBattery()+"%",W-2,8);
+    g.setFontAlign(0,0).drawString(timeOnly,W/2,24);
   }
 
   function drawSun(){
@@ -146,7 +159,7 @@ try {
     var r=settings.earthSize;
     g.setColor(C.earth).fillCircle(EX,EY,r);
     g.setColor(C.earthEdge).drawCircle(EX,EY,r);
-    var ha=wrapPi(gmst(date)+loc.lon*RAD-ref.eq.ra);
+    var ha=localSolarHourAngle(date);
     var a=ref.sunAng+ha;
     var d=r*Math.cos(loc.lat*RAD);
     var px=EX+d*Math.cos(a), py=EY+d*Math.sin(a);
@@ -200,18 +213,19 @@ try {
     var date=sceneDate();
     var phase=phaseAngle(date);
     var sunAng=Math.atan2(SY-EY,SX-EX);
+    var moonOrbitR=settings.earthSize+settings.moonSize+10;
     var ma=sunAng+phase;
-    var mx=Math.round(EX+MOON_ORBIT_R*Math.cos(ma));
-    var my=Math.round(EY+MOON_ORBIT_R*Math.sin(ma));
+    var mx=Math.round(EX+moonOrbitR*Math.cos(ma));
+    var my=Math.round(EY+moonOrbitR*Math.sin(ma));
     g.setBgColor(C.bg).setColor(C.bg).clear();
     drawHeader(date);
-    g.setFont("6x8",1).setFontAlign(0,-1).setColor(sliderIndex?C.moon:C.fg).drawString(currentLabel(),W/2,20);
-    g.setColor(C.orbit).drawCircle(EX,EY,MOON_ORBIT_R);
+    g.setFont("6x8",1).setFontAlign(0,-1).setColor(sliderIndex?C.moon:C.fg).drawString(currentLabel(),W/2,35);
+    g.setColor(C.orbit).drawCircle(EX,EY,moonOrbitR);
     var ref=solarReference(date);
     drawSun();
     drawEarth(date,ref);
     drawMoon(mx,my,date);
-    g.setColor(C.fg).setFont("6x8",1).setFontAlign(0,0).drawString(loc.pref+" / "+loc.name,W/2,151);
+    g.setColor(C.fg).setFont("6x8",1).setFontAlign(-1,0).drawString(loc.pref+"/"+loc.name,2,47);
     drawSlider();
   }
 
@@ -222,9 +236,9 @@ try {
     if(idx!==sliderIndex){sliderIndex=idx;draw();}
   }
   function onDrag(e){
-    if(e.b&&(dragActive||e.y>=H-30)){dragActive=true;setSliderFromX(e.x);}else if(!e.b)dragActive=false;
+    if(e.b&&(dragActive||e.y>=H-44)){dragActive=true;setSliderFromX(e.x);}else if(!e.b)dragActive=false;
   }
-  function onTouch(zone,e){if(e&&e.y>=H-30)setSliderFromX(e.x);}
+  function onTouch(zone,e){if(e&&e.y>=H-44)setSliderFromX(e.x);}
 
   function queueTick(){
     if(tickTimer)clearTimeout(tickTimer);
