@@ -68,3 +68,12 @@ Default location: Tokyo / Tokyo.
 - Holding the right edge continuously moves the displayed scene forward one hour at a time and redraws after every step.
 - A short edge tap still moves only one hour.
 - Releasing the finger stops the continuous time movement.
+
+
+## Version 0.09 controls and defaults
+
+- Double-tap the right edge to move the displayed scene forward by one day.
+- Double-tap the left edge to move the displayed scene backward by one day.
+- Single edge tap remains one hour; holding an edge still scrubs continuously by one hour at a time.
+- New-install defaults are Sun 6 px, Earth 30 px, Moon 9 px.
+- A red local-zenith line now extends outward from the observer point, with length about twice the point-to-Moon-orbit gap.
