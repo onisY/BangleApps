@@ -3,8 +3,10 @@
   var L = require("orbitloc").prefs;
   var FILE = "orbit.json";
   var d = {
+    locationMode:0, // 0=Place, 1=Manual
     pref:12, place:0,
     locPref:"Tokyo", locName:"Chiyoda-ku", lat:35.694, lon:139.754, elevationM:0,
+    manualLat:35.694, manualLon:139.754, manualElevationM:0,
     sunSize:6, earthSize:30, moonSize:9, markerSize:2
   };
   var s = Storage.readJSON(FILE,1) || {};
@@ -12,36 +14,97 @@
   if(s.pref<0 || s.pref>=L.length) s.pref=12;
   if(s.place<0 || s.place>=L[s.pref][1].length) s.place=0;
 
-  function applyLocation(){
+  function write(){ Storage.writeJSON(FILE,s); }
+
+  function applyPlace(){
     var p=L[s.pref][1][s.place];
     s.locPref=L[s.pref][0];
     s.locName=p[0];
     s.lat=p[1];
     s.lon=p[2];
+    s.elevationM=(p.length>3 && isFinite(p[3])) ? p[3] : 0;
+    write();
   }
-  function save(){ applyLocation(); Storage.writeJSON(FILE,s); }
+
+  function applyManual(){
+    s.locPref="Manual";
+    s.locName="Custom";
+    s.lat=s.manualLat;
+    s.lon=s.manualLon;
+    s.elevationM=s.manualElevationM;
+    write();
+  }
+
+  function applyCurrent(){
+    if(s.locationMode===1) applyManual();
+    else applyPlace();
+  }
+
   function show(){
-    E.showMenu({
+    var m={
       "":{title:"Orbit"},
       "< Back":back,
-      "Prefecture":{
+      "Location mode":{
+        value:s.locationMode,min:0,max:1,
+        format:function(v){return v?"Manual":"Place";},
+        onchange:function(v){
+          s.locationMode=v;
+          if(v){
+            s.manualLat=s.lat;
+            s.manualLon=s.lon;
+            s.manualElevationM=s.elevationM||0;
+            applyManual();
+          } else applyPlace();
+          show();
+        }
+      }
+    };
+
+    if(s.locationMode===0){
+      m["Prefecture"]={
         value:s.pref,min:0,max:L.length-1,
         format:function(v){return L[v][0];},
-        onchange:function(v){s.pref=v;s.place=0;save();show();}
-      },
-      "Place":{
+        onchange:function(v){s.pref=v;s.place=0;applyPlace();show();}
+      };
+      m["Place"]={
         value:s.place,min:0,max:L[s.pref][1].length-1,
         format:function(v){return L[s.pref][1][v][0];},
-        onchange:function(v){s.place=v;save();}
-      },
-      "Selected":function(){applyLocation();E.showAlert(s.locPref+"\n"+s.locName,"Orbit location").then(show);},
-      "Elevation m":{value:s.elevationM,min:0,max:3000,step:10,onchange:function(v){s.elevationM=v;save();}},
-      "Sun size":{value:s.sunSize,min:6,max:15,step:1,onchange:function(v){s.sunSize=v;save();}},
-      "Earth size":{value:s.earthSize,min:8,max:48,step:1,onchange:function(v){s.earthSize=v;save();}},
-      "Moon size":{value:s.moonSize,min:3,max:9,step:1,onchange:function(v){s.moonSize=v;save();}},
-      "Marker size":{value:s.markerSize,min:1,max:4,step:1,onchange:function(v){s.markerSize=v;save();}}
-    });
+        onchange:function(v){s.place=v;applyPlace();}
+      };
+      m["Location info"]=function(){
+        applyPlace();
+        E.showAlert(
+          s.locPref+" / "+s.locName+"\n"+
+          "Lat "+s.lat.toFixed(3)+"\n"+
+          "Lon "+s.lon.toFixed(3)+"\n"+
+          "Alt "+Math.round(s.elevationM)+" m",
+          "Orbit location"
+        ).then(show);
+      };
+    } else {
+      m["Latitude"]={
+        value:s.manualLat,min:-90,max:90,step:0.001,
+        format:function(v){return v.toFixed(3);},
+        onchange:function(v){s.manualLat=v;applyManual();}
+      };
+      m["Longitude"]={
+        value:s.manualLon,min:-180,max:180,step:0.001,
+        format:function(v){return v.toFixed(3);},
+        onchange:function(v){s.manualLon=v;applyManual();}
+      };
+      m["Elevation m"]={
+        value:s.manualElevationM,min:-500,max:9000,step:1,
+        onchange:function(v){s.manualElevationM=v;applyManual();}
+      };
+    }
+
+    m["Sun size"]={value:s.sunSize,min:3,max:15,step:1,onchange:function(v){s.sunSize=v;write();}};
+    m["Earth size"]={value:s.earthSize,min:8,max:48,step:1,onchange:function(v){s.earthSize=v;write();}};
+    m["Moon size"]={value:s.moonSize,min:3,max:12,step:1,onchange:function(v){s.moonSize=v;write();}};
+    m["Marker size"]={value:s.markerSize,min:1,max:4,step:1,onchange:function(v){s.markerSize=v;write();}};
+    E.showMenu(m);
   }
-  save();
+
+  applyCurrent();
   show();
 })
