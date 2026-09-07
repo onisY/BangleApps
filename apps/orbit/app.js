@@ -20,7 +20,7 @@ try {
   var PHASE_ANCHOR = utc(2000,0,6,18,14,0);
 
   var SX = 140, SY = 59;
-  var EX = 50, EY = 108;
+  var EX = 55, EY = 108;
   var SLIDER_X0 = 10, SLIDER_X1 = W-10, SLIDER_Y = H-16;
 
   var def = {
@@ -125,9 +125,9 @@ try {
     var timeOnly=f2(date.getHours())+":"+f2(date.getMinutes());
     g.setColor(ev?C.fg:C.bg).fillRect(0,0,W-1,33);
     g.setColor(ev?C.bg:C.fg).setFont("6x8",2);
-    g.setFontAlign(-1,0).drawString(dateOnly,2,8);
-    g.setFontAlign(1,0).drawString("B"+E.getBattery()+"%",W-2,8);
-    g.setFontAlign(0,0).drawString(timeOnly,W/2,24);
+    g.setFontAlign(0,0).drawString(dateOnly,W/2,8);
+    g.setFontAlign(-1,0).drawString(timeOnly,2,24);
+    g.setFontAlign(1,0).drawString("B"+E.getBattery()+"%",W-2,24);
   }
 
   function drawSun(){
