@@ -137,7 +137,9 @@ try {
     return Math.acos(R/(R+h));
   }
   function moonVisible(date,m){
-    return moonTopocentricAltitude(date,m) > -horizonDip();
+    var alt=moonTopocentricAltitude(date,m);
+    var moonRadius=Math.asin(1737.4/m.dist);
+    return alt+moonRadius > -horizonDip();
   }
   function dayOfYear(date){
     var jan1=new Date(date.getFullYear(),0,1,0,0,0,0);
