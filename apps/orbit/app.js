@@ -135,17 +135,10 @@ try {
     var R=6378.137;
     return Math.acos(R/(R+h));
   }
-  function refractionAt(alt){
-    var d=alt/RAD;
-    if(d < -1) return 0;
-    var q=(d+10.3/(d+5.11))*RAD;
-    return (1.02/Math.tan(q)/60)*RAD;
-  }
   function moonVisible(date,m){
     var alt=moonTopocentricAltitude(date,m);
     var moonRadius=Math.asin(1737.4/m.dist);
-    var apparent=alt+refractionAt(alt);
-    return apparent+moonRadius > -horizonDip();
+    return alt+moonRadius > -horizonDip();
   }
   function dayOfYear(date){
     var jan1=new Date(date.getFullYear(),0,1,0,0,0,0);
