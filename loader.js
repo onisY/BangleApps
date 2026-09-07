@@ -12,6 +12,9 @@ if (window.location.host==="banglejs.com") {
     'This is your local Bangle.js App Loader - you can try the <a href="https://banglejs.com/apps/">Official Version</a> here.';
 } else {
   document.title += " [Unofficial]";
+  // Personal GitHub Pages forks can serve a cached generated apps.json.
+  // Add a per-page-load cache buster so new metadata versions appear promptly.
+  Const.APPS_JSON_FILE = "apps.json?v=" + Date.now();
   document.getElementById("apploaderlinks").innerHTML =
     'This is not the official Bangle.js App Loader - you can try the <a href="https://banglejs.com/apps/">Official Version</a> here.';
 }
