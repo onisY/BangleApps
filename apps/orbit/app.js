@@ -6,7 +6,18 @@ try {
   var PI = Math.PI, TAU = PI*2, RAD = PI/180;
   var DAY = 86400000, J1970 = 2440588, J2000 = 2451545;
   var SYNODIC = 29.530588853;
-  var PHASE_ANCHOR = Date.UTC(2000,0,6,18,14,0);
+  function utc(y,m0,d,h,mi,s){
+    var m=m0+1;
+    if(m<=2)y--;
+    var era=Math.floor(y/400);
+    var yoe=y-era*400;
+    var mp=m+(m>2?-3:9);
+    var doy=Math.floor((153*mp+2)/5)+d-1;
+    var doe=yoe*365+Math.floor(yoe/4)-Math.floor(yoe/100)+doy;
+    var days=era*146097+doe-719468;
+    return days*DAY+h*3600000+mi*60000+s*1000;
+  }
+  var PHASE_ANCHOR = utc(2000,0,6,18,14,0);
 
   var SX = 137, SY = 51;
   var EX = 50, EY = 117;
@@ -62,12 +73,12 @@ try {
   function phaseAngle(date){return norm(moonGeo(date).lon-sunLon(date));}
 
   var eclipseTable=[
-    [Date.UTC(2027,1,6,16,0,48),"SOL ANNULAR","solar"],
-    [Date.UTC(2027,1,20,23,14,6),"LUN PENUMBRAL","lunar"],
-    [Date.UTC(2027,6,18,16,4,9),"LUN PENUMBRAL","lunar"],
-    [Date.UTC(2027,7,2,10,7,50),"SOL TOTAL","solar"],
-    [Date.UTC(2027,7,17,7,14,59),"LUN PENUMBRAL","lunar"],
-    [Date.UTC(2028,0,12,4,14,13),"LUN PARTIAL","lunar"]
+    [utc(2027,1,6,16,0,48),"SOL ANNULAR","solar"],
+    [utc(2027,1,20,23,14,6),"LUN PENUMBRAL","lunar"],
+    [utc(2027,6,18,16,4,9),"LUN PENUMBRAL","lunar"],
+    [utc(2027,7,2,10,7,50),"SOL TOTAL","solar"],
+    [utc(2027,7,17,7,14,59),"LUN PENUMBRAL","lunar"],
+    [utc(2028,0,12,4,14,13),"LUN PARTIAL","lunar"]
   ];
   var midAutumn={2026:[8,25],2027:[8,15],2028:[9,3]};
 
