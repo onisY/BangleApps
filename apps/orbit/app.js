@@ -92,6 +92,28 @@ try {
     var e=RAD*23.4397;
     return {ra:Math.atan2(Math.sin(l)*Math.cos(e),Math.cos(l)),dec:Math.asin(Math.sin(e)*Math.sin(l))};
   }
+  function gmst(date){
+    var jd=date.valueOf()/DAY+2440587.5;
+    var T=(jd-2451545.0)/36525;
+    return norm((280.46061837+360.98564736629*(jd-2451545.0)+
+      0.000387933*T*T-T*T*T/38710000)*RAD);
+  }
+  function moonEqu(m){
+    var e=RAD*23.4397;
+    var sl=Math.sin(m.lon),cl=Math.cos(m.lon);
+    var sb=Math.sin(m.lat),cb=Math.cos(m.lat);
+    return {
+      ra:Math.atan2(sl*Math.cos(e)-Math.tan(m.lat)*Math.sin(e),cl),
+      dec:Math.asin(sb*Math.cos(e)+cb*Math.sin(e)*sl)
+    };
+  }
+  function moonAltitude(date,m){
+    var q=moonEqu(m);
+    var Hh=wrapPi(gmst(date)+loc.lon*RAD-q.ra);
+    var lat=loc.lat*RAD;
+    return Math.asin(Math.sin(lat)*Math.sin(q.dec)+
+      Math.cos(lat)*Math.cos(q.dec)*Math.cos(Hh));
+  }
   function dayOfYear(date){
     var jan1=new Date(date.getFullYear(),0,1,0,0,0,0);
     return Math.floor((date.valueOf()-jan1.valueOf())/DAY)+1;
@@ -266,6 +288,7 @@ try {
     drawThickLine2(x0,y0,x1,y1);
 
     g.setColor(C.marker).fillCircle(x0,y0,settings.markerSize);
+    return {x:x0,y:y0};
   }
 
   function shadowGeometry(m,s,r){
@@ -319,7 +342,10 @@ try {
     g.setColor(C.orbit).drawCircle(EX,EY,moonOrbitR);
     var ref=solarReference(date,eq);
     drawSun();
-    drawEarth(date,ref,moonOrbitR);
+    var observer=drawEarth(date,ref,moonOrbitR);
+    if(observer && moonAltitude(date,mGeo)>0){
+      g.setColor(C.fg).drawLine(observer.x,observer.y,mx,my);
+    }
     drawMoon(mx,my,mGeo,sLon);
     g.setColor(C.fg).setFont("6x8",1).setFontAlign(1,0);
     g.drawString(loc.pref,W-3,H-43);
