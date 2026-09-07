@@ -77,3 +77,13 @@ Default location: Tokyo / Tokyo.
 - Single edge tap remains one hour; holding an edge still scrubs continuously by one hour at a time.
 - New-install defaults are Sun 6 px, Earth 30 px, Moon 9 px.
 - A red local-zenith line now extends outward from the observer point, with length about twice the point-to-Moon-orbit gap.
+
+
+## Version 0.10 rendering optimization
+
+- The observer zenith line is now green, starts exactly at the red observer point, and extends outward from Earth.
+- The zenith line is drawn at about twice the previous thickness.
+- Earth day/night rendering no longer paints individual pixels. It uses horizontal scanlines, reducing JavaScript drawing-loop work from O(radius^2) pixel operations to O(radius) line operations.
+- Moon illumination uses the same scanline method.
+- Lunar-eclipse penumbra/umbra are rendered with circle/scanline intersections instead of per-pixel distance tests.
+- These changes are intended to substantially improve redraw speed, especially with a large Earth setting.
