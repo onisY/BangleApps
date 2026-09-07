@@ -5,7 +5,7 @@
   var d = {
     pref:12, place:0,
     locPref:"Tokyo", locName:"Tokyo", lat:35.681, lon:139.767,
-    sunSize:10, earthSize:12, moonSize:6, markerSize:2
+    sunSize:6, earthSize:30, moonSize:9, markerSize:2
   };
   var s = Storage.readJSON(FILE,1) || {};
   Object.keys(d).forEach(function(k){ if (s[k]===undefined) s[k]=d[k]; });
