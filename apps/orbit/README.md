@@ -153,3 +153,11 @@ Tokyo entries are:
 - Okutama-machi: 35.809 N, 139.096 E, 337 m
 
 Manual mode stores the final selected values in `orbit.json` as `Manual / Custom`, and the Moon-horizon calculation uses those manual values exactly.
+
+
+## Version 0.17 Moon sight-line fix
+
+- Moon visibility remains purely geometric: observer elevation, lunar parallax, lunar upper limb and geometric horizon dip are included; daylight is not a veto.
+- Atmospheric refraction is intentionally not used in the visibility decision.
+- The white observer-to-Moon line is now drawn after the Moon, not before it.
+- The white line is 2 px thick and the red observer marker is redrawn on top, making the line visible even when it overlaps the green zenith line.
