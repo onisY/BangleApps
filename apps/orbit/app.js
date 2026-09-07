@@ -202,7 +202,7 @@ try {
         if(xx*ux+yy*uy>=0) g.setPixel(EX+xx,EY+yy);
       }
     }
-    g.setColor(C.earthEdge).drawCircle(EX,EY,r);
+    g.setColor(C.earth).drawCircle(EX,EY,r);
 
     var ha=localSolarHourAngle(date);
     var a=ref.sunAng+ha;
