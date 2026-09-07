@@ -1,0 +1,22 @@
+{
+  "id": "orbit",
+  "name": "Orbit",
+  "shortName": "Orbit",
+  "version": "0.01",
+  "author": "onisY",
+  "description": "Five-minute Sun-Earth-Moon orrery for Bangle.js 2 with local position, horizon, lunar illumination/eclipses, battery display, and a one-year lunar-event slider.",
+  "icon": "app.png",
+  "type": "app",
+  "tags": "science,astronomy,gps,moon",
+  "supports": ["BANGLEJS2"],
+  "readme": "README.md",
+  "allow_emulator": true,
+  "storage": [
+    {"name": "orbit.app.js", "url": "app.js"},
+    {"name": "orbit.settings.js", "url": "settings.js"},
+    {"name": "orbit.img", "url": "app-icon.js", "evaluate": true}
+  ],
+  "data": [
+    {"name": "orbit.json"}
+  ]
+}
