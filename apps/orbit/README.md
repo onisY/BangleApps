@@ -47,3 +47,14 @@ Default location: Tokyo / Tokyo.
 - Raises the event slider for easier finger dragging.
 - Earth radius can be set up to 24 px (twice the original 12 px default).
 - Moon orbit radius expands automatically with Earth/Moon sizes so the Moon remains outside the Earth with a 10 px gap.
+
+
+## Version 0.07 controls and layout
+
+- Header is a single-line tall bold bitmap font: Reiwa year (for example R8), month/day, time and battery.
+- Tap the left edge to move the displayed scene back by one hour.
+- Tap the right edge to move the displayed scene forward by one hour.
+- Double-tap the center to return immediately to the current time and clear any event/manual-time offset.
+- Prefecture and place are shown as two right-aligned lines at the lower-right.
+- Earth size can now be increased up to 40 px radius.
+- The Moon orbit expands with Earth and Moon size so it remains outside the Earth.
