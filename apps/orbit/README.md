@@ -262,3 +262,20 @@ Manual mode stores the final selected values in `orbit.json` as `Manual / Custom
 - The map mode is now **N/S Hemi map**:
   - North view shows North America, Greenland, Eurasia, Scandinavia, Japan, Great Britain and the Arctic.
   - South view shows South America, southern Africa, Australia, Madagascar, New Zealand and an Antarctic polar cap.
+
+
+## Version 0.28 daily buzzes and coastline refinement
+
+- Added a 7-second vibration at four daily events:
+  - 00:00 local civil time;
+  - local sunrise;
+  - 12:00 local civil noon;
+  - local sunset.
+- Sunrise and sunset are calculated from the configured observer latitude/longitude using the standard apparent solar altitude of -0.833 degrees.
+- The next event only is scheduled at a time, so the feature does not require frequent polling.
+- Northern Hemisphere coastlines were refined:
+  - Florida peninsula is more recognizable;
+  - Mexico includes Baja/Yucatan character;
+  - Iberian and Italian peninsulas and Mediterranean coastline are represented;
+  - the East Asian mainland coast leaves a clearer Japan Sea gap;
+  - Ogasawara and Hawaiian islands are drawn as tiny one-pixel references.
