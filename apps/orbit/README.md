@@ -177,3 +177,11 @@ Manual mode stores the final selected values in `orbit.json` as `Manual / Custom
 - The **observer horizon** is reduced to a 1 px line and shortened to only slightly longer than the Earth diameter.
 - The **Moon sight line** visibility test now uses an independent compact SunCalc-style lunar position calculation plus horizontal-parallax correction.
 - This independent path is deliberately separated from the schematic Moon-orbit drawing model, so a drawing-model error cannot suppress the visibility line.
+
+
+## Version 0.20 Moon display simplification
+
+- The **Moon sight line** has been removed completely.
+- Moon visibility / above-horizon calculations are no longer performed by the clock.
+- The Moon is now clipped to the hemisphere facing Earth: the hemisphere on the far side from Earth is not drawn.
+- Solar illumination and lunar-eclipse shading are still calculated before the Earth-facing clipping is applied.
