@@ -46,12 +46,21 @@ try {
     elevationM:settings.elevationM||0,pref:settings.locPref};
 
   var C = {bg:"#000",fg:"#fff",sun:"#f22",flare:"#f80",earth:"#5cf",earthEdge:"#9ef",
-           marker:"#f00",horizon:"#a4f",moon:"#fd4",orbit:"#555",rise:"#ff0",set:"#f80",
+           marker:"#f00",horizon:"#f0f",moon:"#fd4",orbit:"#555",rise:"#ff0",set:"#f80",
            noon:"#ccc",penumbra:"#631",slider:"#777",nowBg:"#0f0",shiftBg:"#f00",zenith:"#0f0"};
   var dragActive = false, tickTimer, timeOffsetMs = 0, lastCenterTap = 0;
   var holdTimer, holdDir = 0, edgeDownDir = 0, edgeDownAt = 0;
   var edgeTapTimer, pendingEdgeDir = 0;
   var interactive = false, idleTimer;
+  var batteryPct=E.getBattery(), batterySampleAt=Date.now();
+
+  function refreshBattery(){
+    var now=Date.now();
+    if(now-batterySampleAt>=600000){
+      batteryPct=E.getBattery();
+      batterySampleAt=now;
+    }
+  }
 
   function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
   function norm(a){a%=TAU;return a<0?a+TAU:a;}
@@ -63,7 +72,7 @@ try {
     return y>=2019 ? "R"+(y-2018) : ""+y;
   }
   function headerText(d){
-    return eraYear(d)+"/"+f2(d.getMonth()+1)+"/"+f2(d.getDate())+" "+f2(d.getHours())+":"+f2(d.getMinutes())+" ."+E.getBattery();
+    return eraYear(d)+"/"+f2(d.getMonth()+1)+"/"+f2(d.getDate())+" "+f2(d.getHours())+":"+f2(d.getMinutes())+" ."+batteryPct;
   }
   var FONT3={
     "0":[7,5,5,5,5,5,7],"1":[2,6,2,2,2,2,7],"2":[7,1,1,7,4,4,7],
@@ -105,9 +114,9 @@ try {
     return norm((280.46061837+360.98564736629*(jd-2451545.0)+
       0.000387933*T*T-T*T*T/38710000)*RAD);
   }
-  // Topocentric Moon altitude using angular parallax correction.
-  // This is numerically lighter and more stable on Espruino than subtracting
-  // large Earth/Moon Cartesian vectors.
+  // Geometric topocentric Moon altitude.
+  // First find geocentric altitude, then subtract the observer radius
+  // geometrically. This stable form includes the Moon's large horizontal parallax.
   function moonTopocentricAltitude(date,m){
     var eps=23.4397*RAD;
     var sl=Math.sin(m.lon), cl=Math.cos(m.lon);
@@ -116,18 +125,12 @@ try {
     var dec=Math.asin(sb*Math.cos(eps)+cb*Math.sin(eps)*sl);
     var phi=loc.lat*RAD;
     var Hh=wrapPi(gmst(date)+loc.lon*RAD-ra);
-    var par=Math.asin(6378.14/m.dist);
-    var u=Math.atan(0.99664719*Math.tan(phi));
-    var h=(loc.elevationM||0)/6378140;
-    var rhoSin=0.99664719*Math.sin(u)+h*Math.sin(phi);
-    var rhoCos=Math.cos(u)+h*Math.cos(phi);
-    var dRa=Math.atan2(-rhoCos*Math.sin(par)*Math.sin(Hh),
-      Math.cos(dec)-rhoCos*Math.sin(par)*Math.cos(Hh));
-    var dec2=Math.atan2((Math.sin(dec)-rhoSin*Math.sin(par))*Math.cos(dRa),
-      Math.cos(dec)-rhoCos*Math.sin(par)*Math.cos(Hh));
-    var H2=Hh-dRa;
-    return Math.asin(Math.sin(phi)*Math.sin(dec2)+
-      Math.cos(phi)*Math.cos(dec2)*Math.cos(H2));
+    var geoAlt=Math.asin(Math.sin(phi)*Math.sin(dec)+
+      Math.cos(phi)*Math.cos(dec)*Math.cos(Hh));
+    var sp=Math.sin(phi);
+    var earthR=6378.137-21.385*sp*sp+(loc.elevationM||0)/1000;
+    return Math.atan2(m.dist*Math.sin(geoAlt)-earthR,
+      m.dist*Math.cos(geoAlt));
   }
   function horizonDip(){
     var h=Math.max(0,loc.elevationM||0)/1000;
@@ -244,6 +247,15 @@ try {
     g.drawLine(x0+ox,y0+oy,x1+ox,y1+oy);
   }
 
+  function drawThickLine3(x0,y0,x1,y1){
+    var dx=x1-x0,dy=y1-y0;
+    var l=Math.sqrt(dx*dx+dy*dy)||1;
+    var ox=Math.round(-dy/l),oy=Math.round(dx/l);
+    g.drawLine(x0,y0,x1,y1);
+    g.drawLine(x0+ox,y0+oy,x1+ox,y1+oy);
+    g.drawLine(x0-ox,y0-oy,x1-ox,y1-oy);
+  }
+
   function drawEarth(date,ref,moonOrbitR){
     var r=settings.earthSize;
     var ux=SX-EX, uy=SY-EY, len=Math.sqrt(ux*ux+uy*uy)||1;
@@ -258,15 +270,22 @@ try {
     var a=ref.sunAng+ha;
     var d=r*Math.cos(loc.lat*RAD);
     var px=EX+d*Math.cos(a), py=EY+d*Math.sin(a);
-    var half=Math.sqrt(Math.max(0,r*r-d*d));
-    var vx=-Math.sin(a),vy=Math.cos(a);
-    g.setColor(C.horizon).drawLine(Math.round(px-half*vx),Math.round(py-half*vy),
-      Math.round(px+half*vx),Math.round(py+half*vy));
 
-    // Local zenith: starts at the observer and extends strictly outward from Earth.
+    // Observer radial direction in this north-polar schematic.
     var rx=px-EX, ry=py-EY;
     var radial=Math.sqrt(rx*rx+ry*ry) || 1;
     var zx=rx/radial, zy=ry/radial;
+
+    // Local horizon: perpendicular to the observer's zenith and extended
+    // beyond Earth so it remains unmistakable on the watch display.
+    var hx=-zy, hy=zx;
+    var horizonHalf=moonOrbitR+settings.moonSize+6;
+    g.setColor(C.horizon);
+    drawThickLine3(
+      Math.round(px-hx*horizonHalf),Math.round(py-hy*horizonHalf),
+      Math.round(px+hx*horizonHalf),Math.round(py+hy*horizonHalf));
+
+    // Local zenith: starts at the observer and extends strictly outward from Earth.
     var toOrbit=Math.max(4,moonOrbitR-radial);
     var zenLen=2*toOrbit;
     var x0=Math.round(px), y0=Math.round(py);
@@ -328,8 +347,8 @@ try {
       g.setColor(C.marker).fillCircle(observer.x,observer.y,settings.markerSize);
     }
     g.setColor(C.fg).setFont("6x8",1).setFontAlign(1,0);
-    g.drawString(loc.pref,W-3,H-43);
-    g.drawString(loc.name,W-3,H-34);
+    g.drawString(loc.pref,W-1,H-17);
+    g.drawString(loc.name,W-1,H-8);
   }
 
   function armIdle(){
@@ -486,6 +505,7 @@ try {
       tickTimer=undefined;
       if(!interactive){
         timeOffsetMs=0;
+        refreshBattery();
         draw();
       }
       queueTick();
