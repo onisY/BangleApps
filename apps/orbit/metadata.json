@@ -2,7 +2,7 @@
   "id":"orbit",
   "name":"Orbit",
   "shortName":"Orbit",
-  "version":"0.20",
+  "version":"0.21",
   "author":"onisY",
   "description":"Boot-safe Sun-Earth-Moon clock for Bangle.js 2. Fixed Sun/Earth layout, Moon orbit, solar noon/rise/set reference lines, offline Japan place selection, topocentric Moon visibility, observer elevation and battery display. No GPS.",
   "icon":"app.png",
