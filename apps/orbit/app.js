@@ -53,7 +53,7 @@ try {
            marker:"#f00",horizon:"#f0f",moon:"#fd4",moonDark:"#008",orbit:"#555",rise:"#ff0",set:"#f80",
            noon:"#ccc",penumbra:"#631",slider:"#777",zenith:"#0f0",
            headInput:"#ff0",headBlue:"#00f",headPurple:"#f0f",headOther:"#fff"};
-  var dragActive = false, tickTimer, timeOffsetMs = 0, lastCenterTap = 0;
+  var dragActive = false, tickTimer, eventTimer, timeOffsetMs = 0, lastCenterTap = 0;
   var holdTimer, holdDir = 0, edgeDownDir = 0, edgeDownAt = 0;
   var edgeTapTimer, pendingEdgeDir = 0;
   var interactive = false, idleTimer;
@@ -142,6 +142,49 @@ try {
     var civilMin=date.getHours()*60+date.getMinutes()+date.getSeconds()/60;
     var solarMin=civilMin + 4*(loc.lon-135) + eot; // JST standard meridian = 135E
     return wrapPi((solarMin-720)*0.25*RAD);
+  }
+
+  function solarDayEvents(date){
+    var y=date.getFullYear(),m=date.getMonth(),dd=date.getDate();
+    var noonDate=new Date(y,m,dd,12,0,0,0);
+    var n=dayOfYear(noonDate);
+    var b=TAU*(n-81)/364;
+    var eot=9.87*Math.sin(2*b)-7.53*Math.cos(b)-1.5*Math.sin(b);
+    var dec=sunEquFromLon(sunLon(noonDate)).dec;
+    var phi=loc.lat*RAD;
+    var c0=(Math.sin(-0.833*RAD)-Math.sin(phi)*Math.sin(dec))/
+      (Math.cos(phi)*Math.cos(dec));
+    var noonMin=720-4*(loc.lon-135)-eot;
+    var ev=[{min:0},{min:noonMin}];
+    if(c0>=-1 && c0<=1){
+      var h0=Math.acos(c0)/RAD;
+      ev.push({min:noonMin-4*h0});
+      ev.push({min:noonMin+4*h0});
+    }
+    return ev;
+  }
+  function eventDate(base,min){
+    var d=new Date(base.getFullYear(),base.getMonth(),base.getDate(),0,0,0,0);
+    d.setMinutes(min);
+    return d;
+  }
+  function queueEventBuzz(){
+    if(eventTimer){clearTimeout(eventTimer);eventTimer=undefined;}
+    var now=new Date(),nowMs=now.valueOf(),best=0;
+    for(var add=0;add<2;add++){
+      var base=new Date(now.getFullYear(),now.getMonth(),now.getDate()+add,12,0,0,0);
+      var ev=solarDayEvents(base);
+      for(var i=0;i<ev.length;i++){
+        var t=eventDate(base,ev[i].min).valueOf();
+        if(t>nowMs+1000 && (!best || t<best)) best=t;
+      }
+    }
+    if(!best)return;
+    eventTimer=setTimeout(function(){
+      eventTimer=undefined;
+      try{Bangle.buzz(7000,1);}catch(e){}
+      setTimeout(queueEventBuzz,8000);
+    },Math.max(100,best-nowMs));
   }
 
   function moonGeo(date){
@@ -711,6 +754,7 @@ try {
     edgeDownDir=0;
     if(idleTimer)clearTimeout(idleTimer);
     if(tickTimer)clearTimeout(tickTimer);
+    if(eventTimer)clearTimeout(eventTimer);
     Bangle.removeListener("drag",onDrag);
     Bangle.removeListener("touch",onTouch);
     Bangle.removeListener("lcdPower",onLCD);
@@ -729,6 +773,7 @@ try {
   try { Bangle.setLocked(true); } catch(e) {}
   draw();
   queueTick();
+  queueEventBuzz();
 })();
 
 } catch (e) {
