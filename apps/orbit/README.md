@@ -201,3 +201,13 @@ Manual mode stores the final selected values in `orbit.json` as `Manual / Custom
   - directly illuminated area is gold;
   - area without direct sunlight is deep blue.
 - Lunar-eclipse shadow processing is retained on the visible Earth-facing hemisphere.
+
+
+## Version 0.23 swipe screenshots
+
+- Swipe anywhere on the Orbit clock to save the current screen as a BMP.
+- Screenshots are stored as `orb00.bmp` through `orb19.bmp`.
+- Storage is circular: after 20 images, the oldest slot is overwritten.
+- A short vibration confirms a successful save; no on-screen message is drawn into the screenshot.
+- Orbit settings now show the saved screenshot count and provide **Delete shots** to erase all screenshot BMP files.
+- On a computer, connect the watch in Espruino Web IDE and use the Storage view to save the `orbNN.bmp` files to disk.
