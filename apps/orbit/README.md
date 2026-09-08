@@ -185,3 +185,9 @@ Manual mode stores the final selected values in `orbit.json` as `Manual / Custom
 - Moon visibility / above-horizon calculations are no longer performed by the clock.
 - The Moon is now clipped to the hemisphere facing Earth: the hemisphere on the far side from Earth is not drawn.
 - Solar illumination and lunar-eclipse shading are still calculated before the Earth-facing clipping is applied.
+
+
+## Version 0.21 Moon far-side outline removal
+
+- The Earth-far hemisphere of the Moon is now removed completely, including its outer rim.
+- Only the outer semicircular rim of the Earth-facing hemisphere is drawn.
