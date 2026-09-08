@@ -108,29 +108,28 @@ try {
     var e=RAD*23.4397;
     return {ra:Math.atan2(Math.sin(l)*Math.cos(e),Math.cos(l)),dec:Math.asin(Math.sin(e)*Math.sin(l))};
   }
-  function gmst(date){
-    var jd=date.valueOf()/DAY+2440587.5;
-    var T=(jd-2451545.0)/36525;
-    return norm((280.46061837+360.98564736629*(jd-2451545.0)+
-      0.000387933*T*T-T*T*T/38710000)*RAD);
-  }
-  // Geometric topocentric Moon altitude.
-  // First find geocentric altitude, then subtract the observer radius
-  // geometrically. This stable form includes the Moon's large horizontal parallax.
-  function moonTopocentricAltitude(date,m){
+  // Independent Moon-altitude calculation for the Moon sight line.
+  // Uses the compact SunCalc-style lunar coordinates, then applies horizontal
+  // parallax approximately as -parallax*cos(altitude).
+  function moonSightAltitude(date){
+    var d=toDays(date);
+    var L=RAD*(218.316+13.176396*d);
+    var M=RAD*(134.963+13.064993*d);
+    var F=RAD*(93.272+13.229350*d);
+    var lon=L+RAD*6.289*Math.sin(M);
+    var lat=RAD*5.128*Math.sin(F);
+    var dist=385001-20905*Math.cos(M);
     var eps=23.4397*RAD;
-    var sl=Math.sin(m.lon), cl=Math.cos(m.lon);
-    var sb=Math.sin(m.lat), cb=Math.cos(m.lat);
-    var ra=Math.atan2(sl*Math.cos(eps)-Math.tan(m.lat)*Math.sin(eps),cl);
-    var dec=Math.asin(sb*Math.cos(eps)+cb*Math.sin(eps)*sl);
+    var ra=Math.atan2(Math.sin(lon)*Math.cos(eps)-Math.tan(lat)*Math.sin(eps),Math.cos(lon));
+    var dec=Math.asin(Math.sin(lat)*Math.cos(eps)+Math.cos(lat)*Math.sin(eps)*Math.sin(lon));
+    var lw=-loc.lon*RAD;
+    var sid=RAD*(280.16+360.9856235*d)-lw;
+    var Hh=sid-ra;
     var phi=loc.lat*RAD;
-    var Hh=wrapPi(gmst(date)+loc.lon*RAD-ra);
     var geoAlt=Math.asin(Math.sin(phi)*Math.sin(dec)+
       Math.cos(phi)*Math.cos(dec)*Math.cos(Hh));
-    var sp=Math.sin(phi);
-    var earthR=6378.137-21.385*sp*sp+(loc.elevationM||0)/1000;
-    return Math.atan2(m.dist*Math.sin(geoAlt)-earthR,
-      m.dist*Math.cos(geoAlt));
+    var par=Math.asin(6378.14/dist);
+    return {alt:geoAlt-par*Math.cos(geoAlt),dist:dist};
   }
   function horizonDip(){
     var h=Math.max(0,loc.elevationM||0)/1000;
@@ -139,9 +138,9 @@ try {
     return Math.acos(R/(R+h));
   }
   function moonVisible(date,m){
-    var alt=moonTopocentricAltitude(date,m);
-    var moonRadius=Math.asin(1737.4/m.dist);
-    return alt+moonRadius > -horizonDip();
+    var q=moonSightAltitude(date);
+    var moonRadius=Math.asin(1737.4/q.dist);
+    return q.alt+moonRadius > -horizonDip();
   }
   function dayOfYear(date){
     var jan1=new Date(date.getFullYear(),0,1,0,0,0,0);
@@ -247,15 +246,6 @@ try {
     g.drawLine(x0+ox,y0+oy,x1+ox,y1+oy);
   }
 
-  function drawThickLine3(x0,y0,x1,y1){
-    var dx=x1-x0,dy=y1-y0;
-    var l=Math.sqrt(dx*dx+dy*dy)||1;
-    var ox=Math.round(-dy/l),oy=Math.round(dx/l);
-    g.drawLine(x0,y0,x1,y1);
-    g.drawLine(x0+ox,y0+oy,x1+ox,y1+oy);
-    g.drawLine(x0-ox,y0-oy,x1-ox,y1-oy);
-  }
-
   function drawEarth(date,ref,moonOrbitR){
     var r=settings.earthSize;
     var ux=SX-EX, uy=SY-EY, len=Math.sqrt(ux*ux+uy*uy)||1;
@@ -279,9 +269,8 @@ try {
     // Local horizon: perpendicular to the observer's zenith and extended
     // beyond Earth so it remains unmistakable on the watch display.
     var hx=-zy, hy=zx;
-    var horizonHalf=moonOrbitR+settings.moonSize+6;
-    g.setColor(C.horizon);
-    drawThickLine3(
+    var horizonHalf=settings.earthSize+8;
+    g.setColor(C.horizon).drawLine(
       Math.round(px-hx*horizonHalf),Math.round(py-hy*horizonHalf),
       Math.round(px+hx*horizonHalf),Math.round(py+hy*horizonHalf));
 
