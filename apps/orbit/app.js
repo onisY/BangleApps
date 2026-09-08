@@ -2,6 +2,8 @@ try {
 (function () {
   var Storage = require("Storage");
   var FILE = "orbit.json";
+  var SHOT_STATE = "orbitshot.json";
+  var SHOT_MAX = 20;
   var W = g.getWidth(), H = g.getHeight();
   var PI = Math.PI, TAU = PI*2, RAD = PI/180;
   var DAY = 86400000, J1970 = 2440588, J2000 = 2451545;
@@ -323,6 +325,39 @@ try {
     g.drawString(loc.name,W-1,H-8);
   }
 
+  function shotName(i){
+    return "orb"+(i<10?"0":"")+i+".bmp";
+  }
+  function saveScreenshot(){
+    try {
+      var bmp=g.asBMP();
+      if(!bmp){
+        Bangle.buzz(150);
+        return;
+      }
+      var st=Storage.readJSON(SHOT_STATE,1) || {next:0,count:0};
+      var idx=st.next|0;
+      if(idx<0 || idx>=SHOT_MAX) idx=0;
+      if(Storage.write(shotName(idx),bmp)===false){
+        Bangle.buzz(150);
+        return;
+      }
+      st.next=(idx+1)%SHOT_MAX;
+      st.count=Math.min(SHOT_MAX,(st.count|0)+1);
+      Storage.writeJSON(SHOT_STATE,st);
+      Bangle.buzz(60);
+      armIdle();
+    } catch(e) {
+      try { Storage.write("orbit.err","screenshot: "+e); } catch(x) {}
+      try { Bangle.buzz(150); } catch(x2) {}
+    }
+  }
+  function onSwipe(lr,ud){
+    if(!lr && !ud) return;
+    startInteraction();
+    saveScreenshot();
+  }
+
   function armIdle(){
     if(idleTimer) clearTimeout(idleTimer);
     if(!interactive) return;
@@ -505,6 +540,7 @@ try {
     Bangle.removeListener("touch",onTouch);
     Bangle.removeListener("lcdPower",onLCD);
     Bangle.removeListener("faceUp",onFaceUp);
+    Bangle.removeListener("swipe",onSwipe);
   }
 
   Bangle.setUI({mode:"clock",remove:cleanup});
@@ -512,6 +548,7 @@ try {
   Bangle.on("touch",onTouch);
   Bangle.on("lcdPower",onLCD);
   Bangle.on("faceUp",onFaceUp);
+  Bangle.on("swipe",onSwipe);
 
   try { Bangle.setBacklight(false); } catch(e) {}
   try { Bangle.setLocked(true); } catch(e) {}
