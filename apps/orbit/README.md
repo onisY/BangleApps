@@ -246,3 +246,19 @@ Manual mode stores the final selected values in `orbit.json` as `Manual / Custom
 - Enlarged and reshaped Greenland so it remains recognizable on the 176x176 display.
 - Great Britain remains a separate island west of continental Europe.
 - Fine internal country borders remain omitted.
+
+
+## Version 0.27 physical rotation and North/South views
+
+- Corrected the physical rotation directions in the polar/orbital schematic.
+  - North-side view: Earth rotates counterclockwise as time advances.
+  - North-side view: the Moon also orbits counterclockwise.
+  - South-side view: both apparent directions reverse, as expected from the opposite side.
+- Sunrise and sunset reference directions now follow the same view handedness.
+- Map longitude is used directly, so east-west angular separation corresponds to local solar-time difference at 15 degrees per hour.
+  - Tokyo/UK longitudes differ by roughly 140 degrees, about 9.3 hours of local solar time.
+  - Contiguous North-American west/east coasts are roughly 57 degrees apart, about 3.8 hours of local solar time.
+- Added **View side: North / South** in Orbit settings.
+- The map mode is now **N/S Hemi map**:
+  - North view shows North America, Greenland, Eurasia, Scandinavia, Japan, Great Britain and the Arctic.
+  - South view shows South America, southern Africa, Australia, Madagascar, New Zealand and an Antarctic polar cap.
