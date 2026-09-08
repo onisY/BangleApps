@@ -198,6 +198,20 @@ try {
     fillLitHalf(cx,cy,r,-ux,-uy,C.bg);
   }
 
+  function drawMoonEarthFacingArc(cx,cy,r){
+    var a0=Math.atan2(EY-cy,EX-cx)-PI/2;
+    var steps=Math.max(12,r*4);
+    var px=Math.round(cx+r*Math.cos(a0));
+    var py=Math.round(cy+r*Math.sin(a0));
+    for(var i=1;i<=steps;i++){
+      var a=a0+PI*i/steps;
+      var x=Math.round(cx+r*Math.cos(a));
+      var y=Math.round(cy+r*Math.sin(a));
+      g.drawLine(px,py,x,y);
+      px=x; py=y;
+    }
+  }
+
   function fillDiskIntersection(cx,cy,r,ox,oy,sr,color){
     if(sr<=0)return;
     g.setColor(color);
@@ -282,10 +296,12 @@ try {
     fillDiskIntersection(mx,my,r,sh.ox,sh.oy,sh.pr,C.penumbra);
     fillDiskIntersection(mx,my,r,sh.ox,sh.oy,sh.ur,C.bg);
 
-    g.setColor(C.moon).drawCircle(mx,my,r);
-
-    // Only the Earth-facing hemisphere is drawn in the schematic.
+    // Remove the complete Earth-far hemisphere, including its outer rim.
     eraseMoonFarHalf(mx,my,r);
+
+    // Draw only the outer rim of the hemisphere that faces Earth.
+    g.setColor(C.moon);
+    drawMoonEarthFacingArc(mx,my,r);
   }
 
   function draw(){
