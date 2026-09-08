@@ -279,3 +279,24 @@ Manual mode stores the final selected values in `orbit.json` as `Manual / Custom
   - Iberian and Italian peninsulas and Mediterranean coastline are represented;
   - the East Asian mainland coast leaves a clearer Japan Sea gap;
   - Ogasawara and Hawaiian islands are drawn as tiny one-pixel references.
+
+
+## Version 0.29 runtime size optimization
+
+Orbit keeps the readable development sources (`app.js`, `settings.js`) in the repository, while App Loader now installs minified runtime files (`app.min.js`, `settings.min.js`).
+
+Static files installed to the watch:
+
+| File | Before | v0.29 runtime |
+| --- | ---: | ---: |
+| orbit.app.js | 28,321 B | 19,306 B |
+| orbit.settings.js | 5,455 B | 4,364 B |
+| orbitloc | 4,818 B | 4,818 B |
+| orbit.img source payload | 397 B | 397 B |
+| **Total** | **38,991 B** | **28,885 B** |
+
+Reduction: **10,106 bytes (25.9%)** overall. The main clock runtime alone is reduced by about **31.8%** from the pre-optimization source used by v0.28.
+
+The optimization removes unused legacy code and strips comments, indentation, line breaks and unnecessary whitespace from the installed copies. Functional logic, map coordinates, astronomical calculations, interactions, daily buzz scheduling, screenshots and settings are unchanged.
+
+Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot state are not included in the static program-size comparison.
