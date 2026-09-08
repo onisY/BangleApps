@@ -28,7 +28,8 @@ try {
     locationMode:0,
     locPref:"Tokyo",locName:"Chiyoda-ku",lat:35.694,lon:139.754,elevationM:16,
     sunSize:6,earthSize:30,moonSize:9,markerSize:2,
-    earthStyle:0,earthDayColor:6,earthNightColor:4,earthEdgeColor:7
+    earthStyle:0,earthDayColor:6,earthNightColor:4,earthEdgeColor:7,
+    viewSide:0
   };
   var settings = Storage.readJSON(FILE,1) || {};
   Object.keys(def).forEach(function(k){ if (settings[k]===undefined) settings[k]=def[k]; });
@@ -69,6 +70,10 @@ try {
   function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
   function norm(a){a%=TAU;return a<0?a+TAU:a;}
   function wrapPi(a){a=norm(a);return a>PI?a-TAU:a;}
+  // Screen handedness for the orbital/polar view.
+  // North side: physical east/counterclockwise is decreasing screen angle
+  // because display Y increases downward. South side is the mirror image.
+  function viewSign(){ return settings.viewSide?1:-1; }
   function toDays(date){return date.valueOf()/DAY-0.5+J1970-J2000;}
   function f2(n){return ("0"+n).substr(-2);}
   function headerText(d){
@@ -187,8 +192,10 @@ try {
       g.setColor(color).drawLine(EX,EY,Math.round(EX+Math.cos(a)*len),Math.round(EY+Math.sin(a)*len));
     }
     g.setColor(C.noon).drawLine(EX,EY,SX,SY);
-    ray(sunAng-h0,C.rise);
-    ray(sunAng+h0,C.set);
+    var vs=viewSign();
+    // Hour angle is negative at sunrise and positive at sunset.
+    ray(sunAng-vs*h0,C.rise);
+    ray(sunAng+vs*h0,C.set);
     return {sunAng:sunAng,eq:eq};
   }
 
@@ -247,21 +254,24 @@ try {
   // Simplified but geographically ordered Northern Hemisphere coastlines.
   // Each polygon is latitude/longitude pairs in clockwise geographic order.
   // Separate polygons avoid the projection self-crossings that distorted East Asia.
+  // Coastlines use real longitude directly. Therefore angular east-west
+  // separation corresponds to local solar time at 15 degrees per hour.
   var NH_LAND=[
-    // North America
-    [72,-168,68,-160,64,-152,60,-147,56,-140,52,-134,48,-128,
-     44,-124,40,-123,36,-121,33,-118,30,-115,27,-111,24,-106,
-     23,-100,25,-96,28,-91,30,-86,33,-81,37,-77,41,-73,45,-67,
-     49,-62,53,-57,57,-60,61,-68,65,-76,69,-86,73,-105,74,-125,
-     73,-145],
+    // Alaska
+    [72,-168,69,-160,65,-154,61,-149,58,-143,55,-136,57,-131,
+     61,-134,65,-142,69,-151,72,-160],
 
-    // Greenland - deliberately enlarged/coarsened so it remains recognizable
-    // on a 176x176 display.
+    // Main North America: west coast -> Mexico/Gulf -> Atlantic -> Arctic Canada.
+    [70,-130,62,-136,55,-132,49,-127,44,-124,39,-123,34,-119,
+     30,-115,26,-110,23,-104,22,-98,25,-94,29,-89,30,-84,34,-79,
+     39,-75,44,-69,49,-64,54,-58,59,-56,63,-63,67,-72,71,-82,
+     74,-96,74,-112],
+
+    // Greenland
     [59,-46,62,-52,67,-57,73,-58,78,-52,82,-42,83,-30,80,-20,
      75,-18,70,-24,65,-31,61,-38],
 
-    // Main Eurasian landmass. Scandinavia is drawn separately below so that
-    // its peninsula shape is not lost in the coarse continental outline.
+    // Main Eurasia. Britain, Scandinavia and Japan are separate below.
     [36,-10,43,-9,49,-4,54,2,57,10,60,20,63,31,67,45,71,60,
      73,80,72,100,70,120,67,140,63,158,59,175,55,170,51,160,
      47,151,43,145,39,139,35,133,31,126,27,121,23,116,18,111,
@@ -269,17 +279,15 @@ try {
      31,49,33,43,35,37,37,31,39,26,41,21,43,16,44,11,43,5,
      41,0,39,-5],
 
-    // Scandinavian Peninsula: Norway/Sweden/Finland outline
+    // Scandinavian Peninsula
     [55,5,58,5,61,7,64,10,67,13,70,18,71,24,69,29,66,29,
      63,26,60,22,58,18,56,13],
 
     // Japan: Kyushu
     [30.5,129,32,129.5,33.5,131,33,132.5,31.5,132,30.5,131],
-
     // Japan: Shikoku + Honshu
     [33,132,34,133.5,34.5,135.5,35,137.5,36,139.5,38,141,
      40.5,141.5,40,140,38.5,138.5,37,136.5,35.5,134.5,34,133],
-
     // Japan: Hokkaido
     [41.5,140,42.5,141,43.5,143,45.5,145,45,142,43.5,140],
 
@@ -288,15 +296,34 @@ try {
      56,0,54,-1,52,0.5,50.5,-1]
   ];
 
-  // Approximate sea-ice cap used only as a clear North Pole reference.
+  // Southern Hemisphere map used when View side = South.
+  var SH_LAND=[
+    // South America
+    [-2,-80,-8,-79,-15,-76,-22,-71,-30,-72,-38,-73,-46,-75,
+     -53,-70,-56,-66,-52,-60,-45,-55,-36,-52,-28,-49,-20,-44,
+     -12,-38,-5,-35,0,-45],
+
+    // Southern Africa
+    [0,9,-7,12,-15,13,-23,16,-30,18,-35,20,-34,27,-29,32,
+     -22,35,-15,39,-8,40,-2,35,0,29],
+
+    // Australia
+    [-12,113,-16,121,-20,129,-18,137,-22,145,-28,153,-35,151,
+     -39,145,-38,136,-34,128,-31,116,-24,113],
+
+    // Madagascar
+    [-12,49,-16,50,-21,48,-26,45,-23,43,-17,44],
+
+    // New Zealand
+    [-34,172,-39,176,-44,170,-47,168,-43,166,-38,169]
+  ];
+
   var NH_ICE_LAT=78;
+  var SH_ICE_LAT=65;
 
   function geoPoint(lat,lon,r,baseA){
     var rr=r*Math.cos(lat*RAD);
-    // Looking down on the North Pole, east longitude must advance in the
-    // opposite screen-angle direction because display Y increases downward.
-    // The previous '+' mirrored east and west.
-    var aa=baseA-(lon-loc.lon)*RAD;
+    var aa=baseA+viewSign()*(lon-loc.lon)*RAD;
     return [Math.round(EX+rr*Math.cos(aa)),Math.round(EY+rr*Math.sin(aa))];
   }
   function geoPoly(src,r,baseA){
@@ -325,31 +352,33 @@ try {
       if(x0<=x1)g.drawLine(EX+x0,EY+yy,EX+x1,EY+yy);
     }
   }
-  function drawNorthMap(r,baseA,ux,uy){
+  function drawHemisphereMap(r,baseA,ux,uy){
+    var south=!!settings.viewSide;
+    var land=south?SH_LAND:NH_LAND;
+
     // Sea: blue on night base, cyan on directly illuminated half.
     g.setColor("#00f").fillCircle(EX,EY,r);
     fillLitHalf(EX,EY,r,ux,uy,"#0ff");
 
-    // North Pole / Arctic sea-ice reference at the polar-map center.
-    var iceR=Math.max(2,Math.round(r*Math.cos(NH_ICE_LAT*RAD)));
+    // Polar ice reference. North view = Arctic; South view = Antarctica.
+    var iceLat=south?SH_ICE_LAT:NH_ICE_LAT;
+    var iceR=Math.max(2,Math.round(r*Math.cos(iceLat*RAD)));
     g.setColor("#fff").fillCircle(EX,EY,iceR);
 
-    // Land: green with only coastline outlines. No internal country borders.
-    for(var i=0;i<NH_LAND.length;i++){
-      var p=geoPoly(NH_LAND[i],r,baseA);
+    // Land: green with coastline only.
+    for(var i=0;i<land.length;i++){
+      var p=geoPoly(land[i],r,baseA);
       g.setColor("#0f0").fillPoly(p);
       g.setColor("#000").drawPoly(p,true);
     }
 
-    // Keep the same day/night treatment as the current N.Hemi map.
     shadeEarthNight(r,ux,uy);
 
-    // Re-emphasize only major coastlines after night shading.
+    // Re-emphasize major coastlines after night shading.
     g.setColor("#fff");
-    for(var j=0;j<NH_LAND.length;j++)
-      g.drawPoly(geoPoly(NH_LAND[j],r,baseA),true);
+    for(var j=0;j<land.length;j++)
+      g.drawPoly(geoPoly(land[j],r,baseA),true);
 
-    // Mark the exact North Pole and the Earth rim.
     g.setColor("#fff").fillCircle(EX,EY,1);
     g.drawCircle(EX,EY,r);
   }
@@ -360,11 +389,11 @@ try {
     ux/=len; uy/=len;
 
     var ha=localSolarHourAngle(date);
-    var a=ref.sunAng+ha;
+    var a=ref.sunAng+viewSign()*ha;
     var style=settings.earthStyle|0;
 
     if(style===2){
-      drawNorthMap(r,a,ux,uy);
+      drawHemisphereMap(r,a,ux,uy);
     } else if(style===1){
       var dc=EARTH_COLORS[settings.earthDayColor|0]||"#0ff";
       var nc=EARTH_COLORS[settings.earthNightColor|0]||"#00f";
@@ -453,7 +482,9 @@ try {
     var eq=sunEquFromLon(sLon);
     var sunAng=Math.atan2(SY-EY,SX-EX);
     var moonOrbitR=settings.earthSize+settings.moonSize+5;
-    var ma=sunAng+phase;
+    // Lunar ecliptic longitude increases eastward. North view therefore
+    // moves counterclockwise on screen; South view is the mirror image.
+    var ma=sunAng+viewSign()*phase;
     var mx=Math.round(EX+moonOrbitR*Math.cos(ma));
     var my=Math.round(EY+moonOrbitR*Math.sin(ma));
     g.setBgColor(C.bg).setColor(C.bg).clear();
