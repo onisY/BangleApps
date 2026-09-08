@@ -2,6 +2,8 @@
   var Storage = require("Storage");
   var L = require("orbitloc").prefs;
   var FILE = "orbit.json";
+  var SHOT_STATE = "orbitshot.json";
+  var SHOT_MAX = 20;
   var d = {
     locationMode:0, // 0=Place, 1=Manual
     pref:12, place:0,
@@ -38,6 +40,21 @@
   function applyCurrent(){
     if(s.locationMode===1) applyManual();
     else applyPlace();
+  }
+
+  function shotName(i){
+    return "orb"+(i<10?"0":"")+i+".bmp";
+  }
+  function shotCount(){
+    var st=Storage.readJSON(SHOT_STATE,1);
+    if(st && isFinite(st.count)) return Math.max(0,Math.min(SHOT_MAX,st.count|0));
+    var n=0;
+    for(var i=0;i<SHOT_MAX;i++) if(Storage.read(shotName(i))!==undefined) n++;
+    return n;
+  }
+  function deleteShots(){
+    for(var i=0;i<SHOT_MAX;i++) Storage.erase(shotName(i));
+    Storage.erase(SHOT_STATE);
   }
 
   function show(){
@@ -98,6 +115,15 @@
       };
     }
 
+    m["Screenshots"]=function(){
+      E.showAlert(shotCount()+" / "+SHOT_MAX+" saved","Orbit shots").then(show);
+    };
+    m["Delete shots"]=function(){
+      E.showPrompt("Delete all screenshots?",{title:"Orbit shots"}).then(function(ok){
+        if(ok) deleteShots();
+        show();
+      });
+    };
     m["Sun size"]={value:s.sunSize,min:3,max:15,step:1,onchange:function(v){s.sunSize=v;write();}};
     m["Earth size"]={value:s.earthSize,min:8,max:48,step:1,onchange:function(v){s.earthSize=v;write();}};
     m["Moon size"]={value:s.moonSize,min:3,max:12,step:1,onchange:function(v){s.moonSize=v;write();}};
