@@ -248,35 +248,44 @@ try {
   // Each polygon is latitude/longitude pairs in clockwise geographic order.
   // Separate polygons avoid the projection self-crossings that distorted East Asia.
   var NH_LAND=[
-    // North America: Alaska -> Pacific coast -> Gulf/Atlantic -> Canada -> Arctic
+    // North America
     [72,-168,68,-160,64,-152,60,-147,56,-140,52,-134,48,-128,
      44,-124,40,-123,36,-121,33,-118,30,-115,27,-111,24,-106,
      23,-100,25,-96,28,-91,30,-86,33,-81,37,-77,41,-73,45,-67,
      49,-62,53,-57,57,-60,61,-68,65,-76,69,-86,73,-105,74,-125,
      73,-145],
 
-    // Greenland
-    [60,-52,64,-57,69,-59,74,-57,79,-50,82,-38,81,-28,77,-22,
-     72,-24,67,-31,63,-40],
+    // Greenland - deliberately enlarged/coarsened so it remains recognizable
+    // on a 176x176 display.
+    [59,-46,62,-52,67,-57,73,-58,78,-52,82,-42,83,-30,80,-20,
+     75,-18,70,-24,65,-31,61,-38],
 
-    // Eurasia: Atlantic Europe -> Arctic Russia -> Pacific Asia ->
-    // Southeast/South Asia -> Middle East/Mediterranean -> Atlantic Europe
-    [36,-10,42,-10,48,-6,53,1,57,8,61,16,65,24,69,32,72,44,
-     74,60,75,80,74,100,72,120,69,140,65,160,61,175,57,169,
-     53,158,49,150,45,145,41,140,37,134,33,126,29,121,24,117,
-     20,112,15,108,10,103,8,98,11,92,16,86,20,80,24,75,27,69,
-     30,62,31,55,29,49,31,43,33,38,35,33,37,29,39,24,41,20,
-     43,15,45,10,45,5,43,0,40,-5],
+    // Main Eurasian landmass. Scandinavia is drawn separately below so that
+    // its peninsula shape is not lost in the coarse continental outline.
+    [36,-10,43,-9,49,-4,54,2,57,10,60,20,63,31,67,45,71,60,
+     73,80,72,100,70,120,67,140,63,158,59,175,55,170,51,160,
+     47,151,43,145,39,139,35,133,31,126,27,121,23,116,18,111,
+     13,106,9,101,10,95,15,88,20,82,24,76,28,70,31,63,33,56,
+     31,49,33,43,35,37,37,31,39,26,41,21,43,16,44,11,43,5,
+     41,0,39,-5],
 
-    // Japan - Kyushu / Shikoku-Honshu / Hokkaido as separate islands
-    [31,129,33,130,34,132,32,132,30.5,131],
-    [33,132,34,134,34.5,136,35,138,36,140,38,141.5,40.5,141,
-     39,139,37,137,35.5,135,34,133],
-    [41.5,140,42,142,43,145,45.5,145.5,45,142,43.5,140],
+    // Scandinavian Peninsula: Norway/Sweden/Finland outline
+    [55,5,58,5,61,7,64,10,67,13,70,18,71,24,69,29,66,29,
+     63,26,60,22,58,18,56,13],
+
+    // Japan: Kyushu
+    [30.5,129,32,129.5,33.5,131,33,132.5,31.5,132,30.5,131],
+
+    // Japan: Shikoku + Honshu
+    [33,132,34,133.5,34.5,135.5,35,137.5,36,139.5,38,141,
+     40.5,141.5,40,140,38.5,138.5,37,136.5,35.5,134.5,34,133],
+
+    // Japan: Hokkaido
+    [41.5,140,42.5,141,43.5,143,45.5,145,45,142,43.5,140],
 
     // Great Britain
-    [50,-5.5,52,-4.5,54,-3.5,56,-5,58,-4,58.5,-2,57,0,
-     55,-1,53,0,51,1]
+    [50,-5.5,51.5,-4.5,53,-4,55,-5,57,-4.5,58.5,-3,58,-1,
+     56,0,54,-1,52,0.5,50.5,-1]
   ];
 
   // Approximate sea-ice cap used only as a clear North Pole reference.
@@ -284,7 +293,10 @@ try {
 
   function geoPoint(lat,lon,r,baseA){
     var rr=r*Math.cos(lat*RAD);
-    var aa=baseA+(lon-loc.lon)*RAD;
+    // Looking down on the North Pole, east longitude must advance in the
+    // opposite screen-angle direction because display Y increases downward.
+    // The previous '+' mirrored east and west.
+    var aa=baseA-(lon-loc.lon)*RAD;
     return [Math.round(EX+rr*Math.cos(aa)),Math.round(EY+rr*Math.sin(aa))];
   }
   function geoPoly(src,r,baseA){
