@@ -170,3 +170,10 @@ Manual mode stores the final selected values in `orbit.json` as `Manual / Custom
 - The **observer horizon** is now bright magenta, 3 px thick, and extended well beyond the Earth so it is clearly visible.
 - The place labels are moved to the actual lower-right edge.
 - Battery percentage is sampled at most once every 10 minutes in idle mode and reused during time scrubbing, preventing 3-5% apparent jumps caused by repeatedly sampling battery voltage under changing display/CPU load.
+
+
+## Version 0.19 horizon and Moon sight-line correction
+
+- The **observer horizon** is reduced to a 1 px line and shortened to only slightly longer than the Earth diameter.
+- The **Moon sight line** visibility test now uses an independent compact SunCalc-style lunar position calculation plus horizontal-parallax correction.
+- This independent path is deliberately separated from the schematic Moon-orbit drawing model, so a drawing-model error cannot suppress the visibility line.
