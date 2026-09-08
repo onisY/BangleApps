@@ -46,7 +46,7 @@ try {
     elevationM:settings.elevationM||0,pref:settings.locPref};
 
   var C = {bg:"#000",fg:"#fff",sun:"#f22",flare:"#f80",earth:"#5cf",earthEdge:"#9ef",
-           marker:"#f00",horizon:"#f0f",moon:"#fd4",orbit:"#555",rise:"#ff0",set:"#f80",
+           marker:"#f00",horizon:"#f0f",moon:"#fd4",moonDark:"#008",orbit:"#555",rise:"#ff0",set:"#f80",
            noon:"#ccc",penumbra:"#631",slider:"#777",nowBg:"#0f0",shiftBg:"#f00",zenith:"#0f0"};
   var dragActive = false, tickTimer, timeOffsetMs = 0, lastCenterTap = 0;
   var holdTimer, holdDir = 0, edgeDownDir = 0, edgeDownAt = 0;
@@ -194,22 +194,8 @@ try {
     var ux=EX-cx, uy=EY-cy;
     var len=Math.sqrt(ux*ux+uy*uy)||1;
     ux/=len; uy/=len;
-    // Delete the hemisphere facing away from Earth.
-    fillLitHalf(cx,cy,r,-ux,-uy,C.bg);
-  }
-
-  function drawMoonEarthFacingArc(cx,cy,r){
-    var a0=Math.atan2(EY-cy,EX-cx)-PI/2;
-    var steps=Math.max(12,r*4);
-    var px=Math.round(cx+r*Math.cos(a0));
-    var py=Math.round(cy+r*Math.sin(a0));
-    for(var i=1;i<=steps;i++){
-      var a=a0+PI*i/steps;
-      var x=Math.round(cx+r*Math.cos(a));
-      var y=Math.round(cy+r*Math.sin(a));
-      g.drawLine(px,py,x,y);
-      px=x; py=y;
-    }
+    // Delete the Earth-far hemisphere, including any orbit/rim pixels beneath it.
+    fillLitHalf(cx,cy,r+1,-ux,-uy,C.bg);
   }
 
   function fillDiskIntersection(cx,cy,r,ox,oy,sr,color){
@@ -283,25 +269,34 @@ try {
   }
 
   function drawMoon(mx,my,m,s){
-    // Sun is effectively at infinity on the Earth-Moon scale:
-    // use one parallel sunlight direction for both Earth and Moon.
-    var r=settings.moonSize, ux=SX-EX,uy=SY-EY,len=Math.sqrt(ux*ux+uy*uy)||1;
-    ux/=len;uy/=len;
+    // Parallel sunlight direction: the Sun is effectively at infinity
+    // on the Earth-Moon scale.
+    var r=settings.moonSize;
+    var sux=SX-EX, suy=SY-EY, slen=Math.sqrt(sux*sux+suy*suy)||1;
+    sux/=slen; suy/=slen;
 
-    g.setColor(C.bg).fillCircle(mx,my,r);
-    fillLitHalf(mx,my,r,ux,uy,C.moon);
+    // Earth-facing direction as seen from the Moon.
+    var eux=EX-mx, euy=EY-my, elen=Math.sqrt(eux*eux+euy*euy)||1;
+    eux/=elen; euy/=elen;
 
-    // Eclipse shadow using scanline-circle intersections instead of per-pixel tests.
+    // Start from a completely blank Moon disk.  The Earth-facing hemisphere
+    // is deep blue where it receives no direct sunlight.
+    g.setColor(C.bg).fillCircle(mx,my,r+1);
+    fillLitHalf(mx,my,r,eux,euy,C.moonDark);
+
+    // Direct sunlight is gold. It is painted first over the full Sun-facing
+    // half, then the Earth-far half is erased below, leaving only the
+    // Earth-facing AND directly illuminated intersection.
+    fillLitHalf(mx,my,r,sux,suy,C.moon);
+
+    // Lunar-eclipse shadow remains applicable to the visible Earth-facing side.
     var sh=shadowGeometry(m,s,r);
     fillDiskIntersection(mx,my,r,sh.ox,sh.oy,sh.pr,C.penumbra);
     fillDiskIntersection(mx,my,r,sh.ox,sh.oy,sh.ur,C.bg);
 
-    // Remove the complete Earth-far hemisphere, including its outer rim.
+    // Final clipping: erase the entire Earth-far hemisphere. No outline is
+    // redrawn afterward, so its outer rim cannot remain visible.
     eraseMoonFarHalf(mx,my,r);
-
-    // Draw only the outer rim of the hemisphere that faces Earth.
-    g.setColor(C.moon);
-    drawMoonEarthFacingArc(mx,my,r);
   }
 
   function draw(){
