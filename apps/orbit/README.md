@@ -211,3 +211,18 @@ Manual mode stores the final selected values in `orbit.json` as `Manual / Custom
 - A short vibration confirms a successful save; no on-screen message is drawn into the screenshot.
 - Orbit settings now show the saved screenshot count and provide **Delete shots** to erase all screenshot BMP files.
 - On a computer, connect the watch in Espruino Web IDE and use the Storage view to save the `orbNN.bmp` files to disk.
+
+
+## Version 0.24 header, Moon size and Earth styles
+
+- The top status header no longer shows the Reiwa year prefix. It now uses `MM/DD HH:MM •battery` and spreads the larger bold glyphs almost across the full display width.
+- Header background states:
+  - input-enabled: yellow with dark text;
+  - current time: subdued blue-purple with white text;
+  - other state: white with dark text.
+- Moon size can now be increased to 18 px radius, approximately twice the original 9 px default.
+- Earth display mode can be selected in settings:
+  - **Current**: the existing Orbit Earth;
+  - **Custom colors**: selectable day, night and rim colors;
+  - **N.Hemi map**: simplified north-polar Northern Hemisphere sea/land map with fine reference/country-border lines.
+- The Northern Hemisphere map rotates with the same local solar/geographic orientation used for the observer marker.
