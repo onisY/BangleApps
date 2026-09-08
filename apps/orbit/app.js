@@ -244,25 +244,43 @@ try {
 
   // Simplified northern-hemisphere land polygons: latitude, longitude pairs.
   // Projection is polar/orthographic: north pole=center, equator=rim.
+  // Simplified but geographically ordered Northern Hemisphere coastlines.
+  // Each polygon is latitude/longitude pairs in clockwise geographic order.
+  // Separate polygons avoid the projection self-crossings that distorted East Asia.
   var NH_LAND=[
-    [72,-168,68,-150,61,-140,54,-132,47,-125,38,-122,30,-114,22,-105,18,-96,25,-82,35,-75,45,-66,53,-56,61,-65,68,-83,73,-110],
-    [60,-52,66,-58,76,-62,82,-50,83,-32,77,-19,69,-24,64,-37],
-    [36,-10,44,-7,52,2,59,12,66,22,70,38,72,58,73,82,71,105,66,130,61,155,54,170,48,155,43,143,36,137,31,124,26,112,20,104,15,93,22,80,27,67,31,53,36,42,40,30,36,18,42,8],
-    [37,-10,31,-8,23,-16,12,-17,3,-10,0,5,5,18,12,28,22,34,31,31,36,20],
-    [31,68,27,77,23,88,14,81,8,73,18,68],
-    [25,96,22,108,16,120,8,123,2,114,6,103],
-    [31,130,34,132,38,136,42,141,45,143,42,146,37,142,33,136],
-    [63,-24,66,-24,67,-18,65,-13,63,-17]
+    // North America: Alaska -> Pacific coast -> Gulf/Atlantic -> Canada -> Arctic
+    [72,-168,68,-160,64,-152,60,-147,56,-140,52,-134,48,-128,
+     44,-124,40,-123,36,-121,33,-118,30,-115,27,-111,24,-106,
+     23,-100,25,-96,28,-91,30,-86,33,-81,37,-77,41,-73,45,-67,
+     49,-62,53,-57,57,-60,61,-68,65,-76,69,-86,73,-105,74,-125,
+     73,-145],
+
+    // Greenland
+    [60,-52,64,-57,69,-59,74,-57,79,-50,82,-38,81,-28,77,-22,
+     72,-24,67,-31,63,-40],
+
+    // Eurasia: Atlantic Europe -> Arctic Russia -> Pacific Asia ->
+    // Southeast/South Asia -> Middle East/Mediterranean -> Atlantic Europe
+    [36,-10,42,-10,48,-6,53,1,57,8,61,16,65,24,69,32,72,44,
+     74,60,75,80,74,100,72,120,69,140,65,160,61,175,57,169,
+     53,158,49,150,45,145,41,140,37,134,33,126,29,121,24,117,
+     20,112,15,108,10,103,8,98,11,92,16,86,20,80,24,75,27,69,
+     30,62,31,55,29,49,31,43,33,38,35,33,37,29,39,24,41,20,
+     43,15,45,10,45,5,43,0,40,-5],
+
+    // Japan - Kyushu / Shikoku-Honshu / Hokkaido as separate islands
+    [31,129,33,130,34,132,32,132,30.5,131],
+    [33,132,34,134,34.5,136,35,138,36,140,38,141.5,40.5,141,
+     39,139,37,137,35.5,135,34,133],
+    [41.5,140,42,142,43,145,45.5,145.5,45,142,43.5,140],
+
+    // Great Britain
+    [50,-5.5,52,-4.5,54,-3.5,56,-5,58,-4,58.5,-2,57,0,
+     55,-1,53,0,51,1]
   ];
 
-  // A few coarse internal borders for orientation.  They are intentionally
-  // sparse so the 176x176 map stays legible.
-  var NH_BORDERS=[
-    [49,-125,49,-95,45,-83], [32,-117,31,-106,29,-103],
-    [60,5,50,15,47,25,49,35], [55,22,60,30,62,40],
-    [50,40,50,60,52,80,50,100,50,120],
-    [35,73,30,78,27,85], [42,130,39,135]
-  ];
+  // Approximate sea-ice cap used only as a clear North Pole reference.
+  var NH_ICE_LAT=78;
 
   function geoPoint(lat,lon,r,baseA){
     var rr=r*Math.cos(lat*RAD);
@@ -300,19 +318,28 @@ try {
     g.setColor("#00f").fillCircle(EX,EY,r);
     fillLitHalf(EX,EY,r,ux,uy,"#0ff");
 
-    // Land: green. Coastlines are black before night shading.
+    // North Pole / Arctic sea-ice reference at the polar-map center.
+    var iceR=Math.max(2,Math.round(r*Math.cos(NH_ICE_LAT*RAD)));
+    g.setColor("#fff").fillCircle(EX,EY,iceR);
+
+    // Land: green with only coastline outlines. No internal country borders.
     for(var i=0;i<NH_LAND.length;i++){
       var p=geoPoly(NH_LAND[i],r,baseA);
       g.setColor("#0f0").fillPoly(p);
       g.setColor("#000").drawPoly(p,true);
     }
 
+    // Keep the same day/night treatment as the current N.Hemi map.
     shadeEarthNight(r,ux,uy);
 
-    // Fine country/reference borders, then the Earth rim.
+    // Re-emphasize only major coastlines after night shading.
     g.setColor("#fff");
-    for(var j=0;j<NH_BORDERS.length;j++)g.drawPoly(geoPoly(NH_BORDERS[j],r,baseA),false);
-    g.setColor("#fff").drawCircle(EX,EY,r);
+    for(var j=0;j<NH_LAND.length;j++)
+      g.drawPoly(geoPoly(NH_LAND[j],r,baseA),true);
+
+    // Mark the exact North Pole and the Earth rim.
+    g.setColor("#fff").fillCircle(EX,EY,1);
+    g.drawCircle(EX,EY,r);
   }
 
   function drawEarth(date,ref,moonOrbitR){
