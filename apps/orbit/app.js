@@ -108,40 +108,6 @@ try {
     var e=RAD*23.4397;
     return {ra:Math.atan2(Math.sin(l)*Math.cos(e),Math.cos(l)),dec:Math.asin(Math.sin(e)*Math.sin(l))};
   }
-  // Independent Moon-altitude calculation for the Moon sight line.
-  // Uses the compact SunCalc-style lunar coordinates, then applies horizontal
-  // parallax approximately as -parallax*cos(altitude).
-  function moonSightAltitude(date){
-    var d=toDays(date);
-    var L=RAD*(218.316+13.176396*d);
-    var M=RAD*(134.963+13.064993*d);
-    var F=RAD*(93.272+13.229350*d);
-    var lon=L+RAD*6.289*Math.sin(M);
-    var lat=RAD*5.128*Math.sin(F);
-    var dist=385001-20905*Math.cos(M);
-    var eps=23.4397*RAD;
-    var ra=Math.atan2(Math.sin(lon)*Math.cos(eps)-Math.tan(lat)*Math.sin(eps),Math.cos(lon));
-    var dec=Math.asin(Math.sin(lat)*Math.cos(eps)+Math.cos(lat)*Math.sin(eps)*Math.sin(lon));
-    var lw=-loc.lon*RAD;
-    var sid=RAD*(280.16+360.9856235*d)-lw;
-    var Hh=sid-ra;
-    var phi=loc.lat*RAD;
-    var geoAlt=Math.asin(Math.sin(phi)*Math.sin(dec)+
-      Math.cos(phi)*Math.cos(dec)*Math.cos(Hh));
-    var par=Math.asin(6378.14/dist);
-    return {alt:geoAlt-par*Math.cos(geoAlt),dist:dist};
-  }
-  function horizonDip(){
-    var h=Math.max(0,loc.elevationM||0)/1000;
-    if(!h)return 0;
-    var R=6378.137;
-    return Math.acos(R/(R+h));
-  }
-  function moonVisible(date,m){
-    var q=moonSightAltitude(date);
-    var moonRadius=Math.asin(1737.4/q.dist);
-    return q.alt+moonRadius > -horizonDip();
-  }
   function dayOfYear(date){
     var jan1=new Date(date.getFullYear(),0,1,0,0,0,0);
     return Math.floor((date.valueOf()-jan1.valueOf())/DAY)+1;
@@ -222,6 +188,14 @@ try {
       }
       if(x0<=x1) g.drawLine(cx+x0,cy+yy,cx+x1,cy+yy);
     }
+  }
+
+  function eraseMoonFarHalf(cx,cy,r){
+    var ux=EX-cx, uy=EY-cy;
+    var len=Math.sqrt(ux*ux+uy*uy)||1;
+    ux/=len; uy/=len;
+    // Delete the hemisphere facing away from Earth.
+    fillLitHalf(cx,cy,r,-ux,-uy,C.bg);
   }
 
   function fillDiskIntersection(cx,cy,r,ox,oy,sr,color){
@@ -309,6 +283,9 @@ try {
     fillDiskIntersection(mx,my,r,sh.ox,sh.oy,sh.ur,C.bg);
 
     g.setColor(C.moon).drawCircle(mx,my,r);
+
+    // Only the Earth-facing hemisphere is drawn in the schematic.
+    eraseMoonFarHalf(mx,my,r);
   }
 
   function draw(){
@@ -328,13 +305,8 @@ try {
     g.setColor(C.orbit).drawCircle(EX,EY,moonOrbitR);
     var ref=solarReference(date,eq);
     drawSun();
-    var observer=drawEarth(date,ref,moonOrbitR);
+    drawEarth(date,ref,moonOrbitR);
     drawMoon(mx,my,mGeo,sLon);
-    if(observer && moonVisible(date,mGeo)){
-      g.setColor(C.fg);
-      drawThickLine2(observer.x,observer.y,mx,my);
-      g.setColor(C.marker).fillCircle(observer.x,observer.y,settings.markerSize);
-    }
     g.setColor(C.fg).setFont("6x8",1).setFontAlign(1,0);
     g.drawString(loc.pref,W-1,H-17);
     g.drawString(loc.name,W-1,H-8);
