@@ -154,12 +154,18 @@ try {
     var phi=loc.lat*RAD;
     var c0=(Math.sin(-0.833*RAD)-Math.sin(phi)*Math.sin(dec))/
       (Math.cos(phi)*Math.cos(dec));
-    var noonMin=720-4*(loc.lon-135)-eot;
-    var ev=[{min:0},{min:noonMin}];
+
+    // Device civil timezone. Japan gives 135E automatically:
+    // getTimezoneOffset()=-540 min -> standard meridian=135 deg E.
+    var stdLon=-noonDate.getTimezoneOffset()/4;
+    var solarNoonMin=720-4*(loc.lon-stdLon)-eot;
+
+    // 00:00 and civil noon 12:00 are exact clock-time events.
+    var ev=[{min:0},{min:720}];
     if(c0>=-1 && c0<=1){
       var h0=Math.acos(c0)/RAD;
-      ev.push({min:noonMin-4*h0});
-      ev.push({min:noonMin+4*h0});
+      ev.push({min:solarNoonMin-4*h0});
+      ev.push({min:solarNoonMin+4*h0});
     }
     return ev;
   }
@@ -304,23 +310,43 @@ try {
     [72,-168,69,-160,65,-154,61,-149,58,-143,55,-136,57,-131,
      61,-134,65,-142,69,-151,72,-160],
 
-    // Main North America: west coast -> Mexico/Gulf -> Atlantic -> Arctic Canada.
-    [70,-130,62,-136,55,-132,49,-127,44,-124,39,-123,34,-119,
-     30,-115,26,-110,23,-104,22,-98,25,-94,29,-89,30,-84,34,-79,
-     39,-75,44,-69,49,-64,54,-58,59,-56,63,-63,67,-72,71,-82,
-     74,-96,74,-112],
+    // Canada + USA. Florida is exaggerated slightly to remain visible.
+    [70,-130,62,-136,55,-132,49,-127,44,-124,39,-123,35,-120,
+     32,-117,31,-111,29,-104,27,-98,28,-94,29,-90,30,-86,
+     29,-83,27,-82,24.5,-81,26,-80,29,-81,32,-80,35,-76,
+     39,-74,44,-69,49,-64,54,-58,59,-56,63,-63,67,-72,
+     71,-82,74,-96,74,-112],
+
+    // Mexico including Baja California and Yucatan.
+    [32,-117,29,-115,26,-113,23,-110,21,-106,19,-105,17,-101,
+     15,-96,16,-92,18,-89,21,-87,22,-90,20,-96,23,-101,
+     26,-104,29,-107,31,-112],
 
     // Greenland
     [59,-46,62,-52,67,-57,73,-58,78,-52,82,-42,83,-30,80,-20,
      75,-18,70,-24,65,-31,61,-38],
 
-    // Main Eurasia. Britain, Scandinavia and Japan are separate below.
-    [36,-10,43,-9,49,-4,54,2,57,10,60,20,63,31,67,45,71,60,
-     73,80,72,100,70,120,67,140,63,158,59,175,55,170,51,160,
-     47,151,43,145,39,139,35,133,31,126,27,121,23,116,18,111,
-     13,106,9,101,10,95,15,88,20,82,24,76,28,70,31,63,33,56,
-     31,49,33,43,35,37,37,31,39,26,41,21,43,16,44,11,43,5,
-     41,0,39,-5],
+    // Main Eurasia. Far-east mainland coast deliberately stays west of Japan,
+    // leaving a visible Japan Sea gap.
+    [43,-1,49,-4,54,2,57,10,60,20,63,31,67,45,71,60,
+     73,80,72,100,70,120,67,140,63,158,59,175,55,170,51,158,
+     47,145,44,137,42,132,40,130,38,128,35,126,32,123,29,121,
+     24,117,18,111,13,106,9,101,10,95,15,88,20,82,24,76,
+     28,70,31,63,33,56,31,49,33,43,35,37,37,31,39,26,
+     41,21,43,16,44,11,43,5,41,0],
+
+    // Iberian Peninsula, separated by the Bay of Biscay / Mediterranean coast.
+    [43,-9,43,0,41,3,39,0,36,-1,36,-7,38,-9,41,-9],
+
+    // Italian Peninsula
+    [46,8,45,12,43,13,41,16,39,16,38,14,40,12,42,11,44,8],
+
+    // Balkan / Greece projection to suggest the eastern Mediterranean.
+    [45,14,44,20,42,23,40,24,38,23,39,20,41,18,43,16],
+
+    // North Africa, creating the Mediterranean as blue water between coasts.
+    [36,-6,35,2,37,10,36,18,34,25,31,32,27,34,22,32,20,25,
+     22,15,25,5,28,-3,31,-8,34,-9],
 
     // Scandinavian Peninsula
     [55,5,58,5,61,7,64,10,67,13,70,18,71,24,69,29,66,29,
@@ -337,6 +363,13 @@ try {
     // Great Britain
     [50,-5.5,51.5,-4.5,53,-4,55,-5,57,-4.5,58.5,-3,58,-1,
      56,0,54,-1,52,0.5,50.5,-1]
+  ];
+
+  // Tiny islands: single-pixel references at real latitude/longitude.
+  // Ogasawara, Hawaii Big Island, Maui and Oahu.
+  var NH_ISLANDS=[
+    [27.1,142.2],
+    [19.7,-155.5],[20.8,-156.3],[21.4,-158.0]
   ];
 
   // Southern Hemisphere map used when View side = South.
@@ -421,6 +454,15 @@ try {
     g.setColor("#fff");
     for(var j=0;j<land.length;j++)
       g.drawPoly(geoPoly(land[j],r,baseA),true);
+
+    // Ogasawara and Hawaii: intentionally sub-rice-grain, one pixel each.
+    if(!south){
+      g.setColor("#0f0");
+      for(var k=0;k<NH_ISLANDS.length;k++){
+        var q=geoPoint(NH_ISLANDS[k][0],NH_ISLANDS[k][1],r,baseA);
+        g.setPixel(q[0],q[1]);
+      }
+    }
 
     g.setColor("#fff").fillCircle(EX,EY,1);
     g.drawCircle(EX,EY,r);
