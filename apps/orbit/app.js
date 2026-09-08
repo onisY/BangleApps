@@ -7,20 +7,6 @@ try {
   var W = g.getWidth(), H = g.getHeight();
   var PI = Math.PI, TAU = PI*2, RAD = PI/180;
   var DAY = 86400000, J1970 = 2440588, J2000 = 2451545;
-  var SYNODIC = 29.530588853;
-  function utc(y,m0,d,h,mi,s){
-    var m=m0+1;
-    if(m<=2)y--;
-    var era=Math.floor(y/400);
-    var yoe=y-era*400;
-    var mp=m+(m>2?-3:9);
-    var doy=Math.floor((153*mp+2)/5)+d-1;
-    var doe=yoe*365+Math.floor(yoe/4)-Math.floor(yoe/100)+doy;
-    var days=era*146097+doe-719468;
-    return days*DAY+h*3600000+mi*60000+s*1000;
-  }
-  var PHASE_ANCHOR = utc(2000,0,6,18,14,0);
-
   var SX = 145, SY = 50;
   var EX = 74, EY = 101;
 
@@ -49,11 +35,11 @@ try {
   var loc = {name:settings.locName,lat:settings.lat,lon:settings.lon,
     elevationM:settings.elevationM||0,pref:settings.locPref};
 
-  var C = {bg:"#000",fg:"#fff",sun:"#f22",flare:"#f80",earth:"#5cf",earthEdge:"#9ef",
+  var C = {bg:"#000",fg:"#fff",sun:"#f22",flare:"#f80",earth:"#5cf",
            marker:"#f00",horizon:"#f0f",moon:"#fd4",moonDark:"#008",orbit:"#555",rise:"#ff0",set:"#f80",
-           noon:"#ccc",penumbra:"#631",slider:"#777",zenith:"#0f0",
+           noon:"#ccc",penumbra:"#631",zenith:"#0f0",
            headInput:"#ff0",headBlue:"#00f",headPurple:"#f0f",headOther:"#fff"};
-  var dragActive = false, tickTimer, eventTimer, timeOffsetMs = 0, lastCenterTap = 0;
+  var tickTimer, eventTimer, timeOffsetMs = 0, lastCenterTap = 0;
   var holdTimer, holdDir = 0, edgeDownDir = 0, edgeDownAt = 0;
   var edgeTapTimer, pendingEdgeDir = 0;
   var interactive = false, idleTimer;
@@ -205,7 +191,6 @@ try {
     var dist=385000.56-20905.355*Math.cos(Mp)-3699.111*Math.cos(2*D-Mp)-2955.968*Math.cos(2*D)-569.925*Math.cos(2*Mp);
     return {lon:norm(lon),lat:lat,dist:dist};
   }
-  function phaseAngle(date){return norm(moonGeo(date).lon-sunLon(date));}
 
   function sceneDate(){ return new Date(Date.now()+timeOffsetMs); }
   function currentLabel(){
@@ -727,7 +712,6 @@ try {
   function onDrag(e){
     if(e.b) armIdle();
     if(!e.b){
-      dragActive=false;
       edgeDownDir=0;
       stopHold();
       return;
