@@ -2,9 +2,9 @@
   "id": "orbit",
   "name": "Orbit",
   "shortName": "Orbit",
-  "version": "0.28",
+  "version": "0.29",
   "author": "onisY",
-  "description": "Sun-Earth-Moon clock for Bangle.js 2 with physically oriented North/South views, offline Japan locations, selectable Earth rendering, lunar illumination/eclipses, battery display and swipe screenshots. No GPS.",
+  "description": "Lightweight Sun-Earth-Moon clock for Bangle.js 2 with North/South views, offline Japan locations, selectable Earth rendering, daily solar-event buzzes, lunar illumination/eclipses, battery display and swipe screenshots. No GPS.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,science,astronomy,moon",
@@ -16,11 +16,11 @@
   "storage": [
     {
       "name": "orbit.app.js",
-      "url": "app.js"
+      "url": "app.min.js"
     },
     {
       "name": "orbit.settings.js",
-      "url": "settings.js"
+      "url": "settings.min.js"
     },
     {
       "name": "orbitloc",
