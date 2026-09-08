@@ -9,8 +9,11 @@
     pref:12, place:0,
     locPref:"Tokyo", locName:"Chiyoda-ku", lat:35.694, lon:139.754, elevationM:0,
     manualLat:35.694, manualLon:139.754, manualElevationM:0,
-    sunSize:6, earthSize:30, moonSize:9, markerSize:2
+    sunSize:6, earthSize:30, moonSize:9, markerSize:2,
+    earthStyle:0, earthDayColor:6, earthNightColor:4, earthEdgeColor:7
   };
+  var EARTH_STYLES=["Current","Custom colors","N.Hemi map"];
+  var EARTH_COLOR_NAMES=["Black","Red","Green","Yellow","Blue","Magenta","Cyan","White"];
   var s = Storage.readJSON(FILE,1) || {};
   Object.keys(d).forEach(function(k){ if (s[k]===undefined) s[k]=d[k]; });
   if(s.pref<0 || s.pref>=L.length) s.pref=12;
@@ -115,6 +118,29 @@
       };
     }
 
+    m["Earth style"]={
+      value:s.earthStyle,min:0,max:2,
+      format:function(v){return EARTH_STYLES[v];},
+      onchange:function(v){s.earthStyle=v;write();show();}
+    };
+    if(s.earthStyle===1){
+      m["Earth day"]={
+        value:s.earthDayColor,min:0,max:7,
+        format:function(v){return EARTH_COLOR_NAMES[v];},
+        onchange:function(v){s.earthDayColor=v;write();}
+      };
+      m["Earth night"]={
+        value:s.earthNightColor,min:0,max:7,
+        format:function(v){return EARTH_COLOR_NAMES[v];},
+        onchange:function(v){s.earthNightColor=v;write();}
+      };
+      m["Earth edge"]={
+        value:s.earthEdgeColor,min:0,max:7,
+        format:function(v){return EARTH_COLOR_NAMES[v];},
+        onchange:function(v){s.earthEdgeColor=v;write();}
+      };
+    }
+
     m["Screenshots"]=function(){
       E.showAlert(shotCount()+" / "+SHOT_MAX+" saved","Orbit shots").then(show);
     };
@@ -126,7 +152,7 @@
     };
     m["Sun size"]={value:s.sunSize,min:3,max:15,step:1,onchange:function(v){s.sunSize=v;write();}};
     m["Earth size"]={value:s.earthSize,min:8,max:48,step:1,onchange:function(v){s.earthSize=v;write();}};
-    m["Moon size"]={value:s.moonSize,min:3,max:12,step:1,onchange:function(v){s.moonSize=v;write();}};
+    m["Moon size"]={value:s.moonSize,min:3,max:18,step:1,onchange:function(v){s.moonSize=v;write();}};
     m["Marker size"]={value:s.markerSize,min:1,max:4,step:1,onchange:function(v){s.markerSize=v;write();}};
     E.showMenu(m);
   }
