@@ -236,3 +236,13 @@ Manual mode stores the final selected values in `orbit.json` as `Manual / Custom
 - Removed fine internal country-border lines.
 - Added a simple white Arctic sea-ice cap and a North Pole marker at the map center.
 - Retained the existing sea/land color scheme and day/night shading.
+
+
+## Version 0.26 Northern Hemisphere east-west fix
+
+- Corrected the handedness of the north-polar longitude projection. East and west were mirrored because screen Y increases downward.
+- Japan now uses separate Kyushu, Honshu/Shikoku and Hokkaido shapes on the east side of Eurasia.
+- Added a distinct Scandinavian Peninsula outline.
+- Enlarged and reshaped Greenland so it remains recognizable on the 176x176 display.
+- Great Britain remains a separate island west of continental Europe.
+- Fine internal country borders remain omitted.
