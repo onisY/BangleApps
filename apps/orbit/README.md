@@ -161,3 +161,12 @@ Manual mode stores the final selected values in `orbit.json` as `Manual / Custom
 - Atmospheric refraction is intentionally not used in the visibility decision.
 - The white observer-to-Moon line is now drawn after the Moon, not before it.
 - The white line is 2 px thick and the red observer marker is redrawn on top, making the line visible even when it overlaps the green zenith line.
+
+
+## Version 0.18 display fixes from device photo
+
+- Moon visibility uses a simpler, numerically stable geometric parallax correction suitable for Espruino.
+- The **Moon sight line** is drawn only when the Moon's upper limb is geometrically above the observer horizon.
+- The **observer horizon** is now bright magenta, 3 px thick, and extended well beyond the Earth so it is clearly visible.
+- The place labels are moved to the actual lower-right edge.
+- Battery percentage is sampled at most once every 10 minutes in idle mode and reused during time scrubbing, preventing 3-5% apparent jumps caused by repeatedly sampling battery voltage under changing display/CPU load.
