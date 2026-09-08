@@ -1,21 +1,43 @@
 {
-  "id":"orbit",
-  "name":"Orbit",
-  "shortName":"Orbit",
-  "version":"0.22",
-  "author":"onisY",
-  "description":"Boot-safe Sun-Earth-Moon clock for Bangle.js 2. Fixed Sun/Earth layout, Moon orbit, solar noon/rise/set reference lines, offline Japan place selection, topocentric Moon visibility, observer elevation and battery display. No GPS.",
-  "icon":"app.png",
-  "type":"clock",
-  "tags":"clock,science,astronomy,moon",
-  "supports":["BANGLEJS2"],
-  "readme":"README.md",
-  "allow_emulator":true,
-  "storage":[
-    {"name":"orbit.app.js","url":"app.js"},
-    {"name":"orbit.settings.js","url":"settings.js"},
-    {"name":"orbitloc","url":"locations.js"},
-    {"name":"orbit.img","url":"app-icon.js","evaluate":true}
+  "id": "orbit",
+  "name": "Orbit",
+  "shortName": "Orbit",
+  "version": "0.23",
+  "author": "onisY",
+  "description": "Boot-safe Sun-Earth-Moon clock for Bangle.js 2. Fixed Sun/Earth layout, Moon orbit, solar noon/rise/set reference lines, offline Japan place selection, topocentric Moon visibility, observer elevation and battery display. No GPS.",
+  "icon": "app.png",
+  "type": "clock",
+  "tags": "clock,science,astronomy,moon",
+  "supports": [
+    "BANGLEJS2"
   ],
-  "data":[{"name":"orbit.json"}]
+  "readme": "README.md",
+  "allow_emulator": true,
+  "storage": [
+    {
+      "name": "orbit.app.js",
+      "url": "app.js"
+    },
+    {
+      "name": "orbit.settings.js",
+      "url": "settings.js"
+    },
+    {
+      "name": "orbitloc",
+      "url": "locations.js"
+    },
+    {
+      "name": "orbit.img",
+      "url": "app-icon.js",
+      "evaluate": true
+    }
+  ],
+  "data": [
+    {
+      "name": "orbit.json"
+    },
+    {
+      "name": "orbitshot.json"
+    }
+  ]
 }
