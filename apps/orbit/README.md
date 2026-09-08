@@ -226,3 +226,13 @@ Manual mode stores the final selected values in `orbit.json` as `Manual / Custom
   - **Custom colors**: selectable day, night and rim colors;
   - **N.Hemi map**: simplified north-polar Northern Hemisphere sea/land map with fine reference/country-border lines.
 - The Northern Hemisphere map rotates with the same local solar/geographic orientation used for the observer marker.
+
+
+## Version 0.25 Northern Hemisphere map correction
+
+- Reworked the N.Hemi map coastline data to avoid projection self-crossing around East Asia.
+- Major geography is now represented as separate shapes for North America, Greenland, Eurasia, Japan and Great Britain.
+- Japan is placed off the east coast of Eurasia instead of at the western edge of the continent.
+- Removed fine internal country-border lines.
+- Added a simple white Arctic sea-ice cap and a North Pole marker at the map center.
+- Retained the existing sea/land color scheme and day/night shading.
