@@ -27,7 +27,8 @@ try {
   var def = {
     locationMode:0,
     locPref:"Tokyo",locName:"Chiyoda-ku",lat:35.694,lon:139.754,elevationM:16,
-    sunSize:6,earthSize:30,moonSize:9,markerSize:2
+    sunSize:6,earthSize:30,moonSize:9,markerSize:2,
+    earthStyle:0,earthDayColor:3,earthNightColor:4,earthEdgeColor:7
   };
   var settings = Storage.readJSON(FILE,1) || {};
   Object.keys(def).forEach(function(k){ if (settings[k]===undefined) settings[k]=def[k]; });
@@ -49,7 +50,8 @@ try {
 
   var C = {bg:"#000",fg:"#fff",sun:"#f22",flare:"#f80",earth:"#5cf",earthEdge:"#9ef",
            marker:"#f00",horizon:"#f0f",moon:"#fd4",moonDark:"#008",orbit:"#555",rise:"#ff0",set:"#f80",
-           noon:"#ccc",penumbra:"#631",slider:"#777",nowBg:"#0f0",shiftBg:"#f00",zenith:"#0f0"};
+           noon:"#ccc",penumbra:"#631",slider:"#777",zenith:"#0f0",
+           headInput:"#ff0",headBlue:"#00f",headPurple:"#f0f",headOther:"#fff"};
   var dragActive = false, tickTimer, timeOffsetMs = 0, lastCenterTap = 0;
   var holdTimer, holdDir = 0, edgeDownDir = 0, edgeDownAt = 0;
   var edgeTapTimer, pendingEdgeDir = 0;
@@ -69,12 +71,8 @@ try {
   function wrapPi(a){a=norm(a);return a>PI?a-TAU:a;}
   function toDays(date){return date.valueOf()/DAY-0.5+J1970-J2000;}
   function f2(n){return ("0"+n).substr(-2);}
-  function eraYear(d){
-    var y=d.getFullYear();
-    return y>=2019 ? "R"+(y-2018) : ""+y;
-  }
   function headerText(d){
-    return eraYear(d)+"/"+f2(d.getMonth()+1)+"/"+f2(d.getDate())+" "+f2(d.getHours())+":"+f2(d.getMinutes())+" ."+batteryPct;
+    return f2(d.getMonth()+1)+"/"+f2(d.getDate())+" "+f2(d.getHours())+":"+f2(d.getMinutes())+" ."+batteryPct;
   }
   var FONT3={
     "0":[7,5,5,5,5,5,7],"1":[2,6,2,2,2,2,7],"2":[7,1,1,7,4,4,7],
@@ -84,17 +82,33 @@ try {
     "/":[1,1,1,2,4,4,4],":":[0,2,2,0,2,2,0],"%":[5,1,2,2,4,4,5],".":[0,2,7,7,2,0,0]," ":[0,0,0,0,0,0,0],
     "-":[0,0,0,7,0,0,0],"+":[0,2,2,7,2,2,0],"H":[5,5,5,7,5,5,5]
   };
-  function drawTallBoldString(str,y,fg,bg){
-    var adv=8, pw=2, ph=3, total=str.length*adv-2;
-    var x=Math.floor((W-total)/2);
-    g.setColor(bg).fillRect(0,y-1,W-1,y+21);
+  function fillHeaderBg(y,mode){
+    var y0=y-1,y1=y+21;
+    if(mode===2){
+      g.setColor(C.headInput).fillRect(0,y0,W-1,y1);
+    } else if(mode===1){
+      // Blue-magenta fine stripes give a subdued blue-purple on the 3-bit LCD.
+      g.setColor(C.headBlue).fillRect(0,y0,W-1,y1);
+      g.setColor(C.headPurple);
+      for(var x=3;x<W;x+=8) g.drawLine(x,y0,x,y1);
+    } else {
+      g.setColor(C.headOther).fillRect(0,y0,W-1,y1);
+    }
+  }
+  function drawTallBoldString(str,y,fg,mode){
+    // 3-pixel-wide strokes. Character starts are distributed across almost
+    // the full 176 px width, making the shorter header substantially larger.
+    var pw=3,ph=3,gw=9;
+    var adv=str.length>1?(W-2-gw)/(str.length-1):0;
+    fillHeaderBg(y,mode);
     g.setColor(fg);
     for(var i=0;i<str.length;i++){
       var rows=FONT3[str[i]]||FONT3[" "];
+      var bx=1+Math.round(i*adv);
       for(var ry=0;ry<7;ry++){
         var bits=rows[ry];
         for(var rx=0;rx<3;rx++) if(bits&(4>>rx)){
-          var px=x+i*adv+rx*pw, py=y+ry*ph;
+          var px=bx+rx*pw,py=y+ry*ph;
           g.fillRect(px,py,px+pw-1,py+ph-1);
         }
       }
@@ -146,8 +160,11 @@ try {
   }
 
   function drawHeader(date){
-    var isNow=(timeOffsetMs===0);
-    drawTallBoldString(headerText(date),1,isNow?C.bg:C.fg,isNow?C.nowBg:C.shiftBg);
+    // Priority: input-enabled -> yellow; current idle time -> blue-purple;
+    // all other states -> white.
+    var mode=interactive?2:(timeOffsetMs===0?1:0);
+    var fg=(mode===1)?C.fg:C.bg;
+    drawTallBoldString(headerText(date),1,fg,mode);
   }
 
   function drawSun(){
@@ -222,18 +239,106 @@ try {
     g.drawLine(x0+ox,y0+oy,x1+ox,y1+oy);
   }
 
+  // Actual Bangle.js 2 3-bit display colors used by Custom Earth mode.
+  var EARTH_COLORS=["#000","#f00","#0f0","#ff0","#00f","#f0f","#0ff","#fff"];
+
+  // Simplified northern-hemisphere land polygons: latitude, longitude pairs.
+  // Projection is polar/orthographic: north pole=center, equator=rim.
+  var NH_LAND=[
+    [72,-168,68,-150,61,-140,54,-132,47,-125,38,-122,30,-114,22,-105,18,-96,25,-82,35,-75,45,-66,53,-56,61,-65,68,-83,73,-110],
+    [60,-52,66,-58,76,-62,82,-50,83,-32,77,-19,69,-24,64,-37],
+    [36,-10,44,-7,52,2,59,12,66,22,70,38,72,58,73,82,71,105,66,130,61,155,54,170,48,155,43,143,36,137,31,124,26,112,20,104,15,93,22,80,27,67,31,53,36,42,40,30,36,18,42,8],
+    [37,-10,31,-8,23,-16,12,-17,3,-10,0,5,5,18,12,28,22,34,31,31,36,20],
+    [31,68,27,77,23,88,14,81,8,73,18,68],
+    [25,96,22,108,16,120,8,123,2,114,6,103],
+    [31,130,34,132,38,136,42,141,45,143,42,146,37,142,33,136],
+    [63,-24,66,-24,67,-18,65,-13,63,-17]
+  ];
+
+  // A few coarse internal borders for orientation.  They are intentionally
+  // sparse so the 176x176 map stays legible.
+  var NH_BORDERS=[
+    [49,-125,49,-95,45,-83], [32,-117,31,-106,29,-103],
+    [60,5,50,15,47,25,49,35], [55,22,60,30,62,40],
+    [50,40,50,60,52,80,50,100,50,120],
+    [35,73,30,78,27,85], [42,130,39,135]
+  ];
+
+  function geoPoint(lat,lon,r,baseA){
+    var rr=r*Math.cos(lat*RAD);
+    var aa=baseA+(lon-loc.lon)*RAD;
+    return [Math.round(EX+rr*Math.cos(aa)),Math.round(EY+rr*Math.sin(aa))];
+  }
+  function geoPoly(src,r,baseA){
+    var p=[];
+    for(var i=0;i<src.length;i+=2){
+      var q=geoPoint(src[i],src[i+1],r,baseA);
+      p.push(q[0],q[1]);
+    }
+    return p;
+  }
+  function shadeEarthNight(r,ux,uy){
+    // Black alternate scanlines over the night hemisphere preserve geography
+    // while making day/night obvious on the 3-bit LCD.
+    g.setColor(C.bg);
+    ux=-ux;uy=-uy;
+    for(var yy=-r;yy<=r;yy+=2){
+      var xmax=Math.floor(Math.sqrt(Math.max(0,r*r-yy*yy)));
+      var x0=-xmax,x1=xmax;
+      if(Math.abs(ux)<0.0001){
+        if(yy*uy<0) continue;
+      } else {
+        var cut=-yy*uy/ux;
+        if(ux>0)x0=Math.max(x0,Math.ceil(cut));
+        else x1=Math.min(x1,Math.floor(cut));
+      }
+      if(x0<=x1)g.drawLine(EX+x0,EY+yy,EX+x1,EY+yy);
+    }
+  }
+  function drawNorthMap(r,baseA,ux,uy){
+    // Sea: blue on night base, cyan on directly illuminated half.
+    g.setColor("#00f").fillCircle(EX,EY,r);
+    fillLitHalf(EX,EY,r,ux,uy,"#0ff");
+
+    // Land: green. Coastlines are black before night shading.
+    for(var i=0;i<NH_LAND.length;i++){
+      var p=geoPoly(NH_LAND[i],r,baseA);
+      g.setColor("#0f0").fillPoly(p);
+      g.setColor("#000").drawPoly(p,true);
+    }
+
+    shadeEarthNight(r,ux,uy);
+
+    // Fine country/reference borders, then the Earth rim.
+    g.setColor("#fff");
+    for(var j=0;j<NH_BORDERS.length;j++)g.drawPoly(geoPoly(NH_BORDERS[j],r,baseA),false);
+    g.setColor("#fff").drawCircle(EX,EY,r);
+  }
+
   function drawEarth(date,ref,moonOrbitR){
     var r=settings.earthSize;
     var ux=SX-EX, uy=SY-EY, len=Math.sqrt(ux*ux+uy*uy)||1;
     ux/=len; uy/=len;
 
-    // Fast day/night disk: night black, Sun-facing half light blue.
-    g.setColor(C.bg).fillCircle(EX,EY,r);
-    fillLitHalf(EX,EY,r,ux,uy,C.earth);
-    g.setColor(C.earth).drawCircle(EX,EY,r);
-
     var ha=localSolarHourAngle(date);
     var a=ref.sunAng+ha;
+    var style=settings.earthStyle|0;
+
+    if(style===2){
+      drawNorthMap(r,a,ux,uy);
+    } else if(style===1){
+      var dc=EARTH_COLORS[settings.earthDayColor|0]||"#0ff";
+      var nc=EARTH_COLORS[settings.earthNightColor|0]||"#00f";
+      var ec=EARTH_COLORS[settings.earthEdgeColor|0]||"#fff";
+      g.setColor(nc).fillCircle(EX,EY,r);
+      fillLitHalf(EX,EY,r,ux,uy,dc);
+      g.setColor(ec).drawCircle(EX,EY,r);
+    } else {
+      // Current/original Orbit Earth.
+      g.setColor(C.bg).fillCircle(EX,EY,r);
+      fillLitHalf(EX,EY,r,ux,uy,C.earth);
+      g.setColor(C.earth).drawCircle(EX,EY,r);
+    }
     var d=r*Math.cos(loc.lat*RAD);
     var px=EX+d*Math.cos(a), py=EY+d*Math.sin(a);
 
