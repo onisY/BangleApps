@@ -191,3 +191,13 @@ Manual mode stores the final selected values in `orbit.json` as `Manual / Custom
 
 - The Earth-far hemisphere of the Moon is now removed completely, including its outer rim.
 - Only the outer semicircular rim of the Earth-facing hemisphere is drawn.
+
+
+## Version 0.22 Moon near-side rendering
+
+- The Earth-far hemisphere of the Moon is erased completely, and no far-side rim or semicircular outline is redrawn afterward.
+- Only the Earth-facing hemisphere remains visible.
+- On the Earth-facing hemisphere:
+  - directly illuminated area is gold;
+  - area without direct sunlight is deep blue.
+- Lunar-eclipse shadow processing is retained on the visible Earth-facing hemisphere.
