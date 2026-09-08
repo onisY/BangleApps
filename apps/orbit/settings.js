@@ -10,9 +10,11 @@
     locPref:"Tokyo", locName:"Chiyoda-ku", lat:35.694, lon:139.754, elevationM:0,
     manualLat:35.694, manualLon:139.754, manualElevationM:0,
     sunSize:6, earthSize:30, moonSize:9, markerSize:2,
-    earthStyle:0, earthDayColor:6, earthNightColor:4, earthEdgeColor:7
+    earthStyle:0, earthDayColor:6, earthNightColor:4, earthEdgeColor:7,
+    viewSide:0
   };
-  var EARTH_STYLES=["Current","Custom colors","N.Hemi map"];
+  var EARTH_STYLES=["Current","Custom colors","N/S Hemi map"];
+  var VIEW_SIDES=["North","South"];
   var EARTH_COLOR_NAMES=["Black","Red","Green","Yellow","Blue","Magenta","Cyan","White"];
   var s = Storage.readJSON(FILE,1) || {};
   Object.keys(d).forEach(function(k){ if (s[k]===undefined) s[k]=d[k]; });
@@ -118,6 +120,11 @@
       };
     }
 
+    m["View side"]={
+      value:s.viewSide,min:0,max:1,
+      format:function(v){return VIEW_SIDES[v];},
+      onchange:function(v){s.viewSide=v;write();show();}
+    };
     m["Earth style"]={
       value:s.earthStyle,min:0,max:2,
       format:function(v){return EARTH_STYLES[v];},
