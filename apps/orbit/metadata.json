@@ -2,7 +2,7 @@
   "id": "orbit",
   "name": "Orbit",
   "shortName": "Orbit",
-  "version": "0.25",
+  "version": "0.26",
   "author": "onisY",
   "description": "Sun-Earth-Moon clock for Bangle.js 2 with time navigation, offline Japan locations, selectable Earth rendering, lunar illumination/eclipses, battery display and swipe screenshots. No GPS.",
   "icon": "app.png",
