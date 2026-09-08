@@ -28,7 +28,7 @@ try {
     locationMode:0,
     locPref:"Tokyo",locName:"Chiyoda-ku",lat:35.694,lon:139.754,elevationM:16,
     sunSize:6,earthSize:30,moonSize:9,markerSize:2,
-    earthStyle:0,earthDayColor:3,earthNightColor:4,earthEdgeColor:7
+    earthStyle:0,earthDayColor:6,earthNightColor:4,earthEdgeColor:7
   };
   var settings = Storage.readJSON(FILE,1) || {};
   Object.keys(def).forEach(function(k){ if (settings[k]===undefined) settings[k]=def[k]; });
