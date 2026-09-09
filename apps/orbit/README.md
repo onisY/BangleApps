@@ -351,3 +351,11 @@ Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot stat
 - A single side-button click intentionally does nothing while Orbit is running.
 - Two button events within 1 second perform BLE reset.
 - The launcher is no longer invoked by Orbit's single-click handler, eliminating the conflict that caused immediate app/menu transitions before the second click.
+
+
+## Version 0.35 single-click launcher restored
+
+- BTN1 still uses the raw `setWatch` handler that fixed the BLE double-click conflict.
+- One button release now starts a 1 second wait.
+- If no second release occurs, the normal launcher opens.
+- A second release within the window cancels the launcher and performs BLE reset.
