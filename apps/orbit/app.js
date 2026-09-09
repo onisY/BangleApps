@@ -776,11 +776,11 @@ try {
   }
   // ===== BEGIN ORBIT BLE DOUBLE CLICK =====
   // Easy-to-remove development helper.
-  // Button-down is swallowed so clock mode cannot leave Orbit immediately.
-  // Click timing starts on release:
-  //   one click  -> launcher after 1000 ms
-  //   two clicks -> BLE disconnect + restart, bonds kept
-  var bleBtnTimer,bleBtnClicks=0;
+  // IMPORTANT: button handling is done with setWatch(), not clock UI,
+  // so Bangle's default clock->launcher action cannot pre-empt click #2.
+  // One release  -> launcher after 1000 ms
+  // Two releases -> BLE disconnect + restart, bonds kept
+  var bleBtnTimer,bleBtnClicks=0,bleBtnWatch;
   function orbitBleReset(){
     if(bleBtnTimer){clearTimeout(bleBtnTimer);bleBtnTimer=undefined;}
     bleBtnClicks=0;
@@ -789,9 +789,6 @@ try {
       try{NRF.restart();}catch(e){}
       setTimeout(function(){try{Bangle.buzz(80);}catch(e){}},700);
     },500);
-  }
-  function swallowSideButton(){
-    // Intentionally empty: prevents the clock default action on button-down.
   }
   function onSideButtonRelease(){
     bleBtnClicks++;
@@ -806,6 +803,12 @@ try {
       Bangle.showLauncher();
     },1000);
   }
+  function installBleButtonWatch(){
+    if(bleBtnWatch)clearWatch(bleBtnWatch);
+    bleBtnWatch=setWatch(onSideButtonRelease,BTN1,{
+      repeat:true,edge:"rising",debounce:30
+    });
+  }
   // ===== END ORBIT BLE DOUBLE CLICK =====
 
   function cleanup(){
@@ -817,6 +820,7 @@ try {
     if(eventTimer)clearTimeout(eventTimer);
     if(bleBtnTimer)clearTimeout(bleBtnTimer);
     bleBtnClicks=0;
+    if(bleBtnWatch){clearWatch(bleBtnWatch);bleBtnWatch=undefined;}
     Bangle.removeListener("drag",onDrag);
     Bangle.removeListener("touch",onTouch);
     Bangle.removeListener("lcdPower",onLCD);
@@ -824,7 +828,8 @@ try {
     Bangle.removeListener("swipe",onSwipe);
   }
 
-  Bangle.setUI({mode:"custom",clock:1,btn:swallowSideButton,btnRelease:onSideButtonRelease,remove:cleanup});
+  Bangle.setUI({mode:"custom",remove:cleanup});
+  installBleButtonWatch();
   Bangle.on("drag",onDrag);
   Bangle.on("touch",onTouch);
   Bangle.on("lcdPower",onLCD);
