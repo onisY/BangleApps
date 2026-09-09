@@ -333,3 +333,13 @@ Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot stat
   - a second release during the window performs BLE reset;
   - if no second release arrives, Orbit opens the launcher.
 - BLE reset still keeps pairing/bond information.
+
+
+## Version 0.33 raw BTN1 double-click handler
+
+- Removed button handling from Bangle clock/custom UI entirely.
+- Orbit now calls `Bangle.setUI({mode:"custom",remove:cleanup})` with no button handler and installs a raw `setWatch(..., BTN1, ...)` afterward.
+- This prevents the normal clock button-to-launcher behavior from pre-empting the second click.
+- First button event starts a 1 second double-click window.
+- Second event inside the window resets BLE; otherwise the launcher opens after the window expires.
+- The raw watch is removed in Orbit's cleanup handler.
