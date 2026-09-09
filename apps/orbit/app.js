@@ -797,10 +797,11 @@ try {
       return;
     }
     if(bleBtnTimer)clearTimeout(bleBtnTimer);
+    // Single click intentionally does nothing. This completely avoids
+    // interference from normal clock/launcher button behavior.
     bleBtnTimer=setTimeout(function(){
       bleBtnTimer=undefined;
       bleBtnClicks=0;
-      Bangle.showLauncher();
     },1000);
   }
   function installBleButtonWatch(){
