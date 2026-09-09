@@ -797,11 +797,12 @@ try {
       return;
     }
     if(bleBtnTimer)clearTimeout(bleBtnTimer);
-    // Single click intentionally does nothing. This completely avoids
-    // interference from normal clock/launcher button behavior.
+    // If no second click arrives within 1 second, treat this as a normal
+    // single press and open the launcher.
     bleBtnTimer=setTimeout(function(){
       bleBtnTimer=undefined;
       bleBtnClicks=0;
+      Bangle.showLauncher();
     },1000);
   }
   function installBleButtonWatch(){
