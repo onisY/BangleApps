@@ -817,7 +817,7 @@ try {
     Bangle.removeListener("swipe",onSwipe);
   }
 
-  Bangle.setUI({mode:"clock",btn:onSideButton,remove:cleanup});
+  Bangle.setUI({mode:"custom",clock:1,btn:onSideButton,remove:cleanup});
   Bangle.on("drag",onDrag);
   Bangle.on("touch",onTouch);
   Bangle.on("lcdPower",onLCD);
