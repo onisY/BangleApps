@@ -774,6 +774,34 @@ try {
       if(tickTimer){clearTimeout(tickTimer);tickTimer=undefined;}
     }
   }
+  // ===== BEGIN ORBIT BLE DOUBLE CLICK =====
+  // Easy-to-remove development helper:
+  // one side-button click -> normal launcher (after a short wait)
+  // two clicks within 450 ms -> disconnect + restart BLE, keeping bonds.
+  var bleBtnTimer;
+  function orbitBleReset(){
+    if(bleBtnTimer){clearTimeout(bleBtnTimer);bleBtnTimer=undefined;}
+    try{NRF.disconnect();}catch(e){}
+    setTimeout(function(){
+      try{NRF.restart();}catch(e){}
+      setTimeout(function(){try{Bangle.buzz(80);}catch(e){}},700);
+    },500);
+  }
+  function onSideButton(n){
+    if(n!==1)return;
+    if(bleBtnTimer){
+      clearTimeout(bleBtnTimer);
+      bleBtnTimer=undefined;
+      orbitBleReset();
+      return;
+    }
+    bleBtnTimer=setTimeout(function(){
+      bleBtnTimer=undefined;
+      Bangle.showLauncher();
+    },450);
+  }
+  // ===== END ORBIT BLE DOUBLE CLICK =====
+
   function cleanup(){
     stopHold();
     cancelPendingEdgeTap();
@@ -781,6 +809,7 @@ try {
     if(idleTimer)clearTimeout(idleTimer);
     if(tickTimer)clearTimeout(tickTimer);
     if(eventTimer)clearTimeout(eventTimer);
+    if(bleBtnTimer)clearTimeout(bleBtnTimer);
     Bangle.removeListener("drag",onDrag);
     Bangle.removeListener("touch",onTouch);
     Bangle.removeListener("lcdPower",onLCD);
@@ -788,7 +817,7 @@ try {
     Bangle.removeListener("swipe",onSwipe);
   }
 
-  Bangle.setUI({mode:"clock",remove:cleanup});
+  Bangle.setUI({mode:"clock",btn:onSideButton,remove:cleanup});
   Bangle.on("drag",onDrag);
   Bangle.on("touch",onTouch);
   Bangle.on("lcdPower",onLCD);
