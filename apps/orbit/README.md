@@ -323,3 +323,13 @@ Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot stat
 - The previous **BLE reset** item was removed from Orbit settings.
 - The implementation is isolated in the readable source between `BEGIN ORBIT BLE DOUBLE CLICK` and `END ORBIT BLE DOUBLE CLICK`, so it can be removed later as one block.
 - Orbit uses `Bangle.setUI({mode:"custom",clock:1,...})`, preserving clock behavior while overriding the button handler.
+
+
+## Version 0.32 robust side-button BLE double-click
+
+- Side-button detection is now release-based rather than press-based.
+- The first button press is swallowed so Orbit cannot immediately leave the clock before a second click is detected.
+- After the first release, Orbit waits 1.0 second:
+  - a second release during the window performs BLE reset;
+  - if no second release arrives, Orbit opens the launcher.
+- BLE reset still keeps pairing/bond information.
