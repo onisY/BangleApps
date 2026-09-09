@@ -300,3 +300,16 @@ Reduction: **10,106 bytes (25.9%)** overall. The main clock runtime alone is red
 The optimization removes unused legacy code and strips comments, indentation, line breaks and unnecessary whitespace from the installed copies. Functional logic, map coordinates, astronomical calculations, interactions, daily buzz scheduling, screenshots and settings are unchanged.
 
 Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot state are not included in the static program-size comparison.
+
+
+## Version 0.30 BLE reset helper
+
+- Added **BLE reset** to Orbit settings for development use.
+- The action disconnects the current BLE link and restarts the BLE stack.
+- Pairing/bond information is intentionally kept; it does **not** call `NRF.eraseBonds()`.
+- A confirmation prompt is shown before reset, followed by a short buzz after restart.
+- Intended workflow when WebBLE/App Loader loses the usable communication endpoint:
+  1. Orbit settings -> **BLE reset**
+  2. wait briefly
+  3. reconnect from WebBLE/App Loader
+- Both readable `settings.js` and installed minified `settings.min.js` are updated.
