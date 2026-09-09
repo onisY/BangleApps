@@ -148,21 +148,6 @@
       };
     }
 
-    m["BLE reset"]=function(){
-      E.showPrompt("Disconnect and restart BLE?\nPairing info is kept.",{title:"Developer BLE"}).then(function(ok){
-        if(!ok){ show(); return; }
-        E.showMessage("Resetting BLE...","Orbit");
-        try{ NRF.disconnect(); }catch(e){}
-        setTimeout(function(){
-          try{ NRF.restart(); }catch(e){}
-          setTimeout(function(){
-            try{ Bangle.buzz(80); }catch(e){}
-            show();
-          },700);
-        },500);
-      });
-    };
-
     m["Screenshots"]=function(){
       E.showAlert(shotCount()+" / "+SHOT_MAX+" saved","Orbit shots").then(show);
     };
