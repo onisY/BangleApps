@@ -313,3 +313,13 @@ Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot stat
   2. wait briefly
   3. reconnect from WebBLE/App Loader
 - Both readable `settings.js` and installed minified `settings.min.js` are updated.
+
+
+## Version 0.31 side-button BLE reset
+
+- While Orbit is running, double-click the Bangle.js 2 side button within 450 ms to reset BLE.
+- BLE reset disconnects the current link and restarts the BLE stack while keeping bond/pairing information.
+- A single side-button click still opens the launcher after the 450 ms double-click window.
+- The previous **BLE reset** item was removed from Orbit settings.
+- The implementation is isolated in the readable source between `BEGIN ORBIT BLE DOUBLE CLICK` and `END ORBIT BLE DOUBLE CLICK`, so it can be removed later as one block.
+- Orbit uses `Bangle.setUI({mode:"custom",clock:1,...})`, preserving clock behavior while overriding the button handler.
