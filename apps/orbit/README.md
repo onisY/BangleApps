@@ -343,3 +343,11 @@ Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot stat
 - First button event starts a 1 second double-click window.
 - Second event inside the window resets BLE; otherwise the launcher opens after the window expires.
 - The raw watch is removed in Orbit's cleanup handler.
+
+
+## Version 0.34 side-button conflict removal
+
+- Orbit now handles BTN1 with a raw `setWatch` only.
+- A single side-button click intentionally does nothing while Orbit is running.
+- Two button events within 1 second perform BLE reset.
+- The launcher is no longer invoked by Orbit's single-click handler, eliminating the conflict that caused immediate app/menu transitions before the second click.
