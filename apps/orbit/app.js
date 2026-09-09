@@ -775,30 +775,36 @@ try {
     }
   }
   // ===== BEGIN ORBIT BLE DOUBLE CLICK =====
-  // Easy-to-remove development helper:
-  // one side-button click -> normal launcher (after a short wait)
-  // two clicks within 450 ms -> disconnect + restart BLE, keeping bonds.
-  var bleBtnTimer;
+  // Easy-to-remove development helper.
+  // Button-down is swallowed so clock mode cannot leave Orbit immediately.
+  // Click timing starts on release:
+  //   one click  -> launcher after 1000 ms
+  //   two clicks -> BLE disconnect + restart, bonds kept
+  var bleBtnTimer,bleBtnClicks=0;
   function orbitBleReset(){
     if(bleBtnTimer){clearTimeout(bleBtnTimer);bleBtnTimer=undefined;}
+    bleBtnClicks=0;
     try{NRF.disconnect();}catch(e){}
     setTimeout(function(){
       try{NRF.restart();}catch(e){}
       setTimeout(function(){try{Bangle.buzz(80);}catch(e){}},700);
     },500);
   }
-  function onSideButton(n){
-    if(n!==1)return;
-    if(bleBtnTimer){
-      clearTimeout(bleBtnTimer);
-      bleBtnTimer=undefined;
+  function swallowSideButton(){
+    // Intentionally empty: prevents the clock default action on button-down.
+  }
+  function onSideButtonRelease(){
+    bleBtnClicks++;
+    if(bleBtnClicks>=2){
       orbitBleReset();
       return;
     }
+    if(bleBtnTimer)clearTimeout(bleBtnTimer);
     bleBtnTimer=setTimeout(function(){
       bleBtnTimer=undefined;
+      bleBtnClicks=0;
       Bangle.showLauncher();
-    },450);
+    },1000);
   }
   // ===== END ORBIT BLE DOUBLE CLICK =====
 
@@ -810,6 +816,7 @@ try {
     if(tickTimer)clearTimeout(tickTimer);
     if(eventTimer)clearTimeout(eventTimer);
     if(bleBtnTimer)clearTimeout(bleBtnTimer);
+    bleBtnClicks=0;
     Bangle.removeListener("drag",onDrag);
     Bangle.removeListener("touch",onTouch);
     Bangle.removeListener("lcdPower",onLCD);
@@ -817,7 +824,7 @@ try {
     Bangle.removeListener("swipe",onSwipe);
   }
 
-  Bangle.setUI({mode:"custom",clock:1,btn:onSideButton,remove:cleanup});
+  Bangle.setUI({mode:"custom",clock:1,btn:swallowSideButton,btnRelease:onSideButtonRelease,remove:cleanup});
   Bangle.on("drag",onDrag);
   Bangle.on("touch",onTouch);
   Bangle.on("lcdPower",onLCD);
