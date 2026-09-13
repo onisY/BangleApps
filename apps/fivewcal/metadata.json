@@ -1,0 +1,31 @@
+{
+  "id": "fivewcal",
+  "name": "5wCal",
+  "shortName": "5wCal",
+  "version": "0.01",
+  "author": "onisY",
+  "description": "Five-week Monday-first calendar for Bangle.js 2 with Japanese holidays, color-coded weekends, swipe paging, tap-to-today, widgets and timed return to the clock.",
+  "icon": "app.png",
+  "tags": "calendar,tool,japan",
+  "supports": [
+    "BANGLEJS2"
+  ],
+  "readme": "README.md",
+  "allow_emulator": true,
+  "storage": [
+    {
+      "name": "fivewcal.app.js",
+      "url": "app.js"
+    },
+    {
+      "name": "fivewcal.img",
+      "url": "app-icon.js",
+      "evaluate": true
+    }
+  ],
+  "data": [
+    {
+      "name": "fivewcal.json"
+    }
+  ]
+}
