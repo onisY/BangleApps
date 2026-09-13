@@ -65,13 +65,60 @@ function isHoliday(d){
   return false;
 }
 
+/* Return the widest free horizontal interval in the top widget row. */
+function topFreeGap(){
+  var spans=[];
+  if (typeof WIDGETS!=="undefined") {
+    Object.keys(WIDGETS).forEach(function(k){
+      var wd=WIDGETS[k];
+      if(!wd||!wd.width||!wd.area||wd.area.charAt(0)!=="t") return;
+      if(typeof wd.x==="number") spans.push([wd.x,wd.x+wd.width-1]);
+    });
+  }
+  /* drawWidgets normally assigns x. If not, fall back to summed tl/tr widths. */
+  if(!spans.length && typeof WIDGETS!=="undefined"){
+    var lw=0,rw=0;
+    Object.keys(WIDGETS).forEach(function(k){
+      var wd=WIDGETS[k];
+      if(!wd||!wd.width) return;
+      if(wd.area==="tl") lw+=wd.width;
+      else if(wd.area==="tr") rw+=wd.width;
+    });
+    if(lw) spans.push([0,lw-1]);
+    if(rw) spans.push([W-rw,W-1]);
+  }
+  spans.sort(function(a,b){return a[0]-b[0];});
+  var merged=[];
+  spans.forEach(function(s){
+    s[0]=Math.max(0,s[0]);s[1]=Math.min(W-1,s[1]);
+    if(!merged.length||s[0]>merged[merged.length-1][1]+1) merged.push([s[0],s[1]]);
+    else if(s[1]>merged[merged.length-1][1]) merged[merged.length-1][1]=s[1];
+  });
+  var gaps=[],p=0;
+  merged.forEach(function(s){if(s[0]>p) gaps.push([p,s[0]-1]);p=Math.max(p,s[1]+1);});
+  if(p<W) gaps.push([p,W-1]);
+  if(!gaps.length) return [0,W-1];
+  /* Prefer a sufficiently wide gap near the screen centre; otherwise use the widest. */
+  gaps.sort(function(a,b){
+    var aw=a[1]-a[0]+1,bw=b[1]-b[0]+1;
+    if(aw!==bw) return bw-aw;
+    return Math.abs(((a[0]+a[1])>>1)-(W>>1))-Math.abs(((b[0]+b[1])>>1)-(W>>1));
+  });
+  return gaps[0];
+}
+
 function drawTop(){
   try { Bangle.drawWidgets(); } catch(e) {}
   var s=pageStart.getFullYear()+"/"+pad2(pageStart.getMonth()+1);
-  g.setBgColor(BLACK).setColor(WHITE).setFont("Vector",14).setFontAlign(0,0);
-  var w=g.stringWidth(s)+6;
-  g.setColor(BLACK).fillRect((W-w)>>1,1,(W+w)>>1,22);
-  g.setColor(WHITE).drawString(s,W>>1,12);
+  var gap=topFreeGap(),gx1=gap[0]+2,gx2=gap[1]-2;
+  if(gx2<gx1){gx1=gap[0];gx2=gap[1];}
+  var avail=Math.max(1,gx2-gx1+1);
+  var fs=14;
+  g.setFont("Vector",fs);
+  while(fs>8 && g.stringWidth(s)+4>avail){fs-=2;g.setFont("Vector",fs);}
+  var cx=(gx1+gx2)>>1;
+  g.setBgColor(BLACK).setColor(BLACK).fillRect(gx1,1,gx2,22);
+  g.setColor(WHITE).setFont("Vector",fs).setFontAlign(0,0).drawString(s,cx,12);
 }
 
 function line2(x1,y1,x2,y2){g.drawLine(x1,y1,x2,y2);g.drawLine(x1+1,y1,x2+1,y2);}
