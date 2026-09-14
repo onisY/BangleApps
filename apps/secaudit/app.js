@@ -21,9 +21,13 @@ function crc(n){
   for(var i=0;i<s.length;i++) h=((h<<5)-h+s.charCodeAt(i))|0;
   return (h>>>0).toString(16);
 }
-function pushFinding(a,sev,file,kind,detail){
+function sampleAround(src,idx,len){
+  var a=Math.max(0,idx-36),b=Math.min(src.length,idx+(len||1)+64);
+  return src.substring(a,b).replace(/[\r\n\t]+/g," ").replace(/ +/g," ").substring(0,130);
+}
+function pushFinding(a,sev,file,kind,detail,sample){
   if(a.length>=MAX_FINDINGS)return;
-  a.push({sev:sev,file:file,kind:kind,detail:detail});
+  a.push({sev:sev,file:file,kind:kind,detail:detail,sample:sample||""});
 }
 function ownerMap(){
   var m={};
@@ -56,27 +60,44 @@ function scan(){
   boots.sort(function(a,b){return a.file<b.file?-1:a.file>b.file?1:0;});
 
   var exec=files.filter(function(fn){return fn!=="secaudit.app.js"&&(/\.js$/.test(fn)||fn===".boot0"||fn===".bootcde");});
+  /* Keep each API as a separate regexp. Some Espruino builds can behave
+     unexpectedly with complex/non-capturing regexp alternatives. */
   var pats=[
     ["HIGH",/NRF\.setAdvertising\s*\(/,"BLE advertising TX"],
-    ["HIGH",/NRF\.(?:connect|requestDevice)\s*\(/,"Outbound BLE connection"],
+    ["HIGH",/NRF\.connect\s*\(/,"Outbound BLE connection"],
+    ["HIGH",/NRF\.requestDevice\s*\(/,"Outbound BLE connection"],
     ["HIGH",/\.gatt\.connect\s*\(/,"GATT outbound connection"],
-    ["HIGH",/Bluetooth\.(?:write|print|println)\s*\(/,"BLE UART data TX"],
+    ["HIGH",/Bluetooth\.write\s*\(/,"BLE UART data TX"],
+    ["HIGH",/Bluetooth\.print\s*\(/,"BLE UART data TX"],
+    ["HIGH",/Bluetooth\.println\s*\(/,"BLE UART data TX"],
     ["HIGH",/NRF\.wake\s*\(/,"Can re-enable BLE"],
     ["HIGH",/Bluetooth\.setConsole\s*\(/,"Bluetooth console control"],
     ["HIGH",/Flash\.write\s*\(/,"Raw flash write"],
     ["MED",/NRF\.setServices\s*\(/,"Custom BLE services"],
-    ["MED",/NRF\.(?:setScan|findDevices)\s*\(/,"BLE scanning"],
+    ["MED",/NRF\.setScan\s*\(/,"BLE scanning"],
+    ["MED",/NRF\.findDevices\s*\(/,"BLE scanning"],
     ["MED",/NRF\.setTxPower\s*\(/,"BLE TX power control"],
     ["MED",/NRF\.sendHIDReport\s*\(/,"BLE HID transmit"],
-    ["MED",/Storage\.list\s*\(|require\(["']Storage["']\)\.list\s*\(/,"Storage enumeration"],
-    ["INFO",/Bangle\.setGPSPower\s*\(|Bangle\.on\s*\(\s*["']GPS["']/,"GPS access"],
-    ["INFO",/Bangle\.setHRMPower\s*\(|Bangle\.on\s*\(\s*["']HRM["']/,"Heart-rate access"],
+    ["MED",/Storage\.list\s*\(/,"Storage enumeration"],
+    ["MED",/require\(["']Storage["']\)\.list\s*\(/,"Storage enumeration"],
+    ["INFO",/Bangle\.setGPSPower\s*\(/,"GPS access"],
+    ["INFO",/Bangle\.on\s*\(\s*["']GPS["']/,"GPS access"],
+    ["INFO",/Bangle\.setHRMPower\s*\(/,"Heart-rate access"],
+    ["INFO",/Bangle\.on\s*\(\s*["']HRM["']/,"Heart-rate access"],
     ["INFO",/Bangle\.on\s*\(\s*["']accel["']/,"Accelerometer access"]
   ];
   exec.forEach(function(fn){
     var src=safeRead(fn);
     if(!src)return;
-    pats.forEach(function(p){if(p[1].test(src))pushFinding(findings,p[0],fn,p[2],owners[fn]||"");});
+    var seen={};
+    pats.forEach(function(p){
+      if(seen[p[2]])return;
+      var m=src.match(p[1]);
+      if(m){
+        seen[p[2]]=1;
+        pushFinding(findings,p[0],fn,p[2],owners[fn]||"",sampleAround(src,m.index,m[0].length));
+      }
+    });
   });
 
   var programmable=(st.blerepl!==false);
@@ -154,7 +175,10 @@ function showFindings(){
     var k=sevMark(f.sev)+(i+1)+" "+f.file;
     if(k.length>24)k=k.substr(0,24);
     m[k]=function(){
-      alertText(f.sev+" capability",f.kind+"\n\nFile:\n"+f.file+"\n\nOwner:\n"+(f.detail||"unknown")+"\n\nPresence of this API is not proof of malicious behavior.",showFindings);
+      var s=f.kind+"\n\nFile:\n"+f.file+"\n\nOwner:\n"+(f.detail||"unknown");
+      if(f.sample)s+="\n\nMatch:\n"+f.sample;
+      s+="\n\nAPI presence is not proof of malicious behavior.";
+      alertText(f.sev+" capability",s,showFindings);
     };
   });
   E.showMenu(m);
