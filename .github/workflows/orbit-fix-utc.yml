@@ -1,0 +1,73 @@
+name: Orbit UTC compatibility fix
+
+on:
+  push:
+    paths:
+      - '.github/workflows/orbit-fix-utc.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Patch Orbit for Espruino Date API
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('apps/orbit')
+          old='var utcMin=date.getUTCHours()*60+date.getUTCMinutes()+date.getUTCSeconds()/60;'
+          new='var utcMin=date.getHours()*60+date.getMinutes()+date.getSeconds()/60+date.getTimezoneOffset();\n    utcMin=((utcMin%1440)+1440)%1440;'
+          app=p/'app.js'
+          s=app.read_text()
+          assert old in s
+          s=s.replace(old,new)
+          s=s.replace('// Local apparent-solar hour angle for Japanese standard time.','// Local apparent-solar hour angle for any selected longitude.')
+          app.write_text(s)
+
+          oldmin='var utcMin=date.getUTCHours()*60+date.getUTCMinutes()+date.getUTCSeconds()/60;'
+          newmin='var utcMin=date.getHours()*60+date.getMinutes()+date.getSeconds()/60+date.getTimezoneOffset();utcMin=((utcMin%1440)+1440)%1440;'
+          amin=p/'app.min.js'
+          m=amin.read_text()
+          assert oldmin in m
+          m=m.replace(oldmin,newmin)
+          amin.write_text(m)
+
+          meta_path=p/'metadata.json'
+          meta=json.loads(meta_path.read_text())
+          meta['version']='0.39'
+          meta_path.write_text(json.dumps(meta,indent=2,ensure_ascii=False)+'\n')
+
+          readme=p/'README.md'
+          readme.write_text(readme.read_text()+'''\n\n## Version 0.39 Espruino UTC compatibility fix\n\n- Fixed startup error on Bangle.js 2 caused by unsupported `Date.getUTCHours()` / UTC getter methods.\n- UTC minutes are now derived from supported local Date getters plus `getTimezoneOffset()`.\n- World-location solar rotation remains based on UTC plus selected longitude.\n''')
+          PY
+      - name: Verify fix
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('apps/orbit')
+          for name in ['app.js','app.min.js']:
+            s=(p/name).read_text()
+            assert 'getUTCHours' not in s
+            assert 'getUTCMinutes' not in s
+            assert 'getUTCSeconds' not in s
+            assert 'getTimezoneOffset' in s
+          assert json.loads((p/'metadata.json').read_text())['version']=='0.39'
+          print('Orbit UTC compatibility checks passed')
+          PY
+      - name: Commit Orbit v0.39
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/orbit/app.js apps/orbit/app.min.js apps/orbit/metadata.json apps/orbit/README.md
+          git commit -m 'Fix Orbit UTC time calculation for Bangle.js 2'
+          git push origin HEAD:master
