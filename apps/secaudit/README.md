@@ -42,6 +42,18 @@ It also provides shortcuts/guidance for:
 
 Changes to boot-time Bluetooth behaviour may require a restart before they are fully reflected in the generated boot code.
 
+## iPhone clipboard export
+
+From v0.05, the App Loader interface can read `secaudit.json` from the connected watch and place it on the iPhone clipboard.
+
+Open the app's interface page in App Loader, wait for the report to load, then tap:
+
+`Copy to iPhone clipboard`
+
+The report is also shown in a text area. If iOS/WebBLE blocks programmatic clipboard access, the interface falls back to selecting the full report so it can be copied with the normal iPhone Copy command.
+
+Because iOS requires a user gesture for clipboard writes, the copy step is intentionally triggered by a button tap rather than attempted automatically after BLE transfer.
+
 ## Boot-code fingerprints
 
 The app records CRC fingerprints for `.boot0`, `.bootcde`, `bootupdate.js`, and `*.boot.js` files. These are useful for comparing the same watch before and after changes, but they are **not cryptographic proof** that the firmware or boot code is official.
@@ -77,6 +89,13 @@ Pay particular attention to:
 3. unexpected `*.boot.js` files
 4. unexpected apps containing HIGH-capability BLE APIs
 5. changes in core boot-file fingerprints without an expected update
+
+## v0.05 changes
+
+- Adds an App Loader interface page for `secaudit.json`.
+- Reads the latest report over the existing Bangle/WebBLE connection.
+- Adds a one-tap `Copy to iPhone clipboard` button.
+- Adds a fallback that selects the complete report if direct clipboard access is blocked by iOS.
 
 ## v0.04 changes
 
