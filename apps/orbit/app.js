@@ -126,8 +126,9 @@ try {
     var b=TAU*(n-81)/364;
     var eot=9.87*Math.sin(2*b)-7.53*Math.cos(b)-1.5*Math.sin(b); // minutes
     // UTC-based apparent solar time works for any selected world longitude.
-    var utcMin=date.getHours()*60+date.getMinutes()+date.getSeconds()/60-deviceTzHours*60;
-    utcMin=((utcMin%1440)+1440)%1440;
+    // Date.valueOf() is absolute Unix time and is independent of the
+    // watch's configured timezone.  Take its position within the UTC day.
+    var utcMin=(((date.valueOf()%DAY)+DAY)%DAY)/60000;
     var solarMin=utcMin + 4*loc.lon + eot;
     return wrapPi((solarMin-720)*0.25*RAD);
   }

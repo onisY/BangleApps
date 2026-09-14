@@ -386,3 +386,11 @@ Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot stat
 - UTC for Earth rotation is computed as displayed civil time minus the configured device timezone.
 - Sunrise/sunset/noon event calculations use the same timezone source.
 - The top header remains the Bangle's own civil clock time; selecting a world location changes the astronomical location, not the watch's system timezone.
+
+
+## Version 0.41 absolute-UTC Earth rotation
+
+- Earth/observer rotation now derives UTC directly from `Date.valueOf()` (Unix time modulo one UTC day).
+- This removes any dependence on `Date.getTimezoneOffset()` or the watch's timezone setting for the on-screen astronomical rotation.
+- Example sanity check: at 22:35 JST, Rome is approximately 14:30 apparent solar time, rather than near midnight.
+- The header still displays the Bangle's normal civil clock time.
