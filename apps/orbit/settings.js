@@ -14,6 +14,7 @@
   var EARTH_COLOR_NAMES=["Black","Red","Green","Yellow","Blue","Magenta","Cyan","White"];
   var s=Storage.readJSON(FILE,1)||{};
   var gpsHandler,gpsActive=false,gpsReturnMode=0;
+  var gpsStarted=0,gpsLastDraw=0,gpsLastSats=-1,gpsLastHdop=-1,gpsLastFix;
   Object.keys(d).forEach(function(k){if(s[k]===undefined)s[k]=d[k];});
   if(s.locationMode<0||s.locationMode>2)s.locationMode=0;
 
@@ -63,10 +64,44 @@
       try{Bangle.removeListener("GPS",gpsHandler);}catch(e){}
       gpsHandler=undefined;
     }
-    gpsActive=false;
-    // Tagged power management removes only Orbit's request. If another app
-    // still requests GPS with another ID, the receiver remains powered.
+    gpsActive=false;gpsLastFix=undefined;
     try{Bangle.setGPSPower(0,GPS_ID);}catch(e){}
+  }
+  function gpsBar(sats){
+    var n=Math.max(0,Math.min(8,sats|0)),t="[",i;
+    for(i=0;i<8;i++)t+=i<n?"#":"-";
+    return t+"]";
+  }
+  function gpsStateText(fix){
+    var sats=fix&&isFinite(fix.satellites)?fix.satellites|0:0;
+    if(fix&&fix.fix)return "FIX";
+    if(sats===0)return "NO SATS";
+    if(sats<3)return "SEARCHING";
+    if(sats<4)return "ACQUIRING";
+    return "LOCKING";
+  }
+  function gpsElapsed(){
+    var sec=Math.max(0,Math.round((Date.now()-gpsStarted)/1000));
+    var m=Math.floor(sec/60),ss=sec%60;
+    return (m<10?"0":"")+m+":"+(ss<10?"0":"")+ss;
+  }
+  function showGPSProgress(force){
+    if(!gpsActive)return;
+    var fix=gpsLastFix||{},sats=isFinite(fix.satellites)?fix.satellites|0:0;
+    var hdop=isFinite(fix.hdop)&&fix.hdop>0?fix.hdop:0;
+    var now=Date.now();
+    var hdChanged=(hdop&&gpsLastHdop>0)?Math.abs(hdop-gpsLastHdop)>=0.5:(hdop!==gpsLastHdop);
+    if(!force && sats===gpsLastSats && !hdChanged && now-gpsLastDraw<10000)return;
+    gpsLastSats=sats;gpsLastHdop=hdop;gpsLastDraw=now;
+    var hd=hdop?hdop.toFixed(1):"--";
+    E.showMenu({
+      "":{title:"GPS input"},
+      "< Cancel":cancelGPS,
+      "State":{value:0,min:0,max:0,format:function(){return gpsStateText(fix);}},
+      "Satellites":{value:0,min:0,max:0,format:function(){return sats+" "+gpsBar(sats);}},
+      "HDOP":{value:0,min:0,max:0,format:function(){return hd;}},
+      "Elapsed":{value:0,min:0,max:0,format:function(){return gpsElapsed();}}
+    });
   }
   function gpsLocationText(){
     return "Lat "+Number(s.lat).toFixed(4)+"\nLon "+Number(s.lon).toFixed(4)+
@@ -83,28 +118,22 @@
     stopGPS();
     gpsReturnMode=(returnMode===0||returnMode===1||returnMode===2)?returnMode:s.locationMode;
     s.locationMode=2;write();
+    gpsStarted=Date.now();gpsLastDraw=0;gpsLastSats=-1;gpsLastHdop=-1;gpsLastFix={};
     gpsHandler=function(fix){
-      if(!gpsActive||!fix||!fix.fix||!isFinite(fix.lat)||!isFinite(fix.lon))return;
-      applyGPS(fix);
-      stopGPS();
-      try{Bangle.buzz(300);}catch(e){}
-      E.showAlert("GPS location saved\n"+gpsLocationText(),"Orbit GPS").then(show);
+      if(!gpsActive||!fix)return;
+      gpsLastFix=fix;
+      if(fix.fix&&isFinite(fix.lat)&&isFinite(fix.lon)){
+        applyGPS(fix);stopGPS();
+        try{Bangle.buzz(300);}catch(e){}
+        E.showAlert("GPS location saved\n"+gpsLocationText(),"Orbit GPS").then(show);
+        return;
+      }
+      showGPSProgress(false);
     };
     Bangle.on("GPS",gpsHandler);
     gpsActive=true;
-    try{
-      Bangle.setGPSPower(1,GPS_ID);
-    }catch(e){
-      stopGPS();
-      E.showAlert("Could not start GPS","Orbit GPS").then(show);
-      return;
-    }
-    E.showMenu({
-      "":{title:"GPS input"},
-      "< Cancel":cancelGPS,
-      "Status":{value:0,min:0,max:0,format:function(){return "Waiting";}},
-      "Hint":function(){E.showAlert("Place the watch outdoors with a clear sky. A first fix may take several minutes.","GPS input").then(function(){startGPS(gpsReturnMode);});}
-    });
+    try{Bangle.setGPSPower(1,GPS_ID);}catch(e){stopGPS();E.showAlert("Could not start GPS","Orbit GPS").then(show);return;}
+    showGPSProgress(true);
   }
   function onKill(){stopGPS();}
   function leave(){

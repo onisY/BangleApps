@@ -424,3 +424,10 @@ Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot stat
 - Canceling GPS acquisition, leaving Orbit settings, or killing the settings app also removes Orbit's GPS listener and GPS power request.
 - A saved GPS location is retained after acquisition; reopening GPS mode does not continuously run GPS. Use **Get GPS fix** to refresh it.
 - Latitude, longitude and GPS altitude (when available) are stored in `orbit.json`.
+
+
+## Version 0.45 low-power GPS acquisition progress
+
+- GPS acquisition displays real satellite count, HDOP, elapsed time and a text acquisition bar.
+- The bar is a satellite-acquisition guide, not a literal completion percentage.
+- Display refresh is limited to satellite-count changes, meaningful HDOP changes, or at most once every 10 seconds to reduce display energy use.
