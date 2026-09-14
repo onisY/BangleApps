@@ -1,0 +1,80 @@
+<html>
+<head>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="../../css/spectre.min.css">
+  <style>
+    body { padding: 12px; }
+    textarea { width: 100%; min-height: 260px; font-family: monospace; font-size: 12px; }
+    .status { margin: 10px 0; }
+    .buttons { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
+  </style>
+</head>
+<body>
+  <h4>Security Audit Report</h4>
+  <p>This page reads <code>secaudit.json</code> from the connected Bangle.js 2.</p>
+  <div class="buttons">
+    <button id="reload" class="btn">Reload report</button>
+    <button id="copy" class="btn btn-primary" disabled>Copy to iPhone clipboard</button>
+  </div>
+  <div id="status" class="status">Loading report...</div>
+  <textarea id="report" readonly placeholder="secaudit.json will appear here"></textarea>
+
+  <script src="../../core/lib/interface.js"></script>
+  <script>
+    var reportText = "";
+    var statusEl = document.getElementById("status");
+    var reportEl = document.getElementById("report");
+    var copyBtn = document.getElementById("copy");
+
+    function setStatus(s) { statusEl.textContent = s; }
+
+    function loadReport() {
+      copyBtn.disabled = true;
+      setStatus("Loading secaudit.json from Bangle...");
+      Puck.eval('require("Storage").read("secaudit.json")', function(data) {
+        if (!data) {
+          reportText = "";
+          reportEl.value = "";
+          setStatus("No secaudit.json found. Run Security Audit on the watch first.");
+          return;
+        }
+        reportText = data;
+        reportEl.value = data;
+        copyBtn.disabled = false;
+        setStatus("Report loaded. Tap Copy to place it on the iPhone clipboard.");
+      });
+    }
+
+    function legacyCopy() {
+      reportEl.focus();
+      reportEl.select();
+      reportEl.setSelectionRange(0, reportEl.value.length);
+      var ok = false;
+      try { ok = document.execCommand("copy"); } catch (e) {}
+      if (ok) {
+        setStatus("Copied to clipboard.");
+      } else {
+        setStatus("Automatic copy was blocked. The report is selected below; use Copy from the iPhone selection menu.");
+      }
+    }
+
+    function copyReport() {
+      if (!reportText) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(reportText).then(function() {
+          setStatus("Copied to iPhone clipboard.");
+        }).catch(function() {
+          legacyCopy();
+        });
+      } else {
+        legacyCopy();
+      }
+    }
+
+    document.getElementById("reload").addEventListener("click", loadReport);
+    copyBtn.addEventListener("click", copyReport);
+
+    function onInit() { loadReport(); }
+  </script>
+</body>
+</html>
