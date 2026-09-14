@@ -1,0 +1,58 @@
+# Security Audit
+
+Security Audit performs an **on-device static inspection** of a Bangle.js 2.
+
+It is intended to answer practical questions such as:
+
+- Is Bluetooth enabled?
+- Is the Bluetooth JavaScript REPL (`Programmable`) enabled?
+- Is a six-digit passkey configured?
+- Is a Bluetooth whitelist active?
+- Is privacy / hidden device name enabled?
+- Which boot-time JavaScript files are installed?
+- Which applications are installed?
+- Which readable JavaScript files contain APIs capable of Bluetooth transmission, outbound BLE connections, BLE re-enabling, raw flash writes, storage enumeration, or sensitive sensor access?
+
+## Findings
+
+The scanner labels code matches as:
+
+- **HIGH** — powerful transmission/control capabilities such as `NRF.setAdvertising`, outbound BLE connections, `NRF.wake`, `Bluetooth.setConsole`, or raw `Flash.write`.
+- **MED** — capabilities such as BLE scanning, custom BLE services, TX power control, HID transmission, or storage enumeration.
+- **INFO** — sensitive sensor access such as GPS, heart-rate or accelerometer use.
+
+A match **does not mean an app is malicious**. Many legitimate Bangle apps need these APIs. The purpose is to identify code that deserves manual review.
+
+## Boot-code fingerprints
+
+The app records CRC fingerprints for `.boot0`, `.bootcde`, `bootupdate.js`, and `*.boot.js` files. These are useful for comparing the same watch before and after changes, but they are **not cryptographic proof** that the firmware or boot code is official.
+
+## Saved report
+
+Each scan writes a machine-readable report to:
+
+`secaudit.json`
+
+This includes firmware/version information, Bluetooth configuration, installed applications, boot files, code findings, and scanner limitations.
+
+## Important limitations
+
+This app cannot:
+
+- prove that the nRF52840 firmware is byte-for-byte identical to an official Espruino build;
+- inspect or authenticate the MCU bootloader binary from normal Storage;
+- prove that undocumented hardware does not exist on the PCB;
+- reliably inspect code that has been pretokenized or transformed so that API names are no longer stored as plain text;
+- determine malicious intent merely from an API call.
+
+For a stronger audit, combine this report with SWD readback / reflashing from a trusted build and, if required, physical PCB and RF inspection.
+
+## Recommended interpretation
+
+Pay particular attention to:
+
+1. `Programmable = YES`
+2. BLE enabled with no passkey and no whitelist
+3. unexpected `*.boot.js` files
+4. unexpected apps containing HIGH-capability BLE APIs
+5. changes in core boot-file fingerprints without an expected update

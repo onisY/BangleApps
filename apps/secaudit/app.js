@@ -1,0 +1,186 @@
+/* Bangle Security Audit - static security inspection for Bangle.js 2 */
+var S=require("Storage");
+var report;
+var MAX_READ=32768;
+var MAX_FINDINGS=80;
+
+function yn(v){return v?"YES":"NO";}
+function safeRead(n){
+  try {
+    var s=S.read(n,0,MAX_READ);
+    return (typeof s==="string")?s:"";
+  } catch(e) { return ""; }
+}
+function crc(n){
+  var s=safeRead(n);
+  if(!s)return "-";
+  try {
+    if(E.CRC32)return (E.CRC32(s)>>>0).toString(16);
+  } catch(e){}
+  var h=0;
+  for(var i=0;i<s.length;i++) h=((h<<5)-h+s.charCodeAt(i))|0;
+  return (h>>>0).toString(16);
+}
+function pushFinding(a,sev,file,kind,detail){
+  if(a.length>=MAX_FINDINGS)return;
+  a.push({sev:sev,file:file,kind:kind,detail:detail});
+}
+function ownerMap(){
+  var m={};
+  S.list(/\.info$/).forEach(function(fn){
+    var j=S.readJSON(fn,1);
+    if(!j)return;
+    var owner=j.name||fn.replace(/\.info$/,'');
+    var fs=(j.files||"").split(",");
+    fs.forEach(function(f){if(f)m[f]=owner;});
+    if(j.src)m[j.src]=owner;
+  });
+  return m;
+}
+function scan(){
+  var st=S.readJSON("setting.json",1)||{};
+  var files=S.list();
+  var owners=ownerMap();
+  var apps=[],boots=[],findings=[];
+
+  S.list(/\.info$/).forEach(function(fn){
+    var j=S.readJSON(fn,1);
+    if(j)apps.push({id:fn.replace(/\.info$/,''),name:j.name||fn,version:j.version||"?",type:j.type||"app"});
+  });
+  apps.sort(function(a,b){return (a.name||"").localeCompare(b.name||"");});
+
+  files.forEach(function(fn){
+    if(fn===".boot0"||fn===".bootcde"||fn==="bootupdate.js"||/\.boot\.js$/.test(fn))boots.push({file:fn,crc:crc(fn),owner:owners[fn]||""});
+  });
+  boots.sort(function(a,b){return a.file.localeCompare(b.file);});
+
+  var exec=files.filter(function(fn){return /\.js$/.test(fn)||fn===".boot0"||fn===".bootcde";});
+  var pats=[
+    ["HIGH",/NRF\.setAdvertising\s*\(/,"BLE advertising TX"],
+    ["HIGH",/NRF\.(?:connect|requestDevice)\s*\(/,"Outbound BLE connection"],
+    ["HIGH",/NRF\.wake\s*\(/,"Can re-enable BLE"],
+    ["HIGH",/Bluetooth\.setConsole\s*\(/,"Bluetooth console control"],
+    ["HIGH",/Flash\.write\s*\(/,"Raw flash write"],
+    ["MED",/NRF\.setServices\s*\(/,"Custom BLE services"],
+    ["MED",/NRF\.setScan\s*\(/,"BLE scanning"],
+    ["MED",/NRF\.setTxPower\s*\(/,"BLE TX power control"],
+    ["MED",/NRF\.sendHIDReport\s*\(/,"BLE HID transmit"],
+    ["MED",/Storage\.list\s*\(|require\(["']Storage["']\)\.list\s*\(/,"Storage enumeration"],
+    ["INFO",/Bangle\.setGPSPower\s*\(|Bangle\.on\s*\(\s*["']GPS["']/,"GPS access"],
+    ["INFO",/Bangle\.setHRMPower\s*\(|Bangle\.on\s*\(\s*["']HRM["']/,"Heart-rate access"],
+    ["INFO",/Bangle\.on\s*\(\s*["']accel["']/,"Accelerometer access"]
+  ];
+  exec.forEach(function(fn){
+    var src=safeRead(fn);
+    if(!src)return;
+    pats.forEach(function(p){if(p[1].test(src))pushFinding(findings,p[0],fn,p[2],owners[fn]||"");});
+  });
+
+  var programmable=(st.blerepl!==false);
+  var whitelist=!!(st.whitelist&&st.whitelist.length&&!st.whitelist_disabled);
+  var passkey=!!(st.passkey&&(""+st.passkey).length===6);
+  var privacy=!!(st.bleprivacy&&st.blename===false);
+  var high=0,med=0;
+  findings.forEach(function(f){if(f.sev==="HIGH")high++;else if(f.sev==="MED")med++;});
+  var cfgRisk=0;
+  if(st.ble!==false)cfgRisk++;
+  if(programmable)cfgRisk+=2;
+  if(!whitelist)cfgRisk++;
+  if(!passkey)cfgRisk++;
+
+  report={
+    generated:(new Date()).toISOString(),
+    hw:process.env.HWVERSION,
+    board:process.env.BOARD||"?",
+    firmware:process.env.VERSION||"?",
+    git:process.env.GIT_COMMIT||"",
+    bluetooth:{
+      ble:(st.ble!==false), programmable:programmable, hid:!!st.HID,
+      passkey:passkey, whitelist:whitelist,
+      whitelistCount:(st.whitelist&&st.whitelist.length)||0,
+      privacyHideName:privacy
+    },
+    boot:boots,
+    apps:apps,
+    findings:findings,
+    counts:{apps:apps.length,boot:boots.length,high:high,medium:med,configRisk:cfgRisk},
+    limits:{maxRead:MAX_READ,maxFindings:MAX_FINDINGS},
+    note:"Static audit only. Firmware authenticity and hidden hardware cannot be proven on-device. Pretokenized code may reduce pattern detection. API use is capability, not proof of malicious intent."
+  };
+  try{S.writeJSON("secaudit.json",report);}catch(e){}
+  return report;
+}
+function backMain(){showMain();}
+function alertText(title,text,back){
+  E.showAlert(text,title).then(back||backMain);
+}
+function summary(){
+  var r=report;
+  var c=r.counts;
+  var s="FW: "+r.firmware+"\nHW: "+r.hw+"\nApps: "+c.apps+"\nBoot code: "+c.boot+"\nHigh-capability: "+c.high+"\nMedium: "+c.medium+"\n\nFW authenticity:\nNOT VERIFIED";
+  alertText("Audit Summary",s);
+}
+function bluetooth(){
+  var b=report.bluetooth;
+  var s="BLE: "+yn(b.ble)+"\nProgrammable: "+yn(b.programmable)+"\nPasskey: "+yn(b.passkey)+"\nWhitelist: "+yn(b.whitelist)+" ("+b.whitelistCount+")\nHide name: "+yn(b.privacyHideName)+"\nHID: "+yn(b.hid);
+  if(b.programmable)s+="\n\nWARN: Programmable is ON";
+  if(b.ble&&!b.whitelist)s+="\nWARN: No active whitelist";
+  if(b.ble&&!b.passkey)s+="\nWARN: No 6-digit passkey";
+  alertText("Bluetooth",s);
+}
+function showBoot(){
+  var m={"":{title:"Boot code"},"< Back":showMain};
+  if(!report.boot.length)m["None found"]=function(){};
+  report.boot.forEach(function(b,i){
+    var k=(i+1)+" "+b.file;
+    m[k]=function(){alertText("Boot file",b.file+"\nOwner: "+(b.owner||"unknown")+"\nCRC: "+b.crc,showBoot);};
+  });
+  E.showMenu(m);
+}
+function showApps(){
+  var m={"":{title:"Installed apps"},"< Back":showMain};
+  report.apps.forEach(function(a,i){
+    var k=(i+1)+" "+(a.name||a.id);
+    if(k.length>24)k=k.substr(0,24);
+    m[k]=function(){alertText("App",a.name+"\nID: "+a.id+"\nVersion: "+a.version+"\nType: "+a.type,showApps);};
+  });
+  E.showMenu(m);
+}
+function sevMark(s){return s==="HIGH"?"!":s==="MED"?"?":"i";}
+function showFindings(){
+  var m={"":{title:"Code findings"},"< Back":showMain};
+  if(!report.findings.length)m["No matches"]=function(){};
+  report.findings.forEach(function(f,i){
+    var k=sevMark(f.sev)+(i+1)+" "+f.file;
+    if(k.length>24)k=k.substr(0,24);
+    m[k]=function(){
+      alertText(f.sev+" capability",f.kind+"\n\nFile:\n"+f.file+"\n\nOwner:\n"+(f.detail||"unknown")+"\n\nPresence of this API is not proof of malicious behavior.",showFindings);
+    };
+  });
+  E.showMenu(m);
+}
+function limitations(){
+  alertText("What this cannot prove","This app cannot prove that installed firmware matches an official build, cannot inspect the MCU bootloader binary, and cannot rule out undocumented hardware.\n\nIt performs settings checks and static scans of readable Storage code only. Pretokenized/minified apps can reduce pattern detection.");
+}
+function rescan(){
+  E.showMessage("Scanning...","Security Audit");
+  setTimeout(function(){report=scan();showMain();},20);
+}
+function showMain(){
+  var c=report.counts;
+  var m={
+    "":{title:"Security Audit"},
+    "< Exit":function(){load();},
+    "Summary":summary,
+    "Bluetooth":bluetooth
+  };
+  m["Boot code ("+c.boot+")"]=showBoot;
+  m["Apps ("+c.apps+")"]=showApps;
+  m["Findings !"+c.high+" ?"+c.medium]=showFindings;
+  m["Limitations"]=limitations;
+  m["Rescan"]=rescan;
+  E.showMenu(m);
+}
+
+E.showMessage("Scanning Storage...","Security Audit");
+setTimeout(function(){try{report=scan();showMain();}catch(e){E.showAlert("Audit failed:\n"+e,"Security Audit").then(function(){load();});}},20);
