@@ -413,3 +413,14 @@ Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot stat
 - `faceUp` and idle-timeout transitions no longer trigger a full scene redraw.
 - LCD-on no longer triggers a full scene redraw. A short 80 ms header-only debounce lets `faceUp` win, preventing a misleading blue flash before yellow.
 - Header mode/text are cached so identical state and text are not redrawn.
+
+
+## Version 0.44 on-demand GPS location input
+
+- Location mode now has three choices: **Place / Manual / GPS**.
+- Selecting GPS starts the receiver only while the Orbit settings screen is acquiring a fix.
+- GPS power is requested with the dedicated tag `orbitsettings`.
+- After a valid fix is saved, Orbit removes only its own GPS power request with `Bangle.setGPSPower(0,"orbitsettings")`. If another app still requests GPS under another tag, the receiver remains on.
+- Canceling GPS acquisition, leaving Orbit settings, or killing the settings app also removes Orbit's GPS listener and GPS power request.
+- A saved GPS location is retained after acquisition; reopening GPS mode does not continuously run GPS. Use **Get GPS fix** to refresh it.
+- Latitude, longitude and GPS altitude (when available) are stored in `orbit.json`.
