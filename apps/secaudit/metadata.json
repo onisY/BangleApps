@@ -2,9 +2,9 @@
   "id": "secaudit",
   "name": "Security Audit",
   "shortName": "SecAudit",
-  "version": "0.02",
+  "version": "0.03",
   "author": "onisY",
-  "description": "On-device static security audit for Bangle.js 2: checks Bluetooth settings, boot code, installed apps and use of sensitive BLE/storage/sensor APIs.",
+  "description": "On-device static security audit and BLE hardening helper for Bangle.js 2: checks Bluetooth settings, boot code, installed apps and sensitive BLE/storage/sensor APIs.",
   "icon": "app.png",
   "tags": "tool,system,security",
   "supports": [
