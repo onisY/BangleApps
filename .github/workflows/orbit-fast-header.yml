@@ -1,0 +1,146 @@
+name: Orbit fast header state update
+
+on:
+  push:
+    paths:
+      - '.github/workflows/orbit-fast-header.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Patch Orbit header rendering
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('apps/orbit')
+          path=p/'app.js'
+          s=path.read_text()
+
+          old='''  var interactive = false, idleTimer;'''
+          new='''  var interactive = false, idleTimer, lcdHeaderTimer;\n  var lastHeaderMode=-1, lastHeaderText="";'''
+          assert old in s
+          s=s.replace(old,new,1)
+
+          old='''  function drawHeader(date){\n    // Priority: input-enabled -> yellow; current idle time -> blue-purple;\n    // all other states -> white.\n    var mode=interactive?2:1;\n    var fg=(mode===1)?C.fg:C.bg;\n    drawTallBoldString(headerText(date),1,fg,mode);\n  }'''
+          new='''  function drawHeader(date,force){\n    // Header is intentionally independent from the expensive scene redraw.\n    // Input-enabled -> yellow; view-only -> blue-purple.\n    var mode=interactive?2:1;\n    var text=headerText(date);\n    if(!force && mode===lastHeaderMode && text===lastHeaderText) return;\n    var fg=(mode===1)?C.fg:C.bg;\n    drawTallBoldString(text,1,fg,mode);\n    lastHeaderMode=mode;\n    lastHeaderText=text;\n  }\n  function drawHeaderOnly(){\n    refreshBattery();\n    drawHeader(sceneDate(),false);\n  }'''
+          assert old in s
+          s=s.replace(old,new,1)
+
+          # A full-screen clear always requires the header to be redrawn even if cached.
+          old='''    drawHeader(date);'''
+          new='''    drawHeader(date,true);'''
+          assert old in s
+          s=s.replace(old,new,1)
+
+          old='''  function armIdle(){\n    if(idleTimer) clearTimeout(idleTimer);\n    if(!interactive) return;\n    idleTimer=setTimeout(goIdle,8000);\n  }\n  function startInteraction(){\n    interactive=true;\n    try { Bangle.setLocked(false); } catch(e) {}\n    try { Bangle.setBacklight(true); } catch(e) {}\n    armIdle();\n  }\n  function goIdle(){\n    if(idleTimer){ clearTimeout(idleTimer); idleTimer=undefined; }\n    interactive=false;\n    try { Bangle.setBacklight(false); } catch(e) {}\n    try { Bangle.setLocked(true); } catch(e) {}\n    draw();\n    queueTick();\n  }\n  function onFaceUp(up){\n    if(up){\n      startInteraction();\n      draw();\n    }\n  }'''
+          new='''  function armIdle(){\n    if(idleTimer) clearTimeout(idleTimer);\n    if(!interactive) return;\n    idleTimer=setTimeout(goIdle,8000);\n  }\n  function startInteraction(){\n    // Cancel a pending view-only repaint from lcdPower.  faceUp/input state wins.\n    if(lcdHeaderTimer){ clearTimeout(lcdHeaderTimer); lcdHeaderTimer=undefined; }\n    if(!interactive){\n      interactive=true;\n      // Immediate 23-pixel differential repaint: do not wait for Earth/Moon/map.\n      drawHeaderOnly();\n    }\n    try { Bangle.setLocked(false); } catch(e) {}\n    try { Bangle.setBacklight(true); } catch(e) {}\n    armIdle();\n  }\n  function goIdle(){\n    if(idleTimer){ clearTimeout(idleTimer); idleTimer=undefined; }\n    if(interactive){\n      interactive=false;\n      // Return to view-only color immediately, without a full scene redraw.\n      drawHeaderOnly();\n    }\n    try { Bangle.setBacklight(false); } catch(e) {}\n    try { Bangle.setLocked(true); } catch(e) {}\n    queueTick();\n  }\n  function onFaceUp(up){\n    if(up) startInteraction();\n  }'''
+          assert old in s
+          s=s.replace(old,new,1)
+
+          old='''  function onLCD(on){\n    if(on){\n      draw();\n      queueTick();\n    } else {\n      if(idleTimer){clearTimeout(idleTimer);idleTimer=undefined;}\n      interactive=false;\n          if(tickTimer){clearTimeout(tickTimer);tickTimer=undefined;}\n    }\n  }'''
+          new='''  function onLCD(on){\n    if(on){\n      // lcdPower often arrives just before faceUp.  Delay only the cheap blue\n      // header repaint briefly so a following faceUp can switch directly to\n      // yellow without a misleading blue flash.  Never redraw the full scene here.\n      if(lcdHeaderTimer) clearTimeout(lcdHeaderTimer);\n      lcdHeaderTimer=setTimeout(function(){\n        lcdHeaderTimer=undefined;\n        if(!interactive) drawHeaderOnly();\n      },80);\n      queueTick();\n    } else {\n      if(lcdHeaderTimer){clearTimeout(lcdHeaderTimer);lcdHeaderTimer=undefined;}\n      if(idleTimer){clearTimeout(idleTimer);idleTimer=undefined;}\n      interactive=false;\n      if(tickTimer){clearTimeout(tickTimer);tickTimer=undefined;}\n    }\n  }'''
+          assert old in s
+          s=s.replace(old,new,1)
+
+          old='''  function cleanup(){\n    if(idleTimer)clearTimeout(idleTimer);'''
+          new='''  function cleanup(){\n    if(lcdHeaderTimer)clearTimeout(lcdHeaderTimer);\n    if(idleTimer)clearTimeout(idleTimer);'''
+          assert old in s
+          s=s.replace(old,new,1)
+
+          path.write_text(s)
+
+          # Regenerate lightweight app.min.js from readable source.
+          def strip_comments(src):
+            out=[];i=0;state='code';q=''
+            while i<len(src):
+              ch=src[i];n=src[i+1] if i+1<len(src) else ''
+              if state=='code':
+                if ch in "'\"`": state='str';q=ch;out.append(ch);i+=1;continue
+                if ch=='/' and n=='/': state='line';i+=2;continue
+                if ch=='/' and n=='*': state='block';i+=2;continue
+                out.append(ch);i+=1;continue
+              if state=='str':
+                out.append(ch)
+                if ch=='\\' and i+1<len(src):out.append(src[i+1]);i+=2;continue
+                if ch==q:state='code'
+                i+=1;continue
+              if state=='line':
+                if ch=='\n':out.append('\n');state='code'
+                i+=1;continue
+              if state=='block':
+                if ch=='*' and n=='/':state='code';i+=2;continue
+                i+=1
+            return ''.join(out)
+          def mini(src):
+            src=strip_comments(src);out=[];i=0;state='code';q='';pending=False
+            def word(c):return bool(c) and (c.isalnum() or c in '_$')
+            while i<len(src):
+              ch=src[i]
+              if state=='code':
+                if ch in "'\"`":
+                  if pending:
+                    prev=out[-1] if out else ''
+                    if word(prev):out.append(' ')
+                    pending=False
+                  state='str';q=ch;out.append(ch);i+=1;continue
+                if ch.isspace():pending=True;i+=1;continue
+                if pending:
+                  prev=out[-1] if out else ''
+                  if (word(prev) and word(ch)) or (prev=='+' and ch=='+') or (prev=='-' and ch=='-'):out.append(' ')
+                  pending=False
+                out.append(ch);i+=1;continue
+              out.append(ch)
+              if ch=='\\' and i+1<len(src):out.append(src[i+1]);i+=2;continue
+              if ch==q:state='code'
+              i+=1
+            return ''.join(out).strip()+'\n'
+          (p/'app.min.js').write_text(mini(s))
+
+          meta_path=p/'metadata.json'
+          meta=json.loads(meta_path.read_text())
+          meta['version']='0.43'
+          meta_path.write_text(json.dumps(meta,indent=2,ensure_ascii=False)+'\n')
+
+          readme=p/'README.md'
+          readme.write_text(readme.read_text()+'''\n\n## Version 0.43 immediate header-state feedback\n\n- Header state changes are now differential and independent of the expensive Earth/Moon/map redraw.\n- Entering input-enabled mode repaints only the top header immediately in yellow.\n- Returning to view-only mode repaints only the top header immediately in blue-purple.\n- `faceUp` and idle-timeout transitions no longer trigger a full scene redraw.\n- LCD-on no longer triggers a full scene redraw. A short 80 ms header-only debounce lets `faceUp` win, preventing a misleading blue flash before yellow.\n- Header mode/text are cached so identical state and text are not redrawn.\n''')
+          PY
+      - name: Verify optimized header behavior
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('apps/orbit')
+          a=(p/'app.js').read_text();m=(p/'app.min.js').read_text()
+          assert 'function drawHeaderOnly()' in a
+          assert 'lastHeaderMode' in a and 'lastHeaderText' in a
+          assert 'if(up) startInteraction();' in a
+          assert 'if(!interactive) drawHeaderOnly();' in a
+          assert '},80);' in a
+          assert 'drawHeader(date,true);' in a
+          # Ensure faceUp no longer calls full draw and goIdle no longer calls full draw.
+          face=a[a.index('function onFaceUp'):a.index('function queueTick')]
+          assert 'draw();' not in face
+          idle=a[a.index('function goIdle'):a.index('function onFaceUp')]
+          assert 'draw();' not in idle
+          assert json.loads((p/'metadata.json').read_text())['version']=='0.43'
+          assert 'drawHeaderOnly' in m
+          print('Orbit v0.43 fast-header checks passed')
+          PY
+      - name: Commit Orbit v0.43
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/orbit/app.js apps/orbit/app.min.js apps/orbit/metadata.json apps/orbit/README.md
+          git commit -m 'Make Orbit header state feedback immediate'
+          git push origin HEAD:master
