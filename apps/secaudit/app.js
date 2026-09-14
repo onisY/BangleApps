@@ -47,14 +47,14 @@ function scan(){
     var j=S.readJSON(fn,1);
     if(j)apps.push({id:fn.replace(/\.info$/,''),name:j.name||fn,version:j.version||"?",type:j.type||"app"});
   });
-  apps.sort(function(a,b){return (a.name||"").localeCompare(b.name||"");});
+  apps.sort(function(a,b){var A=a.name||"",B=b.name||"";return A<B?-1:A>B?1:0;});
 
   files.forEach(function(fn){
     if(fn===".boot0"||fn===".bootcde"||fn==="bootupdate.js"||/\.boot\.js$/.test(fn))boots.push({file:fn,crc:crc(fn),owner:owners[fn]||""});
   });
-  boots.sort(function(a,b){return a.file.localeCompare(b.file);});
+  boots.sort(function(a,b){return a.file<b.file?-1:a.file>b.file?1:0;});
 
-  var exec=files.filter(function(fn){return /\.js$/.test(fn)||fn===".boot0"||fn===".bootcde";});
+  var exec=files.filter(function(fn){return fn!=="secaudit.app.js"&&(/\.js$/.test(fn)||fn===".boot0"||fn===".bootcde");});
   var pats=[
     ["HIGH",/NRF\.setAdvertising\s*\(/,"BLE advertising TX"],
     ["HIGH",/NRF\.(?:connect|requestDevice)\s*\(/,"Outbound BLE connection"],
