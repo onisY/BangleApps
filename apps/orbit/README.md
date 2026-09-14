@@ -370,3 +370,10 @@ Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot stat
 - United Kingdom provides London, Edinburgh and Salisbury.
 - Touch, double-tap and long-touch time navigation code is physically removed from the Orbit core; swipe screenshots remain.
 - Local apparent solar hour angle is now derived from UTC plus longitude, so Earth rotation remains correct for selected locations anywhere in the world.
+
+
+## Version 0.39 Espruino UTC compatibility fix
+
+- Fixed startup error on Bangle.js 2 caused by unsupported `Date.getUTCHours()` / UTC getter methods.
+- UTC minutes are now derived from supported local Date getters plus `getTimezoneOffset()`.
+- World-location solar rotation remains based on UTC plus selected longitude.

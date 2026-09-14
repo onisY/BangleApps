@@ -117,14 +117,15 @@ try {
     var jan1=new Date(date.getFullYear(),0,1,0,0,0,0);
     return Math.floor((date.valueOf()-jan1.valueOf())/DAY)+1;
   }
-  // Local apparent-solar hour angle for Japanese standard time.
+  // Local apparent-solar hour angle for any selected longitude.
   // At local solar noon this is 0, so the red location marker lies on the Sun-facing meridian.
   function localSolarHourAngle(date){
     var n=dayOfYear(date);
     var b=TAU*(n-81)/364;
     var eot=9.87*Math.sin(2*b)-7.53*Math.cos(b)-1.5*Math.sin(b); // minutes
     // UTC-based apparent solar time works for any selected world longitude.
-    var utcMin=date.getUTCHours()*60+date.getUTCMinutes()+date.getUTCSeconds()/60;
+    var utcMin=date.getHours()*60+date.getMinutes()+date.getSeconds()/60+date.getTimezoneOffset();
+    utcMin=((utcMin%1440)+1440)%1440;
     var solarMin=utcMin + 4*loc.lon + eot;
     return wrapPi((solarMin-720)*0.25*RAD);
   }
