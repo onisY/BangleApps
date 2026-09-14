@@ -3,6 +3,7 @@ var Storage=require("Storage");
 var cfg=Storage.readJSON("fivewcal.json",1)||{};
 if (!(cfg.timeout>=15 && cfg.timeout<=120)) cfg.timeout=30;
 if (cfg.lang!=="ja" && cfg.lang!=="en") cfg.lang="ja";
+if (cfg.ukRegion!=="ew" && cfg.ukRegion!=="sc") cfg.ukRegion="ew";
 
 var W=g.getWidth(),H=g.getHeight();
 var BLACK=0x0000,WHITE=0xFFFF,BLUE=0x001F,RED=0xF800,GREEN=0x07E0,GRAY=0x4208;
@@ -61,7 +62,7 @@ function isJapanHoliday(d){
   return false;
 }
 
-/* Gregorian Easter Sunday, for England and Wales bank holidays */
+/* Gregorian Easter Sunday */
 function easterSunday(y){
   var a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4;
   var f=Math.floor((b+8)/25),gg=Math.floor((b-f+1)/3);
@@ -70,9 +71,26 @@ function easterSunday(y){
   var q=h+l-7*mm+114,month=Math.floor(q/31),day=(q%31)+1;
   return new Date(y,month-1,day);
 }
+function commonUKSpecial(d){
+  var y=d.getFullYear(),m=d.getMonth()+1,n=d.getDate();
+  if(y===2011&&m===4&&n===29)return true; /* Royal Wedding */
+  if(y===2022&&m===9&&n===19)return true; /* State Funeral */
+  if(y===2023&&m===5&&n===8)return true;  /* Coronation */
+  return false;
+}
+function christmasHoliday(d){
+  var y=d.getFullYear(),m=d.getMonth()+1,n=d.getDate();
+  if(m!==12)return false;
+  var xd=new Date(y,11,25).getDay();
+  var x=(xd===0||xd===6)?27:25;
+  if(n===x)return true;
+  var bd=new Date(y,11,26).getDay();
+  var b=(bd===0||bd===6)?28:26;
+  return n===b;
+}
 
-/* England and Wales bank holidays. Includes recent one-off changes. */
-function isUKHoliday(d){
+/* England and Wales bank holidays (London and Salisbury). */
+function isEnglandWalesHoliday(d){
   var y=d.getFullYear(),m=d.getMonth()+1,n=d.getDate();
   var dow=new Date(y,0,1).getDay();
   var ny=(dow===6)?3:(dow===0?2:1);
@@ -81,32 +99,54 @@ function isUKHoliday(d){
   var easter=easterSunday(y);
   if(sameDay(d,addDays(easter,-2))||sameDay(d,addDays(easter,1)))return true;
 
-  /* Early May bank holiday: first Monday, except VE Day move in 2020. */
   if(y===2020){if(m===5&&n===8)return true;}
   else if(m===5&&n===nthMonday(y,5,1))return true;
 
-  /* Spring bank holiday. */
   if(y===2002){if(m===6&&(n===3||n===4))return true;}
   else if(y===2012){if(m===6&&(n===4||n===5))return true;}
   else if(y===2022){if(m===6&&(n===2||n===3))return true;}
   else if(m===5&&n===lastMonday(y,5))return true;
 
-  /* Recent extra bank holidays in England and Wales. */
-  if(y===2011&&m===4&&n===29)return true;  /* Royal Wedding */
-  if(y===2022&&m===9&&n===19)return true;  /* State Funeral */
-  if(y===2023&&m===5&&n===8)return true;   /* Coronation */
-
+  if(commonUKSpecial(d))return true;
   if(m===8&&n===lastMonday(y,8))return true;
-
-  var xmasDow=new Date(y,11,25).getDay();
-  var xmas=(xmasDow===0||xmasDow===6)?27:25;
-  if(m===12&&n===xmas)return true;
-  var boxingDow=new Date(y,11,26).getDay();
-  var boxing=(boxingDow===0||boxingDow===6)?28:26;
-  if(m===12&&n===boxing)return true;
-
+  if(christmasHoliday(d))return true;
   return false;
 }
+
+/* Scotland bank holidays (Edinburgh). */
+function isScotlandHoliday(d){
+  var y=d.getFullYear(),m=d.getMonth()+1,n=d.getDate();
+  var dow=new Date(y,0,1).getDay(),ny1,ny2;
+  if(dow===6){ny1=3;ny2=4;}
+  else if(dow===0){ny1=2;ny2=3;}
+  else if(dow===5){ny1=1;ny2=4;}
+  else{ny1=1;ny2=2;}
+  if(m===1&&(n===ny1||n===ny2))return true;
+
+  var easter=easterSunday(y);
+  if(sameDay(d,addDays(easter,-2)))return true; /* Good Friday; no Easter Monday */
+
+  if(y===2020){if(m===5&&n===8)return true;}
+  else if(m===5&&n===nthMonday(y,5,1))return true;
+
+  if(y===2002){if(m===6&&(n===3||n===4))return true;}
+  else if(y===2012){if(m===6&&(n===4||n===5))return true;}
+  else if(y===2022){if(m===6&&(n===2||n===3))return true;}
+  else if(m===5&&n===lastMonday(y,5))return true;
+
+  if(commonUKSpecial(d))return true;
+  if(y===2026&&m===6&&n===15)return true; /* Scotland World Cup bank holiday */
+  if(m===8&&n===nthMonday(y,8,1))return true;
+
+  var sd=new Date(y,10,30).getDay(),sm=11,sn=30;
+  if(sd===6){sm=12;sn=2;}
+  else if(sd===0){sm=12;sn=1;}
+  if(m===sm&&n===sn)return true;
+
+  if(christmasHoliday(d))return true;
+  return false;
+}
+function isEnglishHoliday(d){return cfg.ukRegion==="sc"?isScotlandHoliday(d):isEnglandWalesHoliday(d);}
 
 function topFreeGap(){
   var spans=[];
@@ -190,7 +230,7 @@ function drawCalendar(){
       var d=addDays(pageStart,r*7+c),x1=Math.floor(c*W/7),x2=Math.floor((c+1)*W/7)-1;
       var bg=BLACK,fg=WHITE;
       if(c===5)bg=BLUE;
-      if(c===6||(cfg.lang==="en"?isUKHoliday(d):isJapanHoliday(d)))bg=RED;
+      if(c===6||(cfg.lang==="en"?isEnglishHoliday(d):isJapanHoliday(d)))bg=RED;
       if(sameDay(d,today)){bg=GREEN;fg=BLACK;}
       g.setColor(bg).fillRect(x1,y1,x2,y2);
       g.setColor(fg).setBgColor(bg).setFont("Vector",20).setFontAlign(0,0);
@@ -220,6 +260,11 @@ function showAppSettings(){
       value:cfg.lang==="en"?1:0,min:0,max:1,step:1,
       format:function(v){return v?"English":"Japanese";},
       onchange:function(v){cfg.lang=v?"en":"ja";save();}
+    },
+    "UK holidays":{
+      value:cfg.ukRegion==="sc"?1:0,min:0,max:1,step:1,
+      format:function(v){return v?"Scotland":"England/Wales";},
+      onchange:function(v){cfg.ukRegion=v?"sc":"ew";save();}
     },
     "Auto exit":{
       value:cfg.timeout,min:15,max:120,step:15,
