@@ -1,0 +1,105 @@
+name: Orbit GPS progress display retry
+
+on:
+  push:
+    paths:
+      - '.github/workflows/orbit-gps-progress2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Patch GPS progress display
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('apps/orbit')
+          path=p/'settings.js'
+          s=path.read_text()
+
+          s=s.replace('  var gpsHandler,gpsActive=false,gpsReturnMode=0;','  var gpsHandler,gpsActive=false,gpsReturnMode=0;\n  var gpsStarted=0,gpsLastDraw=0,gpsLastSats=-1,gpsLastHdop=-1,gpsLastFix;',1)
+
+          old='''  function stopGPS(){\n    if(gpsHandler){\n      try{Bangle.removeListener("GPS",gpsHandler);}catch(e){}\n      gpsHandler=undefined;\n    }\n    gpsActive=false;\n    // Tagged power management removes only Orbit's request. If another app\n    // still requests GPS with another ID, the receiver remains powered.\n    try{Bangle.setGPSPower(0,GPS_ID);}catch(e){}\n  }'''
+          new='''  function stopGPS(){\n    if(gpsHandler){\n      try{Bangle.removeListener("GPS",gpsHandler);}catch(e){}\n      gpsHandler=undefined;\n    }\n    gpsActive=false;gpsLastFix=undefined;\n    try{Bangle.setGPSPower(0,GPS_ID);}catch(e){}\n  }\n  function gpsBar(sats){\n    var n=Math.max(0,Math.min(8,sats|0)),t="[",i;\n    for(i=0;i<8;i++)t+=i<n?"#":"-";\n    return t+"]";\n  }\n  function gpsStateText(fix){\n    var sats=fix&&isFinite(fix.satellites)?fix.satellites|0:0;\n    if(fix&&fix.fix)return "FIX";\n    if(sats===0)return "NO SATS";\n    if(sats<3)return "SEARCHING";\n    if(sats<4)return "ACQUIRING";\n    return "LOCKING";\n  }\n  function gpsElapsed(){\n    var sec=Math.max(0,Math.round((Date.now()-gpsStarted)/1000));\n    var m=Math.floor(sec/60),ss=sec%60;\n    return (m<10?"0":"")+m+":"+(ss<10?"0":"")+ss;\n  }\n  function showGPSProgress(force){\n    if(!gpsActive)return;\n    var fix=gpsLastFix||{},sats=isFinite(fix.satellites)?fix.satellites|0:0;\n    var hdop=isFinite(fix.hdop)&&fix.hdop>0?fix.hdop:0;\n    var now=Date.now();\n    var hdChanged=(hdop&&gpsLastHdop>0)?Math.abs(hdop-gpsLastHdop)>=0.5:(hdop!==gpsLastHdop);\n    if(!force && sats===gpsLastSats && !hdChanged && now-gpsLastDraw<10000)return;\n    gpsLastSats=sats;gpsLastHdop=hdop;gpsLastDraw=now;\n    var hd=hdop?hdop.toFixed(1):"--";\n    E.showMenu({\n      "":{title:"GPS input"},\n      "< Cancel":cancelGPS,\n      "State":{value:0,min:0,max:0,format:function(){return gpsStateText(fix);}},\n      "Satellites":{value:0,min:0,max:0,format:function(){return sats+" "+gpsBar(sats);}},\n      "HDOP":{value:0,min:0,max:0,format:function(){return hd;}},\n      "Elapsed":{value:0,min:0,max:0,format:function(){return gpsElapsed();}}\n    });\n  }'''
+          assert old in s
+          s=s.replace(old,new,1)
+
+          old='''  function startGPS(returnMode){\n    stopGPS();\n    gpsReturnMode=(returnMode===0||returnMode===1||returnMode===2)?returnMode:s.locationMode;\n    s.locationMode=2;write();\n    gpsHandler=function(fix){\n      if(!gpsActive||!fix||!fix.fix||!isFinite(fix.lat)||!isFinite(fix.lon))return;\n      applyGPS(fix);\n      stopGPS();\n      try{Bangle.buzz(300);}catch(e){}\n      E.showAlert("GPS location saved\\n"+gpsLocationText(),"Orbit GPS").then(show);\n    };\n    Bangle.on("GPS",gpsHandler);\n    gpsActive=true;\n    try{\n      Bangle.setGPSPower(1,GPS_ID);\n    }catch(e){\n      stopGPS();\n      E.showAlert("Could not start GPS","Orbit GPS").then(show);\n      return;\n    }\n    E.showMenu({\n      "":{title:"GPS input"},\n      "< Cancel":cancelGPS,\n      "Status":{value:0,min:0,max:0,format:function(){return "Waiting";}},\n      "Hint":function(){E.showAlert("Place the watch outdoors with a clear sky. A first fix may take several minutes.","GPS input").then(function(){startGPS(gpsReturnMode);});}\n    });\n  }'''
+          new='''  function startGPS(returnMode){\n    stopGPS();\n    gpsReturnMode=(returnMode===0||returnMode===1||returnMode===2)?returnMode:s.locationMode;\n    s.locationMode=2;write();\n    gpsStarted=Date.now();gpsLastDraw=0;gpsLastSats=-1;gpsLastHdop=-1;gpsLastFix={};\n    gpsHandler=function(fix){\n      if(!gpsActive||!fix)return;\n      gpsLastFix=fix;\n      if(fix.fix&&isFinite(fix.lat)&&isFinite(fix.lon)){\n        applyGPS(fix);stopGPS();\n        try{Bangle.buzz(300);}catch(e){}\n        E.showAlert("GPS location saved\\n"+gpsLocationText(),"Orbit GPS").then(show);\n        return;\n      }\n      showGPSProgress(false);\n    };\n    Bangle.on("GPS",gpsHandler);\n    gpsActive=true;\n    try{Bangle.setGPSPower(1,GPS_ID);}catch(e){stopGPS();E.showAlert("Could not start GPS","Orbit GPS").then(show);return;}\n    showGPSProgress(true);\n  }'''
+          assert old in s
+          s=s.replace(old,new,1)
+          path.write_text(s)
+
+          def strip_comments(src):
+            out=[];i=0;state='code';q=''
+            while i<len(src):
+              ch=src[i];n=src[i+1] if i+1<len(src) else ''
+              if state=='code':
+                if ch in "'\"`":state='str';q=ch;out.append(ch);i+=1;continue
+                if ch=='/' and n=='/':state='line';i+=2;continue
+                if ch=='/' and n=='*':state='block';i+=2;continue
+                out.append(ch);i+=1;continue
+              if state=='str':
+                out.append(ch)
+                if ch=='\\' and i+1<len(src):out.append(src[i+1]);i+=2;continue
+                if ch==q:state='code'
+                i+=1;continue
+              if state=='line':
+                if ch=='\n':out.append('\n');state='code'
+                i+=1;continue
+              if state=='block':
+                if ch=='*' and n=='/':state='code';i+=2;continue
+                i+=1
+            return ''.join(out)
+          def mini(src):
+            src=strip_comments(src);out=[];i=0;state='code';q='';pending=False
+            def word(c):return bool(c) and (c.isalnum() or c in '_$')
+            while i<len(src):
+              ch=src[i]
+              if state=='code':
+                if ch in "'\"`":
+                  if pending:
+                    prev=out[-1] if out else ''
+                    if word(prev):out.append(' ')
+                    pending=False
+                  state='str';q=ch;out.append(ch);i+=1;continue
+                if ch.isspace():pending=True;i+=1;continue
+                if pending:
+                  prev=out[-1] if out else ''
+                  if (word(prev) and word(ch)) or (prev=='+' and ch=='+') or (prev=='-' and ch=='-'):out.append(' ')
+                  pending=False
+                out.append(ch);i+=1;continue
+              out.append(ch)
+              if ch=='\\' and i+1<len(src):out.append(src[i+1]);i+=2;continue
+              if ch==q:state='code'
+              i+=1
+            return ''.join(out).strip()+'\n'
+          (p/'settings.min.js').write_text(mini(s))
+
+          meta_path=p/'metadata.json';meta=json.loads(meta_path.read_text());meta['version']='0.45';meta_path.write_text(json.dumps(meta,indent=2,ensure_ascii=False)+'\n')
+          readme=p/'README.md';readme.write_text(readme.read_text()+'''\n\n## Version 0.45 low-power GPS acquisition progress\n\n- GPS acquisition displays real satellite count, HDOP, elapsed time and a text acquisition bar.\n- The bar is a satellite-acquisition guide, not a literal completion percentage.\n- Display refresh is limited to satellite-count changes, meaningful HDOP changes, or at most once every 10 seconds to reduce display energy use.\n''')
+          PY
+      - name: Validate
+        run: |
+          node --check apps/orbit/settings.js
+          node --check apps/orbit/settings.min.js
+          grep -q 'showGPSProgress' apps/orbit/settings.js
+          grep -q 'satellites' apps/orbit/settings.js
+          grep -q 'hdop' apps/orbit/settings.js
+      - name: Commit Orbit v0.45
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+onisY@users.noreply.github.com'
+          git add apps/orbit/settings.js apps/orbit/settings.min.js apps/orbit/metadata.json apps/orbit/README.md
+          git commit -m 'Show low-power GPS acquisition progress in Orbit'
+          git push origin HEAD:master
