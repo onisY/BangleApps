@@ -245,7 +245,7 @@ function clearTimer(t){if(t)clearTimeout(t);}
 function save(){Storage.writeJSON("fivewcal.json",cfg);}
 function armExit(){clearTimer(autoTimer);autoTimer=setTimeout(exitClock,cfg.timeout*1000);}
 function exitClock(){clearTimer(autoTimer);clearTimer(btnTimer);clearTimer(tapTimer);Bangle.showClock();}
-function openSystemSettings(){clearTimer(autoTimer);clearTimer(btnTimer);clearTimer(tapTimer);load("setting.app.js");}
+function openLauncher(){clearTimer(autoTimer);clearTimer(btnTimer);clearTimer(tapTimer);Bangle.showLauncher();}
 function backFromAppSettings(){
   E.showMenu();
   today=midnight(new Date());homeStart=mondayOf(today);
@@ -294,7 +294,7 @@ function onSwipe(lr,ud){
 function onButton(){
   armExit();
   if(btnTimer){clearTimer(btnTimer);btnTimer=undefined;exitClock();return;}
-  btnTimer=setTimeout(function(){btnTimer=undefined;openSystemSettings();},1000);
+  btnTimer=setTimeout(function(){btnTimer=undefined;openLauncher();},1000);
 }
 function installUI(){
   Bangle.setUI({mode:"custom",touch:onTouch,swipe:onSwipe,btn:onButton,remove:function(){clearTimer(autoTimer);clearTimer(btnTimer);clearTimer(tapTimer);}});
