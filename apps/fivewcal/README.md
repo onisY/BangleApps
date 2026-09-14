@@ -10,7 +10,7 @@ A compact five-week calendar for Bangle.js 2.
 - Five weeks (35 days) fill the remaining screen.
 - Monday-Friday: black background, white text.
 - Saturday: blue background, white text.
-- Sunday and Japanese national holidays: red background, white text.
+- Sunday and the selected language's holidays: red background, white text.
 - Today: green background, black text. Today takes priority over weekend/holiday colors.
 - Japanese mode uses the built-in drawn weekday kanji, so no additional Japanese font package is required.
 - English mode uses M T W T F S S.
@@ -36,7 +36,10 @@ Settings are stored in `fivewcal.json`.
 
 ## Holidays
 
-Japanese national holidays are calculated in the app, including substitute holidays, Citizens' Holidays, equinox days for modern years, and the special 2019-2021 holiday changes.
+- Japanese mode: Japanese national holidays, including substitute holidays, Citizens' Holidays, equinox days for modern years, and the special 2019-2021 holiday changes.
+- English mode: England and Wales bank holidays. This includes New Year's Day (and substitute day), Good Friday, Easter Monday, Early May bank holiday, Spring bank holiday, Summer bank holiday, Christmas Day, Boxing Day and substitute days. Recent one-off bank holidays are also included where coded.
+
+The United Kingdom has different bank-holiday calendars for England and Wales, Scotland, and Northern Ireland. 5wCal uses England and Wales for English mode.
 
 ## Notes
 
