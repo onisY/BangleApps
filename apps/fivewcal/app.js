@@ -2,6 +2,7 @@
 var Storage=require("Storage");
 var cfg=Storage.readJSON("fivewcal.json",1)||{};
 if (!(cfg.timeout>=15 && cfg.timeout<=120)) cfg.timeout=30;
+if (cfg.lang!=="ja" && cfg.lang!=="en") cfg.lang="ja";
 
 var W=g.getWidth(),H=g.getHeight();
 var BLACK=0x0000,WHITE=0xFFFF,BLUE=0x001F,RED=0xF800,GREEN=0x07E0,GRAY=0x4208;
@@ -119,11 +120,16 @@ function weekdayGlyph(c,x,y){
   else if(c===5){line2(x,y-8,x,y+7);line2(x-5,y-4,x+5,y-4);line2(x-7,y+7,x+7,y+7);}
   else{line2(x-6,y-8,x+5,y-8);line2(x-6,y+8,x+5,y+8);line2(x-6,y-8,x-6,y+8);line2(x+5,y-8,x+5,y+8);line2(x-6,y,x+5,y);}
 }
+function drawEnglishWeekday(c,x,y){
+  var names=["M","T","W","T","F","S","S"];
+  g.setColor(WHITE).setFont("Vector",20).setFontAlign(0,0).drawString(names[c],x,y);
+}
 function drawWeekday(c){
   var x1=Math.floor(c*W/7),x2=Math.floor((c+1)*W/7)-1,bg=BLACK;
   if(c===5)bg=BLUE;else if(c===6)bg=RED;
   g.setColor(bg).fillRect(x1,24,x2,47);
-  weekdayGlyph(c,(x1+x2)>>1,35);
+  if(cfg.lang==="en")drawEnglishWeekday(c,(x1+x2)>>1,35);
+  else weekdayGlyph(c,(x1+x2)>>1,35);
 }
 function drawCalendar(){
   g.setBgColor(BLACK).setColor(BLACK).fillRect(0,24,W-1,H-1);
@@ -147,12 +153,44 @@ function drawCalendar(){
 }
 
 function clearTimer(t){if(t)clearTimeout(t);}
+function save(){Storage.writeJSON("fivewcal.json",cfg);}
 function armExit(){clearTimer(autoTimer);autoTimer=setTimeout(exitClock,cfg.timeout*1000);}
 function exitClock(){clearTimer(autoTimer);clearTimer(btnTimer);clearTimer(tapTimer);Bangle.showClock();}
 function openSystemSettings(){clearTimer(autoTimer);clearTimer(btnTimer);clearTimer(tapTimer);load("setting.app.js");}
+function backFromAppSettings(){
+  E.showMenu();
+  today=midnight(new Date());homeStart=mondayOf(today);
+  installUI();drawCalendar();armExit();
+}
+function showAppSettings(){
+  clearTimer(autoTimer);clearTimer(btnTimer);clearTimer(tapTimer);tapTimer=undefined;
+  E.showMenu({
+    "":{title:"5wCal"},
+    "< Back":backFromAppSettings,
+    "Language":{
+      value:cfg.lang==="en"?1:0,min:0,max:1,step:1,
+      format:function(v){return v?"English":"Japanese";},
+      onchange:function(v){cfg.lang=v?"en":"ja";save();}
+    },
+    "Auto exit":{
+      value:cfg.timeout,min:15,max:120,step:15,
+      format:function(v){return v+" s";},
+      onchange:function(v){cfg.timeout=v;save();}
+    }
+  });
+}
 function onTouch(){
-  clearTimer(tapTimer);armExit();
-  tapTimer=setTimeout(function(){tapTimer=undefined;pageStart=copyDate(homeStart);drawCalendar();},220);
+  armExit();
+  if(tapTimer){
+    clearTimer(tapTimer);tapTimer=undefined;
+    showAppSettings();
+    return;
+  }
+  tapTimer=setTimeout(function(){
+    tapTimer=undefined;
+    pageStart=copyDate(homeStart);
+    drawCalendar();
+  },300);
 }
 function onSwipe(lr,ud){
   if(!ud)return;
