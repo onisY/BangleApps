@@ -21,7 +21,7 @@ A compact five-week calendar for Bangle.js 2.
 - Swipe down: move backward by one 5-week page (35 days).
 - Single tap: return to the initial page containing today.
 - Double tap: open 5wCal's own settings screen.
-- Side button once: after the 1-second double-press window, open the Bangle.js system Settings app.
+- Side button once: after the 1-second double-press window, open the Bangle.js app launcher.
 - Side button twice within 1 second: exit to the clock.
 - By default, 30 seconds without interaction exits to the clock.
 
