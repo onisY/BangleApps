@@ -40,7 +40,8 @@ try {
            noon:"#ccc",penumbra:"#631",zenith:"#0f0",
            headInput:"#ff0",headBlue:"#00f",headPurple:"#f0f",headOther:"#fff"};
   var tickTimer,eventTimer;
-  var interactive = false, idleTimer;
+  var interactive = false, idleTimer, lcdHeaderTimer;
+  var lastHeaderMode=-1, lastHeaderText="";
   var batteryPct=E.getBattery(), batterySampleAt=Date.now();
 
   function refreshBattery(){
@@ -195,12 +196,20 @@ try {
 
   function sceneDate(){ return new Date(); }
 
-  function drawHeader(date){
-    // Priority: input-enabled -> yellow; current idle time -> blue-purple;
-    // all other states -> white.
+  function drawHeader(date,force){
+    // Header is intentionally independent from the expensive scene redraw.
+    // Input-enabled -> yellow; view-only -> blue-purple.
     var mode=interactive?2:1;
+    var text=headerText(date);
+    if(!force && mode===lastHeaderMode && text===lastHeaderText) return;
     var fg=(mode===1)?C.fg:C.bg;
-    drawTallBoldString(headerText(date),1,fg,mode);
+    drawTallBoldString(text,1,fg,mode);
+    lastHeaderMode=mode;
+    lastHeaderText=text;
+  }
+  function drawHeaderOnly(){
+    refreshBattery();
+    drawHeader(sceneDate(),false);
   }
 
   function drawSun(){
@@ -555,7 +564,7 @@ try {
     var mx=Math.round(EX+moonOrbitR*Math.cos(ma));
     var my=Math.round(EY+moonOrbitR*Math.sin(ma));
     g.setBgColor(C.bg).setColor(C.bg).clear();
-    drawHeader(date);
+    drawHeader(date,true);
     g.setColor(C.orbit).drawCircle(EX,EY,moonOrbitR);
     var ref=solarReference(date,eq);
     drawSun();
@@ -605,24 +614,30 @@ try {
     idleTimer=setTimeout(goIdle,8000);
   }
   function startInteraction(){
-    interactive=true;
+    // Cancel a pending view-only repaint from lcdPower.  faceUp/input state wins.
+    if(lcdHeaderTimer){ clearTimeout(lcdHeaderTimer); lcdHeaderTimer=undefined; }
+    if(!interactive){
+      interactive=true;
+      // Immediate 23-pixel differential repaint: do not wait for Earth/Moon/map.
+      drawHeaderOnly();
+    }
     try { Bangle.setLocked(false); } catch(e) {}
     try { Bangle.setBacklight(true); } catch(e) {}
     armIdle();
   }
   function goIdle(){
     if(idleTimer){ clearTimeout(idleTimer); idleTimer=undefined; }
-    interactive=false;
+    if(interactive){
+      interactive=false;
+      // Return to view-only color immediately, without a full scene redraw.
+      drawHeaderOnly();
+    }
     try { Bangle.setBacklight(false); } catch(e) {}
     try { Bangle.setLocked(true); } catch(e) {}
-    draw();
     queueTick();
   }
   function onFaceUp(up){
-    if(up){
-      startInteraction();
-      draw();
-    }
+    if(up) startInteraction();
   }
 
   function queueTick(){
@@ -640,12 +655,20 @@ try {
   }
   function onLCD(on){
     if(on){
-      draw();
+      // lcdPower often arrives just before faceUp.  Delay only the cheap blue
+      // header repaint briefly so a following faceUp can switch directly to
+      // yellow without a misleading blue flash.  Never redraw the full scene here.
+      if(lcdHeaderTimer) clearTimeout(lcdHeaderTimer);
+      lcdHeaderTimer=setTimeout(function(){
+        lcdHeaderTimer=undefined;
+        if(!interactive) drawHeaderOnly();
+      },80);
       queueTick();
     } else {
+      if(lcdHeaderTimer){clearTimeout(lcdHeaderTimer);lcdHeaderTimer=undefined;}
       if(idleTimer){clearTimeout(idleTimer);idleTimer=undefined;}
       interactive=false;
-          if(tickTimer){clearTimeout(tickTimer);tickTimer=undefined;}
+      if(tickTimer){clearTimeout(tickTimer);tickTimer=undefined;}
     }
   }
   // ===== BEGIN ORBIT BLE DOUBLE CLICK =====
@@ -688,6 +711,7 @@ try {
   // ===== END ORBIT BLE DOUBLE CLICK =====
 
   function cleanup(){
+    if(lcdHeaderTimer)clearTimeout(lcdHeaderTimer);
     if(idleTimer)clearTimeout(idleTimer);
     if(tickTimer)clearTimeout(tickTimer);
     if(eventTimer)clearTimeout(eventTimer);

@@ -403,3 +403,13 @@ Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot stat
 - Apparent solar time is now computed as watch civil time + 4 minutes × (selected longitude - 135°E) + equation of time.
 - This restores the previously correct Japan behavior while allowing any selected world longitude.
 - Solar-event times use the same 135°E JST reference.
+
+
+## Version 0.43 immediate header-state feedback
+
+- Header state changes are now differential and independent of the expensive Earth/Moon/map redraw.
+- Entering input-enabled mode repaints only the top header immediately in yellow.
+- Returning to view-only mode repaints only the top header immediately in blue-purple.
+- `faceUp` and idle-timeout transitions no longer trigger a full scene redraw.
+- LCD-on no longer triggers a full scene redraw. A short 80 ms header-only debounce lets `faceUp` win, preventing a misleading blue flash before yellow.
+- Header mode/text are cached so identical state and text are not redrawn.
