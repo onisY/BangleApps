@@ -23,6 +23,8 @@ The scanner labels code matches as:
 
 A match **does not mean an app is malicious**. Many legitimate Bangle apps need these APIs. The purpose is to identify code that deserves manual review.
 
+From v0.04, each finding also stores a short `sample` of the code surrounding the match in `secaudit.json`. This makes it easier to distinguish an expected use from a false positive or an unexpected transmission path.
+
 ## BLE Hardening
 
 The app includes a `BLE Hardening` menu.
@@ -44,13 +46,15 @@ Changes to boot-time Bluetooth behaviour may require a restart before they are f
 
 The app records CRC fingerprints for `.boot0`, `.bootcde`, `bootupdate.js`, and `*.boot.js` files. These are useful for comparing the same watch before and after changes, but they are **not cryptographic proof** that the firmware or boot code is official.
 
+The Bangle Bootloader rebuilds `.boot0` when settings, installed JavaScript files, or the firmware Git commit change, so a `.boot0` CRC change after an expected app/settings update is not automatically suspicious.
+
 ## Saved report
 
 Each scan writes a machine-readable report to:
 
 `secaudit.json`
 
-This includes firmware/version information, Bluetooth configuration, installed applications, boot files, code findings, and scanner limitations.
+This includes firmware/version information, Bluetooth configuration, installed applications, boot files, code findings, match samples, and scanner limitations.
 
 ## Important limitations
 
@@ -73,3 +77,10 @@ Pay particular attention to:
 3. unexpected `*.boot.js` files
 4. unexpected apps containing HIGH-capability BLE APIs
 5. changes in core boot-file fingerprints without an expected update
+
+## v0.04 changes
+
+- Fixed false-positive BLE-UART detections caused by complex regular-expression alternatives on Espruino.
+- Uses separate, simpler patterns for each sensitive BLE API.
+- Adds a short code sample to each finding.
+- Keeps `NRF.findDevices()` detection so BLE Detector and similar scanners are identified correctly.
