@@ -394,3 +394,12 @@ Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot stat
 - This removes any dependence on `Date.getTimezoneOffset()` or the watch's timezone setting for the on-screen astronomical rotation.
 - Example sanity check: at 22:35 JST, Rome is approximately 14:30 apparent solar time, rather than near midnight.
 - The header still displays the Bangle's normal civil clock time.
+
+
+## Version 0.42 JST-reference world-location fix
+
+- Fixed the remaining world-location Earth-rotation error seen with Italy / Rome.
+- The Orbit header/watch clock is treated as Japan Standard Time (JST), matching the actual watch display used by this build.
+- Apparent solar time is now computed as watch civil time + 4 minutes × (selected longitude - 135°E) + equation of time.
+- This restores the previously correct Japan behavior while allowing any selected world longitude.
+- Solar-event times use the same 135°E JST reference.
