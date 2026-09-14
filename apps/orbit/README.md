@@ -359,3 +359,14 @@ Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot stat
 - One button release now starts a 1 second wait.
 - If no second release occurs, the normal launcher opens.
 - A second release within the window cancels the launcher and performs BLE reset.
+
+
+## Version 0.38 world locations and display cleanup
+
+- Removed the on-screen `NOW` label.
+- Added an alphabetically sorted English/ASCII country list.
+- Each country normally uses its capital's latitude/longitude from REST Countries and terrain elevation from Open-Meteo's 90 m DEM.
+- Japan keeps the existing 47-prefecture / three-place-per-prefecture table unchanged.
+- United Kingdom provides London, Edinburgh and Salisbury.
+- Touch, double-tap and long-touch time navigation code is physically removed from the Orbit core; swipe screenshots remain.
+- Local apparent solar hour angle is now derived from UTC plus longitude, so Earth rotation remains correct for selected locations anywhere in the world.

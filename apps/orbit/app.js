@@ -39,9 +39,7 @@ try {
            marker:"#f00",horizon:"#f0f",moon:"#fd4",moonDark:"#008",orbit:"#555",rise:"#ff0",set:"#f80",
            noon:"#ccc",penumbra:"#631",zenith:"#0f0",
            headInput:"#ff0",headBlue:"#00f",headPurple:"#f0f",headOther:"#fff"};
-  var tickTimer, eventTimer, timeOffsetMs = 0, lastCenterTap = 0;
-  var holdTimer, holdDir = 0, edgeDownDir = 0, edgeDownAt = 0;
-  var edgeTapTimer, pendingEdgeDir = 0;
+  var tickTimer,eventTimer;
   var interactive = false, idleTimer;
   var batteryPct=E.getBattery(), batterySampleAt=Date.now();
 
@@ -125,8 +123,9 @@ try {
     var n=dayOfYear(date);
     var b=TAU*(n-81)/364;
     var eot=9.87*Math.sin(2*b)-7.53*Math.cos(b)-1.5*Math.sin(b); // minutes
-    var civilMin=date.getHours()*60+date.getMinutes()+date.getSeconds()/60;
-    var solarMin=civilMin + 4*(loc.lon-135) + eot; // JST standard meridian = 135E
+    // UTC-based apparent solar time works for any selected world longitude.
+    var utcMin=date.getUTCHours()*60+date.getUTCMinutes()+date.getUTCSeconds()/60;
+    var solarMin=utcMin + 4*loc.lon + eot;
     return wrapPi((solarMin-720)*0.25*RAD);
   }
 
@@ -192,16 +191,12 @@ try {
     return {lon:norm(lon),lat:lat,dist:dist};
   }
 
-  function sceneDate(){ return new Date(Date.now()+timeOffsetMs); }
-  function currentLabel(){
-    if(timeOffsetMs) return (timeOffsetMs>0?"+":"")+Math.round(timeOffsetMs/3600000)+"H";
-    return "NOW";
-  }
+  function sceneDate(){ return new Date(); }
 
   function drawHeader(date){
     // Priority: input-enabled -> yellow; current idle time -> blue-purple;
     // all other states -> white.
-    var mode=interactive?2:(timeOffsetMs===0?1:0);
+    var mode=interactive?2:1;
     var fg=(mode===1)?C.fg:C.bg;
     drawTallBoldString(headerText(date),1,fg,mode);
   }
@@ -559,7 +554,6 @@ try {
     var my=Math.round(EY+moonOrbitR*Math.sin(ma));
     g.setBgColor(C.bg).setColor(C.bg).clear();
     drawHeader(date);
-    g.setFont("6x8",1).setFontAlign(0,-1).setColor(C.fg).drawString(currentLabel(),W/2,24);
     g.setColor(C.orbit).drawCircle(EX,EY,moonOrbitR);
     var ref=solarReference(date,eq);
     drawSun();
@@ -616,12 +610,7 @@ try {
   }
   function goIdle(){
     if(idleTimer){ clearTimeout(idleTimer); idleTimer=undefined; }
-    stopHold();
-    cancelPendingEdgeTap();
-    edgeDownDir=0;
     interactive=false;
-    timeOffsetMs=0;
-    lastCenterTap=0;
     try { Bangle.setBacklight(false); } catch(e) {}
     try { Bangle.setLocked(true); } catch(e) {}
     draw();
@@ -634,120 +623,6 @@ try {
     }
   }
 
-  function stepHour(dir){
-    timeOffsetMs += dir*3600000;
-    draw();
-  }
-  function cancelPendingEdgeTap(){
-    if(edgeTapTimer){ clearTimeout(edgeTapTimer); edgeTapTimer=undefined; }
-    pendingEdgeDir=0;
-  }
-  function stopHold(){
-    holdDir=0;
-    if(holdTimer){ clearTimeout(holdTimer); holdTimer=undefined; }
-  }
-  function repeatHold(){
-    if(!holdDir || edgeDownDir!==holdDir) return;
-    // Safety valve: never allow a lost release event to fast-forward forever.
-    if(Date.now()-edgeDownAt>30000){
-      stopHold();
-      edgeDownDir=0;
-      return;
-    }
-    armIdle();
-    stepHour(holdDir);
-    holdTimer=setTimeout(repeatHold,700);
-  }
-  function startHold(dir){
-    if(edgeDownDir!==dir) return;
-    cancelPendingEdgeTap();
-    stopHold();
-    holdDir=dir;
-    armIdle();
-    stepHour(dir);
-    holdTimer=setTimeout(repeatHold,700);
-  }
-  function handleEdgeTouch(dir,type){
-    startInteraction();
-    // Firmware classifies short touches as type 0 and long touches as type 2.
-    if(type===2){
-      cancelPendingEdgeTap();
-      edgeDownDir=dir;
-      edgeDownAt=Date.now();
-      startHold(dir);
-      return;
-    }
-    // Swift touch: wait briefly before committing one hour, so a second
-    // swift touch can turn the pair into exactly one day.
-    edgeDownDir=0;
-    stopHold();
-    registerEdgeTap(dir);
-  }
-  function registerEdgeTap(dir){
-    armIdle();
-    if(pendingEdgeDir===dir && edgeTapTimer){
-      clearTimeout(edgeTapTimer);
-      edgeTapTimer=undefined;
-      pendingEdgeDir=0;
-      timeOffsetMs += dir*DAY;
-      draw();
-      return;
-    }
-    if(pendingEdgeDir && edgeTapTimer){
-      var oldDir=pendingEdgeDir;
-      clearTimeout(edgeTapTimer);
-      edgeTapTimer=undefined;
-      pendingEdgeDir=0;
-      stepHour(oldDir);
-    }
-    pendingEdgeDir=dir;
-    edgeTapTimer=setTimeout(function(){
-      edgeTapTimer=undefined;
-      var d=pendingEdgeDir;
-      pendingEdgeDir=0;
-      if(d) stepHour(d);
-    },420);
-  }
-
-  function onDrag(e){
-    if(e.b) armIdle();
-    if(!e.b){
-      edgeDownDir=0;
-      stopHold();
-      return;
-    }
-    if(edgeDownDir){
-      if((edgeDownDir<0 && e.x>=W*0.35) || (edgeDownDir>0 && e.x<=W*0.65)){
-        edgeDownDir=0;
-        stopHold();
-      }
-    }
-  }
-
-  function onTouch(zone,e){
-    if(!e)return;
-    startInteraction();
-    if(e.x<W*0.28){
-      handleEdgeTouch(-1,e.type);
-      return;
-    }
-    if(e.x>W*0.72){
-      handleEdgeTouch(1,e.type);
-      return;
-    }
-    cancelPendingEdgeTap();
-    edgeDownDir=0;
-    stopHold();
-    var now=Date.now();
-    if(now-lastCenterTap<450){
-      timeOffsetMs=0;
-      lastCenterTap=0;
-      draw();
-    } else {
-      lastCenterTap=now;
-    }
-  }
-
   function queueTick(){
     if(tickTimer)clearTimeout(tickTimer);
     var step=5*60000;
@@ -755,7 +630,6 @@ try {
     tickTimer=setTimeout(function(){
       tickTimer=undefined;
       if(!interactive){
-        timeOffsetMs=0;
         refreshBattery();
         draw();
       }
@@ -767,11 +641,9 @@ try {
       draw();
       queueTick();
     } else {
-      stopHold();
       if(idleTimer){clearTimeout(idleTimer);idleTimer=undefined;}
       interactive=false;
-            timeOffsetMs=0;
-      if(tickTimer){clearTimeout(tickTimer);tickTimer=undefined;}
+          if(tickTimer){clearTimeout(tickTimer);tickTimer=undefined;}
     }
   }
   // ===== BEGIN ORBIT BLE DOUBLE CLICK =====
@@ -814,17 +686,12 @@ try {
   // ===== END ORBIT BLE DOUBLE CLICK =====
 
   function cleanup(){
-    stopHold();
-    cancelPendingEdgeTap();
-    edgeDownDir=0;
     if(idleTimer)clearTimeout(idleTimer);
     if(tickTimer)clearTimeout(tickTimer);
     if(eventTimer)clearTimeout(eventTimer);
     if(bleBtnTimer)clearTimeout(bleBtnTimer);
     bleBtnClicks=0;
     if(bleBtnWatch){clearWatch(bleBtnWatch);bleBtnWatch=undefined;}
-    Bangle.removeListener("drag",onDrag);
-    Bangle.removeListener("touch",onTouch);
     Bangle.removeListener("lcdPower",onLCD);
     Bangle.removeListener("faceUp",onFaceUp);
     Bangle.removeListener("swipe",onSwipe);
@@ -832,8 +699,6 @@ try {
 
   Bangle.setUI({mode:"custom",remove:cleanup});
   installBleButtonWatch();
-  Bangle.on("drag",onDrag);
-  Bangle.on("touch",onTouch);
   Bangle.on("lcdPower",onLCD);
   Bangle.on("faceUp",onFaceUp);
   Bangle.on("swipe",onSwipe);
