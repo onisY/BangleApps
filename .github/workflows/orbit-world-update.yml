@@ -19,6 +19,21 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Use pinned REST Countries dataset
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          p=Path('tools/orbit_world_update.py')
+          s=p.read_text()
+          s,n=re.subn(
+            r"url=\('https://restcountries\.com/v3\.1/all\?fields='\s*'name,capital,capitalInfo,cca2,independent,unMember'\)",
+            "url='https://raw.githubusercontent.com/restcountries/restcountries/master/src/main/resources/countriesV3.1.json'",
+            s
+          )
+          assert n==1, 'REST Countries URL patch did not match'
+          p.write_text(s)
+          PY
       - name: Generate Orbit world locations
         run: python tools/orbit_world_update.py
       - name: Basic checks
