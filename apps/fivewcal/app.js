@@ -16,9 +16,11 @@ function mondayOf(d){var x=copyDate(d);x.setDate(x.getDate()-((x.getDay()+6)%7))
 function sameDay(a,b){return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();}
 function pad2(n){return (n<10?"0":"")+n;}
 function nthMonday(y,m,n){var d=new Date(y,m-1,1);return 1+((8-d.getDay())%7)+7*(n-1);}
+function lastMonday(y,m){var d=new Date(y,m,0);return d.getDate()-((d.getDay()+6)%7);}
 function vernal(y){return Math.floor(20.8431+0.242194*(y-1980)-Math.floor((y-1980)/4));}
 function autumn(y){return Math.floor(23.2488+0.242194*(y-1980)-Math.floor((y-1980)/4));}
 
+/* Japanese national holidays */
 function baseHoliday(d){
   var y=d.getFullYear(),m=d.getMonth()+1,n=d.getDate();
   if(m===1&&n===1)return true;
@@ -47,7 +49,7 @@ function baseHoliday(d){
   if(y===2019&&((m===5&&n===1)||(m===10&&n===22)))return true;
   return false;
 }
-function isHoliday(d){
+function isJapanHoliday(d){
   if(baseHoliday(d))return true;
   var y=d.getFullYear();
   if(y>=1986&&baseHoliday(addDays(d,-1))&&baseHoliday(addDays(d,1)))return true;
@@ -56,6 +58,53 @@ function isHoliday(d){
     if(y<2007)return d.getDay()===1&&baseHoliday(p)&&p.getDay()===0;
     while(baseHoliday(p)){if(p.getDay()===0)return true;p=addDays(p,-1);}
   }
+  return false;
+}
+
+/* Gregorian Easter Sunday, for England and Wales bank holidays */
+function easterSunday(y){
+  var a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4;
+  var f=Math.floor((b+8)/25),gg=Math.floor((b-f+1)/3);
+  var h=(19*a+b-d-gg+15)%30,i=Math.floor(c/4),k=c%4;
+  var l=(32+2*e+2*i-h-k)%7,mm=Math.floor((a+11*h+22*l)/451);
+  var q=h+l-7*mm+114,month=Math.floor(q/31),day=(q%31)+1;
+  return new Date(y,month-1,day);
+}
+
+/* England and Wales bank holidays. Includes recent one-off changes. */
+function isUKHoliday(d){
+  var y=d.getFullYear(),m=d.getMonth()+1,n=d.getDate();
+  var dow=new Date(y,0,1).getDay();
+  var ny=(dow===6)?3:(dow===0?2:1);
+  if(m===1&&n===ny)return true;
+
+  var easter=easterSunday(y);
+  if(sameDay(d,addDays(easter,-2))||sameDay(d,addDays(easter,1)))return true;
+
+  /* Early May bank holiday: first Monday, except VE Day move in 2020. */
+  if(y===2020){if(m===5&&n===8)return true;}
+  else if(m===5&&n===nthMonday(y,5,1))return true;
+
+  /* Spring bank holiday. */
+  if(y===2002){if(m===6&&(n===3||n===4))return true;}
+  else if(y===2012){if(m===6&&(n===4||n===5))return true;}
+  else if(y===2022){if(m===6&&(n===2||n===3))return true;}
+  else if(m===5&&n===lastMonday(y,5))return true;
+
+  /* Recent extra bank holidays in England and Wales. */
+  if(y===2011&&m===4&&n===29)return true;  /* Royal Wedding */
+  if(y===2022&&m===9&&n===19)return true;  /* State Funeral */
+  if(y===2023&&m===5&&n===8)return true;   /* Coronation */
+
+  if(m===8&&n===lastMonday(y,8))return true;
+
+  var xmasDow=new Date(y,11,25).getDay();
+  var xmas=(xmasDow===0||xmasDow===6)?27:25;
+  if(m===12&&n===xmas)return true;
+  var boxingDow=new Date(y,11,26).getDay();
+  var boxing=(boxingDow===0||boxingDow===6)?28:26;
+  if(m===12&&n===boxing)return true;
+
   return false;
 }
 
@@ -141,7 +190,7 @@ function drawCalendar(){
       var d=addDays(pageStart,r*7+c),x1=Math.floor(c*W/7),x2=Math.floor((c+1)*W/7)-1;
       var bg=BLACK,fg=WHITE;
       if(c===5)bg=BLUE;
-      if(c===6||isHoliday(d))bg=RED;
+      if(c===6||(cfg.lang==="en"?isUKHoliday(d):isJapanHoliday(d)))bg=RED;
       if(sameDay(d,today)){bg=GREEN;fg=BLACK;}
       g.setColor(bg).fillRect(x1,y1,x2,y2);
       g.setColor(fg).setBgColor(bg).setFont("Vector",20).setFontAlign(0,0);
