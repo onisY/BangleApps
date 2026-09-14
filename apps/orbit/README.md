@@ -377,3 +377,12 @@ Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot stat
 - Fixed startup error on Bangle.js 2 caused by unsupported `Date.getUTCHours()` / UTC getter methods.
 - UTC minutes are now derived from supported local Date getters plus `getTimezoneOffset()`.
 - World-location solar rotation remains based on UTC plus selected longitude.
+
+
+## Version 0.40 device-timezone correction
+
+- Fixed an approximately half-day Earth/observer rotation error seen with world locations (for example Italy / Rome).
+- Orbit now uses the Bangle system `setting.json` timezone value as the authoritative civil-time offset instead of relying on `Date.getTimezoneOffset()` at runtime.
+- UTC for Earth rotation is computed as displayed civil time minus the configured device timezone.
+- Sunrise/sunset/noon event calculations use the same timezone source.
+- The top header remains the Bangle's own civil clock time; selecting a world location changes the astronomical location, not the watch's system timezone.

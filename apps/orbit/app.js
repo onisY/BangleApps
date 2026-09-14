@@ -2,6 +2,8 @@ try {
 (function () {
   var Storage = require("Storage");
   var FILE = "orbit.json";
+  var systemSettings=Storage.readJSON("setting.json",1)||{};
+  var deviceTzHours=isFinite(systemSettings.timezone)?systemSettings.timezone:(-new Date().getTimezoneOffset()/60);
   var SHOT_STATE = "orbitshot.json";
   var SHOT_MAX = 20;
   var W = g.getWidth(), H = g.getHeight();
@@ -124,7 +126,7 @@ try {
     var b=TAU*(n-81)/364;
     var eot=9.87*Math.sin(2*b)-7.53*Math.cos(b)-1.5*Math.sin(b); // minutes
     // UTC-based apparent solar time works for any selected world longitude.
-    var utcMin=date.getHours()*60+date.getMinutes()+date.getSeconds()/60+date.getTimezoneOffset();
+    var utcMin=date.getHours()*60+date.getMinutes()+date.getSeconds()/60-deviceTzHours*60;
     utcMin=((utcMin%1440)+1440)%1440;
     var solarMin=utcMin + 4*loc.lon + eot;
     return wrapPi((solarMin-720)*0.25*RAD);
@@ -141,9 +143,9 @@ try {
     var c0=(Math.sin(-0.833*RAD)-Math.sin(phi)*Math.sin(dec))/
       (Math.cos(phi)*Math.cos(dec));
 
-    // Device civil timezone. Japan gives 135E automatically:
-    // getTimezoneOffset()=-540 min -> standard meridian=135 deg E.
-    var stdLon=-noonDate.getTimezoneOffset()/4;
+    // Use the Bangle's configured civil timezone. In Japan, timezone=9
+    // gives the JST standard meridian 135 deg E.
+    var stdLon=deviceTzHours*15;
     var solarNoonMin=720-4*(loc.lon-stdLon)-eot;
 
     // 00:00 and civil noon 12:00 are exact clock-time events.
