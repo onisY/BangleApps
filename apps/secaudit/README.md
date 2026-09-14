@@ -1,6 +1,6 @@
 # Security Audit
 
-Security Audit performs an **on-device static inspection** of a Bangle.js 2.
+Security Audit performs an **on-device static inspection** of a Bangle.js 2 and provides a small BLE-hardening helper.
 
 It is intended to answer practical questions such as:
 
@@ -17,11 +17,28 @@ It is intended to answer practical questions such as:
 
 The scanner labels code matches as:
 
-- **HIGH** — powerful transmission/control capabilities such as `NRF.setAdvertising`, outbound BLE connections, `NRF.wake`, `Bluetooth.setConsole`, or raw `Flash.write`.
-- **MED** — capabilities such as BLE scanning, custom BLE services, TX power control, HID transmission, or storage enumeration.
+- **HIGH** — powerful transmission/control capabilities such as `NRF.setAdvertising`, `NRF.connect`, `NRF.requestDevice`, `.gatt.connect`, `Bluetooth.write/print/println`, `NRF.wake`, `Bluetooth.setConsole`, or raw `Flash.write`.
+- **MED** — capabilities such as `NRF.setScan`, `NRF.findDevices`, custom BLE services, TX power control, HID transmission, or storage enumeration.
 - **INFO** — sensitive sensor access such as GPS, heart-rate or accelerometer use.
 
 A match **does not mean an app is malicious**. Many legitimate Bangle apps need these APIs. The purpose is to identify code that deserves manual review.
+
+## BLE Hardening
+
+The app includes a `BLE Hardening` menu.
+
+It can, after confirmation:
+
+- set `Programmable` OFF;
+- set Bluetooth privacy to `Hide name`.
+
+It also provides shortcuts/guidance for:
+
+- configuring a six-digit Passkey in Settings;
+- adding trusted devices to the Bluetooth Whitelist;
+- restarting the watch and rescanning after changes.
+
+Changes to boot-time Bluetooth behaviour may require a restart before they are fully reflected in the generated boot code.
 
 ## Boot-code fingerprints
 
