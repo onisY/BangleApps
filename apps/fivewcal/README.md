@@ -10,7 +10,7 @@ A compact five-week calendar for Bangle.js 2.
 - Five weeks (35 days) fill the remaining screen.
 - Monday-Friday: black background, white text.
 - Saturday: blue background, white text.
-- Sunday and the selected language's holidays: red background, white text.
+- Sunday and the selected holiday calendar's holidays: red background, white text.
 - Today: green background, black text. Today takes priority over weekend/holiday colors.
 - Japanese mode uses the built-in drawn weekday kanji, so no additional Japanese font package is required.
 - English mode uses M T W T F S S.
@@ -30,16 +30,18 @@ A compact five-week calendar for Bangle.js 2.
 Double-tap the calendar screen to open 5wCal settings.
 
 - Language: Japanese / English.
+- UK holidays: England/Wales / Scotland.
 - Auto exit: 15 to 120 seconds.
+
+City names are not displayed. London and Salisbury use the England/Wales calendar; Edinburgh uses the Scotland calendar.
 
 Settings are stored in `fivewcal.json`.
 
 ## Holidays
 
 - Japanese mode: Japanese national holidays, including substitute holidays, Citizens' Holidays, equinox days for modern years, and the special 2019-2021 holiday changes.
-- English mode: England and Wales bank holidays. This includes New Year's Day (and substitute day), Good Friday, Easter Monday, Early May bank holiday, Spring bank holiday, Summer bank holiday, Christmas Day, Boxing Day and substitute days. Recent one-off bank holidays are also included where coded.
-
-The United Kingdom has different bank-holiday calendars for England and Wales, Scotland, and Northern Ireland. 5wCal uses England and Wales for English mode.
+- English mode, England/Wales: New Year's Day and substitute day, Good Friday, Easter Monday, Early May bank holiday, Spring bank holiday, Summer bank holiday, Christmas Day, Boxing Day and substitute days, plus selected recent one-off bank holidays.
+- English mode, Scotland: New Year's Day, 2 January and substitute days, Good Friday, Early May bank holiday, Spring bank holiday, the first-Monday August summer bank holiday, St Andrew's Day and substitute day, Christmas Day and Boxing Day with substitute days, plus selected recent one-off bank holidays. The 15 June 2026 Scotland World Cup bank holiday is included.
 
 ## Notes
 
