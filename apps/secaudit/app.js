@@ -2,7 +2,7 @@
 var S=require("Storage");
 var report;
 var MAX_READ=32768;
-var MAX_FINDINGS=80;
+var MAX_FINDINGS=100;
 
 function yn(v){return v?"YES":"NO";}
 function safeRead(n){
@@ -37,8 +37,9 @@ function ownerMap(){
   });
   return m;
 }
+function currentSettings(){return S.readJSON("setting.json",1)||{};}
 function scan(){
-  var st=S.readJSON("setting.json",1)||{};
+  var st=currentSettings();
   var files=S.list();
   var owners=ownerMap();
   var apps=[],boots=[],findings=[];
@@ -58,11 +59,13 @@ function scan(){
   var pats=[
     ["HIGH",/NRF\.setAdvertising\s*\(/,"BLE advertising TX"],
     ["HIGH",/NRF\.(?:connect|requestDevice)\s*\(/,"Outbound BLE connection"],
+    ["HIGH",/\.gatt\.connect\s*\(/,"GATT outbound connection"],
+    ["HIGH",/Bluetooth\.(?:write|print|println)\s*\(/,"BLE UART data TX"],
     ["HIGH",/NRF\.wake\s*\(/,"Can re-enable BLE"],
     ["HIGH",/Bluetooth\.setConsole\s*\(/,"Bluetooth console control"],
     ["HIGH",/Flash\.write\s*\(/,"Raw flash write"],
     ["MED",/NRF\.setServices\s*\(/,"Custom BLE services"],
-    ["MED",/NRF\.setScan\s*\(/,"BLE scanning"],
+    ["MED",/NRF\.(?:setScan|findDevices)\s*\(/,"BLE scanning"],
     ["MED",/NRF\.setTxPower\s*\(/,"BLE TX power control"],
     ["MED",/NRF\.sendHIDReport\s*\(/,"BLE HID transmit"],
     ["MED",/Storage\.list\s*\(|require\(["']Storage["']\)\.list\s*\(/,"Storage enumeration"],
@@ -80,8 +83,8 @@ function scan(){
   var whitelist=!!(st.whitelist&&st.whitelist.length&&!st.whitelist_disabled);
   var passkey=!!(st.passkey&&(""+st.passkey).length===6);
   var privacy=!!(st.bleprivacy&&st.blename===false);
-  var high=0,med=0;
-  findings.forEach(function(f){if(f.sev==="HIGH")high++;else if(f.sev==="MED")med++;});
+  var high=0,med=0,info=0;
+  findings.forEach(function(f){if(f.sev==="HIGH")high++;else if(f.sev==="MED")med++;else info++;});
   var cfgRisk=0;
   if(st.ble!==false)cfgRisk++;
   if(programmable)cfgRisk+=2;
@@ -103,7 +106,7 @@ function scan(){
     boot:boots,
     apps:apps,
     findings:findings,
-    counts:{apps:apps.length,boot:boots.length,high:high,medium:med,configRisk:cfgRisk},
+    counts:{apps:apps.length,boot:boots.length,high:high,medium:med,info:info,configRisk:cfgRisk},
     limits:{maxRead:MAX_READ,maxFindings:MAX_FINDINGS},
     note:"Static audit only. Firmware authenticity and hidden hardware cannot be proven on-device. Pretokenized code may reduce pattern detection. API use is capability, not proof of malicious intent."
   };
@@ -111,13 +114,10 @@ function scan(){
   return report;
 }
 function backMain(){showMain();}
-function alertText(title,text,back){
-  E.showAlert(text,title).then(back||backMain);
-}
+function alertText(title,text,back){E.showAlert(text,title).then(back||backMain);}
 function summary(){
-  var r=report;
-  var c=r.counts;
-  var s="FW: "+r.firmware+"\nHW: "+r.hw+"\nApps: "+c.apps+"\nBoot code: "+c.boot+"\nHigh-capability: "+c.high+"\nMedium: "+c.medium+"\n\nFW authenticity:\nNOT VERIFIED";
+  var r=report,c=r.counts;
+  var s="FW: "+r.firmware+"\nGit: "+(r.git||"?")+"\nHW: "+r.hw+"\nApps: "+c.apps+"\nBoot code: "+c.boot+"\nHigh-capability: "+c.high+"\nMedium: "+c.medium+"\nInfo: "+c.info+"\n\nFW authenticity:\nNOT VERIFIED";
   alertText("Audit Summary",s);
 }
 function bluetooth(){
@@ -159,6 +159,40 @@ function showFindings(){
   });
   E.showMenu(m);
 }
+function disableProgrammable(){
+  E.showPrompt("Turn Programmable OFF?\n\nYou can turn it back on in Settings when using App Loader/IDE.",{title:"Security Audit"}).then(function(ok){
+    if(!ok)return showHardening();
+    var st=currentSettings();
+    st.blerepl=false;
+    S.writeJSON("setting.json",st);
+    alertText("Saved","Programmable is now set OFF.\n\nRestart the watch for boot-time Bluetooth console settings to be rebuilt.",showHardening);
+  });
+}
+function hideName(){
+  E.showPrompt("Hide the BLE device name?\n\nThis improves privacy but can make manual discovery harder.",{title:"Security Audit"}).then(function(ok){
+    if(!ok)return showHardening();
+    var st=currentSettings();
+    st.bleprivacy=1;
+    st.blename=false;
+    S.writeJSON("setting.json",st);
+    alertText("Saved","Privacy is set to Hide name.\n\nRestart the watch for all boot-time BLE settings to be rebuilt.",showHardening);
+  });
+}
+function hardeningGuide(){
+  alertText("Recommended","1. Programmable OFF\n2. Set a 6-digit Passkey\n3. Whitelist your trusted phone/PC\n4. Optionally Hide name\n5. Restart\n6. Run Security Audit again",showHardening);
+}
+function openSettings(){load("setting.app.js");}
+function showHardening(){
+  var b=report.bluetooth;
+  var m={"":{title:"BLE Hardening"},"< Back":showMain};
+  m["Programmable: "+(b.programmable?"ON":"OFF")]=disableProgrammable;
+  m["Hide name: "+(b.privacyHideName?"YES":"NO")]=hideName;
+  m["Passkey: "+(b.passkey?"SET":"NONE")]=openSettings;
+  m["Whitelist: "+(b.whitelist?"ON":"OFF")]=openSettings;
+  m["Open Settings"]=openSettings;
+  m["Recommended steps"]=hardeningGuide;
+  E.showMenu(m);
+}
 function limitations(){
   alertText("What this cannot prove","This app cannot prove that installed firmware matches an official build, cannot inspect the MCU bootloader binary, and cannot rule out undocumented hardware.\n\nIt performs settings checks and static scans of readable Storage code only. Pretokenized/minified apps can reduce pattern detection.");
 }
@@ -172,7 +206,8 @@ function showMain(){
     "":{title:"Security Audit"},
     "< Exit":function(){load();},
     "Summary":summary,
-    "Bluetooth":bluetooth
+    "Bluetooth":bluetooth,
+    "BLE Hardening":showHardening
   };
   m["Boot code ("+c.boot+")"]=showBoot;
   m["Apps ("+c.apps+")"]=showApps;
