@@ -437,3 +437,10 @@ Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot stat
 
 - When the selected location mode is GPS, the lower-right label now shows latitude, longitude and altitude on three lines instead of `GPS / GPS`.
 - Place and Manual modes retain their existing lower-right labels.
+
+
+## Version 0.46 coordinate labels for Manual/GPS locations
+
+- The lower-right location label now shows latitude, longitude and elevation on three lines whenever the location mode is **Manual** or **GPS**.
+- **Place** mode continues to show the stored region/country and place name.
+- Format: `Lat xx.xxxx`, `Lon xxx.xxxx`, `Alt xxxm`.
