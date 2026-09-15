@@ -15,6 +15,8 @@
   var s=Storage.readJSON(FILE,1)||{};
   var gpsHandler,gpsActive=false,gpsReturnMode=0;
   var gpsStarted=0,gpsLastDraw=0,gpsLastSats=-1,gpsLastHdop=-1,gpsLastFix;
+  var gpsFixAt=0,gpsFixLat,gpsFixLon,gpsAltSamples=[],gpsAltTimer;
+  var GPS_ALT_SAMPLE_MS=20000;
   Object.keys(d).forEach(function(k){if(s[k]===undefined)s[k]=d[k];});
   if(s.locationMode<0||s.locationMode>2)s.locationMode=0;
 
@@ -53,6 +55,11 @@
     s.elevationM=isFinite(fix.alt)?Math.round(fix.alt):0;
     write();
   }
+  function median(a){
+    if(!a.length)return NaN;
+    var b=a.slice().sort(function(x,y){return x-y;}),n=b.length,m=n>>1;
+    return n&1?b[m]:(b[m-1]+b[m])/2;
+  }
   function applyCurrent(){
     if(s.locationMode===0)applyPlace();
     else if(s.locationMode===1)applyManual();
@@ -64,6 +71,7 @@
       try{Bangle.removeListener("GPS",gpsHandler);}catch(e){}
       gpsHandler=undefined;
     }
+    if(gpsAltTimer){clearTimeout(gpsAltTimer);gpsAltTimer=undefined;}
     gpsActive=false;gpsLastFix=undefined;
     try{Bangle.setGPSPower(0,GPS_ID);}catch(e){}
   }
@@ -74,6 +82,7 @@
   }
   function gpsStateText(fix){
     var sats=fix&&isFinite(fix.satellites)?fix.satellites|0:0;
+    if(gpsFixAt)return "ALTITUDE";
     if(fix&&fix.fix)return "FIX";
     if(sats===0)return "NO SATS";
     if(sats<3)return "SEARCHING";
@@ -94,14 +103,22 @@
     if(!force && sats===gpsLastSats && !hdChanged && now-gpsLastDraw<10000)return;
     gpsLastSats=sats;gpsLastHdop=hdop;gpsLastDraw=now;
     var hd=hdop?hdop.toFixed(1):"--";
-    E.showMenu({
+    var menu={
       "":{title:"GPS input"},
       "< Cancel":cancelGPS,
       "State":{value:0,min:0,max:0,format:function(){return gpsStateText(fix);}},
       "Satellites":{value:0,min:0,max:0,format:function(){return sats+" "+gpsBar(sats);}},
       "HDOP":{value:0,min:0,max:0,format:function(){return hd;}},
       "Elapsed":{value:0,min:0,max:0,format:function(){return gpsElapsed();}}
-    });
+    };
+    if(gpsFixAt){
+      menu["Alt samples"]={value:0,min:0,max:0,format:function(){return ""+gpsAltSamples.length;}};
+      menu["Alt wait"]={value:0,min:0,max:0,format:function(){
+        var left=Math.max(0,Math.ceil((GPS_ALT_SAMPLE_MS-(Date.now()-gpsFixAt))/1000));
+        return left+" s";
+      }};
+    }
+    E.showMenu(menu);
   }
   function gpsLocationText(){
     return "Lat "+Number(s.lat).toFixed(4)+"\nLon "+Number(s.lon).toFixed(4)+
@@ -114,18 +131,36 @@
     write();
     show();
   }
+  function finishGPSAltitude(){
+    if(!gpsActive||!gpsFixAt)return;
+    var alt=median(gpsAltSamples);
+    var finalFix={lat:gpsFixLat,lon:gpsFixLon,alt:isFinite(alt)?alt:0};
+    applyGPS(finalFix);
+    var count=gpsAltSamples.length;
+    stopGPS();
+    gpsFixAt=0;gpsAltSamples=[];
+    try{Bangle.buzz(300);}catch(e){}
+    E.showAlert("GPS location saved\n"+gpsLocationText()+"\nAlt samples "+count,"Orbit GPS").then(show);
+  }
   function startGPS(returnMode){
     stopGPS();
     gpsReturnMode=(returnMode===0||returnMode===1||returnMode===2)?returnMode:s.locationMode;
     s.locationMode=2;write();
     gpsStarted=Date.now();gpsLastDraw=0;gpsLastSats=-1;gpsLastHdop=-1;gpsLastFix={};
+    gpsFixAt=0;gpsFixLat=undefined;gpsFixLon=undefined;gpsAltSamples=[];
     gpsHandler=function(fix){
       if(!gpsActive||!fix)return;
       gpsLastFix=fix;
       if(fix.fix&&isFinite(fix.lat)&&isFinite(fix.lon)){
-        applyGPS(fix);stopGPS();
-        try{Bangle.buzz(300);}catch(e){}
-        E.showAlert("GPS location saved\n"+gpsLocationText(),"Orbit GPS").then(show);
+        if(!gpsFixAt){
+          // Lock horizontal position at the first valid fix, but keep the GPS
+          // running briefly so the noisier altitude can settle.
+          gpsFixAt=Date.now();gpsFixLat=fix.lat;gpsFixLon=fix.lon;
+          try{Bangle.buzz(80);}catch(e){}
+          gpsAltTimer=setTimeout(finishGPSAltitude,GPS_ALT_SAMPLE_MS);
+        }
+        if(isFinite(fix.alt))gpsAltSamples.push(fix.alt);
+        showGPSProgress(false);
         return;
       }
       showGPSProgress(false);

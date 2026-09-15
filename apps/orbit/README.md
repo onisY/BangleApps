@@ -453,3 +453,12 @@ Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot stat
 - The normal position is the lower-right corner. If the Moon occupies that area, the readout automatically moves upward to the nearest safe right-side slot.
 - Sun, Earth and Moon circles are checked against the label rectangle before drawing, preventing the location text from being placed over a celestial body.
 - Place mode keeps the existing two-line region/place display.
+
+
+## Version 0.47 stabilized GPS altitude
+
+- The first valid GPS fix now locks latitude and longitude, but does not immediately save the altitude.
+- GPS remains on for 20 additional seconds and collects valid altitude samples.
+- The saved altitude is the **median** of those samples, making it much less sensitive to one bad early vertical fix.
+- During this short settling period the GPS screen shows `ALTITUDE`, the number of altitude samples, and the remaining wait time.
+- After the 20-second sampling window Orbit saves the location and removes only its own tagged GPS power request.
