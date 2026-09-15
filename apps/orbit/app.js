@@ -12,28 +12,29 @@ try {
 
   var def = {
     locationMode:0,
-    locPref:"Tokyo",locName:"Chiyoda-ku",lat:35.694,lon:139.754,elevationM:16,
+    locPref:"Tokyo",locName:"Chiyoda-ku",lat:35.694,lon:139.754,
     sunSize:6,earthSize:30,moonSize:9,markerSize:2,
     earthStyle:0,earthDayColor:6,earthNightColor:4,earthEdgeColor:7,
     viewSide:0
   };
   var settings = Storage.readJSON(FILE,1) || {};
   Object.keys(def).forEach(function(k){ if (settings[k]===undefined) settings[k]=def[k]; });
+  if(settings.elevationM!==undefined || settings.manualElevationM!==undefined){
+    delete settings.elevationM; delete settings.manualElevationM;
+    Storage.writeJSON(FILE,settings);
+  }
   // Migrate old Tokyo default to the new Chiyoda-ku entry.
   if(settings.locPref==="Tokyo" && settings.locName==="Tokyo"){
     settings.locName="Chiyoda-ku";
     settings.lat=35.694;
     settings.lon=139.754;
-    settings.elevationM=16;
     Storage.writeJSON(FILE,settings);
   }
   if(settings.locationMode!==1 && settings.locPref==="Tokyo" &&
      settings.locName==="Chiyoda-ku" && (!isFinite(settings.elevationM) || settings.elevationM===0)){
-    settings.elevationM=16;
     Storage.writeJSON(FILE,settings);
   }
-  var loc = {name:settings.locName,lat:settings.lat,lon:settings.lon,
-    elevationM:settings.elevationM||0,pref:settings.locPref};
+  var loc = {name:settings.locName,lat:settings.lat,lon:settings.lon,pref:settings.locPref};
 
   var C = {bg:"#000",fg:"#fff",sun:"#f22",flare:"#f80",earth:"#5cf",
            marker:"#f00",horizon:"#f0f",moon:"#fd4",moonDark:"#008",orbit:"#555",rise:"#ff0",set:"#f80",
@@ -570,12 +571,11 @@ try {
     var lines=[
       settings.locationMode===2?"GPS":"manual",
       coordText(loc.lat,"N","S"),
-      coordText(loc.lon,"E","W"),
-      Math.round(loc.elevationM)+"m"
+      coordText(loc.lon,"E","W")
     ];
     // Longest coordinate is 9 glyphs at 6 px = 54 px. Keep this narrow
     // right-side column outside the fixed Earth as much as possible.
-    var x1=W-1,x0=x1-53,blockH=35;
+    var x1=W-1,x0=x1-53,blockH=26;
     var ys=[H-blockH,H-blockH-36,76],y0=ys[0];
     for(var i=0;i<ys.length;i++){
       var yy=ys[i],safe=true;

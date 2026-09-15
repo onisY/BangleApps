@@ -4,8 +4,8 @@
   var FILE="orbit.json", SHOT_STATE="orbitshot.json", SHOT_MAX=20;
   var GPS_ID="orbitsettings";
   var d={locationMode:0,countryName:"Japan",pref:12,place:0,
-    locPref:"Tokyo",locName:"Chiyoda-ku",lat:35.694,lon:139.754,elevationM:16,
-    manualLat:35.694,manualLon:139.754,manualElevationM:16,
+    locPref:"Tokyo",locName:"Chiyoda-ku",lat:35.694,lon:139.754,
+    manualLat:35.694,manualLon:139.754,
     sunSize:6,earthSize:30,moonSize:9,markerSize:2,
     earthStyle:0,earthDayColor:6,earthNightColor:4,earthEdgeColor:7,viewSide:0};
   var LOCATION_MODES=["Place","Manual","GPS"];
@@ -15,9 +15,10 @@
   var s=Storage.readJSON(FILE,1)||{};
   var gpsHandler,gpsActive=false,gpsReturnMode=0;
   var gpsStarted=0,gpsLastDraw=0,gpsLastSats=-1,gpsLastHdop=-1,gpsLastFix;
-  var gpsFixAt=0,gpsFixLat,gpsFixLon,gpsAltSamples=[],gpsAltTimer;
-  var GPS_ALT_SAMPLE_MS=20000;
   Object.keys(d).forEach(function(k){if(s[k]===undefined)s[k]=d[k];});
+  if(s.elevationM!==undefined||s.manualElevationM!==undefined){
+    delete s.elevationM;delete s.manualElevationM;Storage.writeJSON(FILE,s);
+  }
   if(s.locationMode<0||s.locationMode>2)s.locationMode=0;
 
   function countryIndex(name){for(var i=0;i<C.length;i++)if(C[i][0]===name)return i;return -1;}
@@ -42,23 +43,17 @@
       var places=C[idx][1];if(!places.length)return;
       if(s.place>=places.length)s.place=0;p=places[s.place];s.locPref=C[idx][0];
     }
-    s.locName=p[0];s.lat=p[1];s.lon=p[2];s.elevationM=(p.length>3&&isFinite(p[3]))?p[3]:0;write();
+    s.locName=p[0];s.lat=p[1];s.lon=p[2];write();
   }
   function applyManual(){
     s.locPref="Manual";s.locName="Custom";
-    s.lat=s.manualLat;s.lon=s.manualLon;s.elevationM=s.manualElevationM;write();
+    s.lat=s.manualLat;s.lon=s.manualLon;write();
   }
   function applyGPS(fix){
     s.locationMode=2;
     s.locPref="GPS";s.locName="GPS";
     s.lat=fix.lat;s.lon=fix.lon;
-    s.elevationM=isFinite(fix.alt)?Math.round(fix.alt):0;
     write();
-  }
-  function median(a){
-    if(!a.length)return NaN;
-    var b=a.slice().sort(function(x,y){return x-y;}),n=b.length,m=n>>1;
-    return n&1?b[m]:(b[m-1]+b[m])/2;
   }
   function applyCurrent(){
     if(s.locationMode===0)applyPlace();
@@ -71,7 +66,6 @@
       try{Bangle.removeListener("GPS",gpsHandler);}catch(e){}
       gpsHandler=undefined;
     }
-    if(gpsAltTimer){clearTimeout(gpsAltTimer);gpsAltTimer=undefined;}
     gpsActive=false;gpsLastFix=undefined;
     try{Bangle.setGPSPower(0,GPS_ID);}catch(e){}
   }
@@ -82,7 +76,6 @@
   }
   function gpsStateText(fix){
     var sats=fix&&isFinite(fix.satellites)?fix.satellites|0:0;
-    if(gpsFixAt)return "ALTITUDE";
     if(fix&&fix.fix)return "FIX";
     if(sats===0)return "NO SATS";
     if(sats<3)return "SEARCHING";
@@ -103,26 +96,17 @@
     if(!force && sats===gpsLastSats && !hdChanged && now-gpsLastDraw<10000)return;
     gpsLastSats=sats;gpsLastHdop=hdop;gpsLastDraw=now;
     var hd=hdop?hdop.toFixed(1):"--";
-    var menu={
+    E.showMenu({
       "":{title:"GPS input"},
       "< Cancel":cancelGPS,
       "State":{value:0,min:0,max:0,format:function(){return gpsStateText(fix);}},
       "Satellites":{value:0,min:0,max:0,format:function(){return sats+" "+gpsBar(sats);}},
       "HDOP":{value:0,min:0,max:0,format:function(){return hd;}},
       "Elapsed":{value:0,min:0,max:0,format:function(){return gpsElapsed();}}
-    };
-    if(gpsFixAt){
-      menu["Alt samples"]={value:0,min:0,max:0,format:function(){return ""+gpsAltSamples.length;}};
-      menu["Alt wait"]={value:0,min:0,max:0,format:function(){
-        var left=Math.max(0,Math.ceil((GPS_ALT_SAMPLE_MS-(Date.now()-gpsFixAt))/1000));
-        return left+" s";
-      }};
-    }
-    E.showMenu(menu);
+    });
   }
   function gpsLocationText(){
-    return "Lat "+Number(s.lat).toFixed(4)+"\nLon "+Number(s.lon).toFixed(4)+
-      "\nAlt "+Math.round(s.elevationM||0)+" m";
+    return "Lat "+Number(s.lat).toFixed(4)+"\nLon "+Number(s.lon).toFixed(4);
   }
   function cancelGPS(){
     stopGPS();
@@ -131,36 +115,18 @@
     write();
     show();
   }
-  function finishGPSAltitude(){
-    if(!gpsActive||!gpsFixAt)return;
-    var alt=median(gpsAltSamples);
-    var finalFix={lat:gpsFixLat,lon:gpsFixLon,alt:isFinite(alt)?alt:0};
-    applyGPS(finalFix);
-    var count=gpsAltSamples.length;
-    stopGPS();
-    gpsFixAt=0;gpsAltSamples=[];
-    try{Bangle.buzz(300);}catch(e){}
-    E.showAlert("GPS location saved\n"+gpsLocationText()+"\nAlt samples "+count,"Orbit GPS").then(show);
-  }
   function startGPS(returnMode){
     stopGPS();
     gpsReturnMode=(returnMode===0||returnMode===1||returnMode===2)?returnMode:s.locationMode;
     s.locationMode=2;write();
     gpsStarted=Date.now();gpsLastDraw=0;gpsLastSats=-1;gpsLastHdop=-1;gpsLastFix={};
-    gpsFixAt=0;gpsFixLat=undefined;gpsFixLon=undefined;gpsAltSamples=[];
     gpsHandler=function(fix){
       if(!gpsActive||!fix)return;
       gpsLastFix=fix;
       if(fix.fix&&isFinite(fix.lat)&&isFinite(fix.lon)){
-        if(!gpsFixAt){
-          // Lock horizontal position at the first valid fix, but keep the GPS
-          // running briefly so the noisier altitude can settle.
-          gpsFixAt=Date.now();gpsFixLat=fix.lat;gpsFixLon=fix.lon;
-          try{Bangle.buzz(80);}catch(e){}
-          gpsAltTimer=setTimeout(finishGPSAltitude,GPS_ALT_SAMPLE_MS);
-        }
-        if(isFinite(fix.alt))gpsAltSamples.push(fix.alt);
-        showGPSProgress(false);
+        applyGPS(fix);stopGPS();
+        try{Bangle.buzz(300);}catch(e){}
+        E.showAlert("GPS location saved\n"+gpsLocationText(),"Orbit GPS").then(show);
         return;
       }
       showGPSProgress(false);
@@ -190,7 +156,7 @@
         var old=s.locationMode;
         stopGPS();
         if(v===0){s.locationMode=0;applyPlace();show();}
-        else if(v===1){s.locationMode=1;s.manualLat=s.lat;s.manualLon=s.lon;s.manualElevationM=s.elevationM||0;applyManual();show();}
+        else if(v===1){s.locationMode=1;s.manualLat=s.lat;s.manualLon=s.lon;applyManual();show();}
         else startGPS(old);
       }}};
     if(s.locationMode===0){
@@ -203,11 +169,10 @@
         var places=C[cidx][1];
         if(places.length)m["Place"]={value:s.place,min:0,max:places.length-1,format:function(v){return places[v][0];},onchange:function(v){s.place=v;applyPlace();}};
       }
-      m["Location info"]=function(){applyPlace();var prefix=s.countryName==="Japan"?("Japan / "+s.locPref):s.locPref;E.showAlert(prefix+" / "+s.locName+"\nLat "+s.lat.toFixed(3)+"\nLon "+s.lon.toFixed(3)+"\nAlt "+Math.round(s.elevationM)+" m","Orbit location").then(show);};
+      m["Location info"]=function(){applyPlace();var prefix=s.countryName==="Japan"?("Japan / "+s.locPref):s.locPref;E.showAlert(prefix+" / "+s.locName+"\nLat "+s.lat.toFixed(3)+"\nLon "+s.lon.toFixed(3),"Orbit location").then(show);};
     }else if(s.locationMode===1){
       m["Latitude"]={value:s.manualLat,min:-90,max:90,step:0.001,format:function(v){return v.toFixed(3);},onchange:function(v){s.manualLat=v;applyManual();}};
       m["Longitude"]={value:s.manualLon,min:-180,max:180,step:0.001,format:function(v){return v.toFixed(3);},onchange:function(v){s.manualLon=v;applyManual();}};
-      m["Elevation m"]={value:s.manualElevationM,min:-500,max:9000,step:1,onchange:function(v){s.manualElevationM=v;applyManual();}};
     }else{
       m["Get GPS fix"]=function(){startGPS(2);};
       m["Location info"]=function(){E.showAlert(gpsLocationText(),"GPS location").then(show);};

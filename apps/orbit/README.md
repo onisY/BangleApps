@@ -462,3 +462,12 @@ Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot stat
 - The saved altitude is the **median** of those samples, making it much less sensitive to one bad early vertical fix.
 - During this short settling period the GPS screen shows `ALTITUDE`, the number of altitude samples, and the remaining wait time.
 - After the 20-second sampling window Orbit saves the location and removes only its own tagged GPS power request.
+
+
+## Version 0.48 altitude removed
+
+- Orbit now treats every location as latitude + longitude only.
+- Altitude/elevation has been removed from Place, Manual and GPS location data, settings and on-screen readouts.
+- Legacy altitude fields in `orbit.json` are removed automatically when the updated app/settings are opened.
+- GPS acquisition now finishes as soon as a valid latitude/longitude fix is obtained; the former 20-second altitude sampling stage is removed.
+- Sunrise/sunset calculations remain based on latitude, longitude, solar declination and the standard -0.833 degree solar altitude, without observer-elevation correction.
