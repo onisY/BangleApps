@@ -444,3 +444,12 @@ Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot stat
 - The lower-right location label now shows latitude, longitude and elevation on three lines whenever the location mode is **Manual** or **GPS**.
 - **Place** mode continues to show the stored region/country and place name.
 - Format: `Lat xx.xxxx`, `Lon xxx.xxxx`, `Alt xxxm`.
+
+
+## Version 0.46 GPS/manual location readout
+
+- GPS and Manual locations now show a compact four-line readout on the right side: mode, latitude, longitude and altitude.
+- Coordinates use hemisphere suffixes, for example `35.6940N` and `139.7540E`.
+- The normal position is the lower-right corner. If the Moon occupies that area, the readout automatically moves upward to the nearest safe right-side slot.
+- Sun, Earth and Moon circles are checked against the label rectangle before drawing, preventing the location text from being placed over a celestial body.
+- Place mode keeps the existing two-line region/place display.

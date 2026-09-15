@@ -550,6 +550,48 @@ try {
     eraseMoonFarHalf(mx,my,r);
   }
 
+  function coordText(v,pos,neg){
+    return Math.abs(v).toFixed(4)+(v<0?neg:pos);
+  }
+  function circleRectHit(cx,cy,r,x0,y0,x1,y1){
+    var qx=clamp(cx,x0,x1),qy=clamp(cy,y0,y1);
+    var dx=cx-qx,dy=cy-qy,rr=r+2;
+    return dx*dx+dy*dy<=rr*rr;
+  }
+  function drawLocationReadout(mx,my){
+    g.setFont("6x8",1);
+    if(settings.locationMode===0){
+      g.setColor(C.fg).setFontAlign(1,0);
+      g.drawString(loc.pref,W-1,H-17);
+      g.drawString(loc.name,W-1,H-8);
+      return;
+    }
+
+    var lines=[
+      settings.locationMode===2?"GPS":"manual",
+      coordText(loc.lat,"N","S"),
+      coordText(loc.lon,"E","W"),
+      Math.round(loc.elevationM)+"m"
+    ];
+    // Longest coordinate is 9 glyphs at 6 px = 54 px. Keep this narrow
+    // right-side column outside the fixed Earth as much as possible.
+    var x1=W-1,x0=x1-53,blockH=35;
+    var ys=[H-blockH,H-blockH-36,76],y0=ys[0];
+    for(var i=0;i<ys.length;i++){
+      var yy=ys[i],safe=true;
+      if(circleRectHit(mx,my,settings.moonSize+1,x0,yy,x1,yy+blockH-1))safe=false;
+      if(circleRectHit(EX,EY,settings.earthSize+1,x0,yy,x1,yy+blockH-1))safe=false;
+      if(circleRectHit(SX,SY,settings.sunSize+5,x0,yy,x1,yy+blockH-1))safe=false;
+      if(safe){y0=yy;break;}
+    }
+    // Clear only the chosen safe label box so orbit/ray lines cannot make
+    // coordinates hard to read. The box has already been checked against
+    // Sun/Earth/Moon before erasing.
+    g.setColor(C.bg).fillRect(x0-1,y0-1,x1,y0+blockH);
+    g.setColor(C.fg).setFontAlign(1,-1);
+    for(var j=0;j<lines.length;j++)g.drawString(lines[j],x1,y0+j*9);
+  }
+
   function draw(){
     var date=sceneDate();
     var sLon=sunLon(date);
@@ -570,15 +612,7 @@ try {
     drawSun();
     drawEarth(date,ref,moonOrbitR);
     drawMoon(mx,my,mGeo,sLon);
-    g.setColor(C.fg).setFont("6x8",1).setFontAlign(1,0);
-    if(settings.locationMode!==0){
-      g.drawString("Lat "+loc.lat.toFixed(4),W-1,H-26);
-      g.drawString("Lon "+loc.lon.toFixed(4),W-1,H-17);
-      g.drawString("Alt "+Math.round(loc.elevationM)+"m",W-1,H-8);
-    } else {
-      g.drawString(loc.pref,W-1,H-17);
-      g.drawString(loc.name,W-1,H-8);
-    }
+    drawLocationReadout(mx,my);
   }
 
   function shotName(i){
