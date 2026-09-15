@@ -431,3 +431,9 @@ Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot stat
 - GPS acquisition displays real satellite count, HDOP, elapsed time and a text acquisition bar.
 - The bar is a satellite-acquisition guide, not a literal completion percentage.
 - Display refresh is limited to satellite-count changes, meaningful HDOP changes, or at most once every 10 seconds to reduce display energy use.
+
+
+## Version 0.46 GPS coordinate label
+
+- When the selected location mode is GPS, the lower-right label now shows latitude, longitude and altitude on three lines instead of `GPS / GPS`.
+- Place and Manual modes retain their existing lower-right labels.

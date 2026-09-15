@@ -571,8 +571,14 @@ try {
     drawEarth(date,ref,moonOrbitR);
     drawMoon(mx,my,mGeo,sLon);
     g.setColor(C.fg).setFont("6x8",1).setFontAlign(1,0);
-    g.drawString(loc.pref,W-1,H-17);
-    g.drawString(loc.name,W-1,H-8);
+    if(settings.locationMode===2){
+      g.drawString("Lat "+loc.lat.toFixed(4),W-1,H-26);
+      g.drawString("Lon "+loc.lon.toFixed(4),W-1,H-17);
+      g.drawString("Alt "+Math.round(loc.elevationM)+"m",W-1,H-8);
+    } else {
+      g.drawString(loc.pref,W-1,H-17);
+      g.drawString(loc.name,W-1,H-8);
+    }
   }
 
   function shotName(i){
