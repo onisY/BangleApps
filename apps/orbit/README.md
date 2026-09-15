@@ -471,3 +471,10 @@ Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot stat
 - Legacy altitude fields in `orbit.json` are removed automatically when the updated app/settings are opened.
 - GPS acquisition now finishes as soon as a valid latitude/longitude fix is obtained; the former 20-second altitude sampling stage is removed.
 - Sunrise/sunset calculations remain based on latitude, longitude, solar declination and the standard -0.833 degree solar altitude, without observer-elevation correction.
+
+
+## Version 0.49 altitude cleanup
+
+- Removed the final obsolete runtime altitude reference left from the old Tokyo-default migration.
+- Altitude/elevation is now absent from all runtime location calculations, location displays and location databases.
+- Only the one-time legacy-key deletion remains so watches upgrading from older Orbit versions can purge old altitude fields from `orbit.json`.

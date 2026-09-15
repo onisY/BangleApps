@@ -30,10 +30,6 @@ try {
     settings.lon=139.754;
     Storage.writeJSON(FILE,settings);
   }
-  if(settings.locationMode!==1 && settings.locPref==="Tokyo" &&
-     settings.locName==="Chiyoda-ku" && (!isFinite(settings.elevationM) || settings.elevationM===0)){
-    Storage.writeJSON(FILE,settings);
-  }
   var loc = {name:settings.locName,lat:settings.lat,lon:settings.lon,pref:settings.locPref};
 
   var C = {bg:"#000",fg:"#fff",sun:"#f22",flare:"#f80",earth:"#5cf",
