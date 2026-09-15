@@ -37,7 +37,6 @@ try {
            noon:"#ccc",penumbra:"#631",zenith:"#0f0",
            headInput:"#ff0",headBlue:"#00f",headPurple:"#f0f",headOther:"#fff"};
   var tickTimer,eventTimer,headerClockTimer;
-  var headerClockMinute=-1;
   var interactive = false, idleTimer, lcdHeaderTimer;
   var lastHeaderMode=-1, lastHeaderText="";
   var batteryPct=E.getBattery(), batterySampleAt=Date.now();
@@ -99,6 +98,30 @@ try {
           var px=bx+rx*pw,py=y+ry*ph;
           g.fillRect(px,py,px+pw-1,py+ph-1);
         }
+      }
+    }
+  }
+  function fillHeaderCharBg(x0,x1,y,mode){
+    var y0=y,y1=y+20;
+    if(mode===2){
+      g.setColor(C.headInput).fillRect(x0,y0,x1,y1);
+    } else if(mode===1){
+      g.setColor(C.headBlue).fillRect(x0,y0,x1,y1);
+      g.setColor(C.headPurple);
+      for(var x=3;x<W;x+=8) if(x>=x0 && x<=x1) g.drawLine(x,y0,x,y1);
+    } else {
+      g.setColor(C.headOther).fillRect(x0,y0,x1,y1);
+    }
+  }
+  function drawTallBoldChar(ch,bx,y,fg){
+    var pw=3,ph=3;
+    var rows=FONT3[ch]||FONT3[" "];
+    g.setColor(fg);
+    for(var ry=0;ry<7;ry++){
+      var bits=rows[ry];
+      for(var rx=0;rx<3;rx++) if(bits&(4>>rx)){
+        var px=bx+rx*pw,py=y+ry*ph;
+        g.fillRect(px,py,px+pw-1,py+ph-1);
       }
     }
   }
@@ -195,8 +218,7 @@ try {
   function sceneDate(){ return new Date(); }
 
   function drawHeader(date,force){
-    // Header is intentionally independent from the expensive scene redraw.
-    // Input-enabled -> yellow; view-only -> blue-purple.
+    // Full header redraw is kept for complete scene redraws or color-mode changes.
     var mode=interactive?2:1;
     var text=headerText(date);
     if(!force && mode===lastHeaderMode && text===lastHeaderText) return;
@@ -205,9 +227,28 @@ try {
     lastHeaderMode=mode;
     lastHeaderText=text;
   }
+  function drawHeaderDelta(date){
+    // Normal clock updates repaint only glyph boxes whose characters changed.
+    var mode=interactive?2:1;
+    var text=headerText(date);
+    if(mode!==lastHeaderMode || !lastHeaderText || text.length!==lastHeaderText.length){
+      drawHeader(date,true);
+      return;
+    }
+    if(text===lastHeaderText)return;
+    var gw=9,adv=text.length>1?(W-2-gw)/(text.length-1):0;
+    var fg=(mode===1)?C.fg:C.bg;
+    for(var i=0;i<text.length;i++) if(text[i]!==lastHeaderText[i]){
+      var bx=1+Math.round(i*adv);
+      fillHeaderCharBg(bx,bx+gw-1,1,mode);
+      drawTallBoldChar(text[i],bx,1,fg);
+    }
+    lastHeaderMode=mode;
+    lastHeaderText=text;
+  }
   function drawHeaderOnly(){
     refreshBattery();
-    drawHeader(sceneDate(),false);
+    drawHeaderDelta(sceneDate());
   }
 
   function drawSun(){
@@ -679,18 +720,13 @@ try {
 
   function queueHeaderClock(){
     if(headerClockTimer)clearTimeout(headerClockTimer);
-    // Check once per second, but repaint only when the displayed minute changes.
-    // This timer is intentionally independent of the 5-minute scene redraw.
-    var wait=1000-(Date.now()%1000)+20;
+    // One wake-up at the next minute boundary. No per-second polling.
+    // This remains independent of the 5-minute astronomical scene redraw.
+    var wait=60000-(Date.now()%60000)+20;
     headerClockTimer=setTimeout(function(){
       headerClockTimer=undefined;
-      var d=new Date();
-      var minuteKey=Math.floor(d.valueOf()/60000);
-      if(minuteKey!==headerClockMinute){
-        headerClockMinute=minuteKey;
-        refreshBattery();
-        drawHeader(d,false);
-      }
+      refreshBattery();
+      drawHeaderDelta(new Date());
       queueHeaderClock();
     },wait);
   }
@@ -717,7 +753,6 @@ try {
         lcdHeaderTimer=undefined;
         if(!interactive) drawHeaderOnly();
       },80);
-      headerClockMinute=Math.floor(Date.now()/60000);
       queueHeaderClock();
       queueTick();
     } else {
@@ -790,7 +825,6 @@ try {
   try { Bangle.setBacklight(false); } catch(e) {}
   try { Bangle.setLocked(true); } catch(e) {}
   draw();
-  headerClockMinute=Math.floor(Date.now()/60000);
   queueHeaderClock();
   queueTick();
   queueEventBuzz();

@@ -486,3 +486,12 @@ Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot stat
 - Only when the minute changes is the header redrawn; the Sun/Earth/Moon scene is not redrawn by this clock update.
 - The existing lower-scene refresh remains on its separate 5-minute schedule.
 - The 1-second header monitor stops while the LCD is off and restarts when the LCD turns on.
+
+
+## Version 0.51 low-power minute header
+
+- Removed the once-per-second header polling introduced in v0.50.
+- Orbit now arms a single timeout for the next exact minute boundary, so the CPU does not wake every second just to check the time.
+- At a normal minute change, only character boxes whose glyphs actually changed are restored and redrawn. Most minutes therefore repaint just one 9 x 21 pixel digit box.
+- Header color-mode changes and full 5-minute astronomical scene refreshes still use a full header redraw when required.
+- The minute timer remains independent of the Sun/Earth/Moon scene timer and is stopped while the LCD is off.
