@@ -1,0 +1,112 @@
+name: Orbit GPS coordinate label update
+
+on:
+  push:
+    paths:
+      - '.github/workflows/orbit-gps-coordinate-label.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Patch GPS coordinate labels
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('apps/orbit')
+          path=p/'app.js'
+          s=path.read_text()
+          old='''    g.setColor(C.fg).setFont("6x8",1).setFontAlign(1,0);\n    g.drawString(loc.pref,W-1,H-17);\n    g.drawString(loc.name,W-1,H-8);'''
+          new='''    g.setColor(C.fg).setFont("6x8",1).setFontAlign(1,0);\n    if(settings.locationMode===2){\n      g.drawString("Lat "+loc.lat.toFixed(4),W-1,H-26);\n      g.drawString("Lon "+loc.lon.toFixed(4),W-1,H-17);\n      g.drawString("Alt "+Math.round(loc.elevationM)+"m",W-1,H-8);\n    } else {\n      g.drawString(loc.pref,W-1,H-17);\n      g.drawString(loc.name,W-1,H-8);\n    }'''
+          assert old in s, 'location label block not found'
+          s=s.replace(old,new,1)
+          path.write_text(s)
+
+          def strip_comments(src):
+            out=[];i=0;state='code';q=''
+            while i<len(src):
+              ch=src[i];n=src[i+1] if i+1<len(src) else ''
+              if state=='code':
+                if ch in "'\"`":state='str';q=ch;out.append(ch);i+=1;continue
+                if ch=='/' and n=='/':state='line';i+=2;continue
+                if ch=='/' and n=='*':state='block';i+=2;continue
+                out.append(ch);i+=1;continue
+              if state=='str':
+                out.append(ch)
+                if ch=='\\' and i+1<len(src):out.append(src[i+1]);i+=2;continue
+                if ch==q:state='code'
+                i+=1;continue
+              if state=='line':
+                if ch=='\n':out.append('\n');state='code'
+                i+=1;continue
+              if state=='block':
+                if ch=='*' and n=='/':state='code';i+=2;continue
+                i+=1
+            return ''.join(out)
+          def mini(src):
+            src=strip_comments(src);out=[];i=0;state='code';q='';pending=False
+            def word(c):return bool(c) and (c.isalnum() or c in '_$')
+            while i<len(src):
+              ch=src[i]
+              if state=='code':
+                if ch in "'\"`":
+                  if pending:
+                    prev=out[-1] if out else ''
+                    if word(prev):out.append(' ')
+                    pending=False
+                  state='str';q=ch;out.append(ch);i+=1;continue
+                if ch.isspace():pending=True;i+=1;continue
+                if pending:
+                  prev=out[-1] if out else ''
+                  if (word(prev) and word(ch)) or (prev=='+' and ch=='+') or (prev=='-' and ch=='-'):out.append(' ')
+                  pending=False
+                out.append(ch);i+=1;continue
+              out.append(ch)
+              if ch=='\\' and i+1<len(src):out.append(src[i+1]);i+=2;continue
+              if ch==q:state='code'
+              i+=1
+            return ''.join(out).strip()+'\n'
+          (p/'app.min.js').write_text(mini(s))
+
+          meta_path=p/'metadata.json'
+          meta=json.loads(meta_path.read_text())
+          meta['version']='0.46'
+          meta_path.write_text(json.dumps(meta,indent=2,ensure_ascii=False)+'\n')
+
+          readme=p/'README.md'
+          readme.write_text(readme.read_text()+'''\n\n## Version 0.46 GPS coordinate label\n\n- When the selected location mode is GPS, the lower-right label now shows latitude, longitude and altitude on three lines instead of `GPS / GPS`.\n- Place and Manual modes retain their existing lower-right labels.\n''')
+          PY
+      - name: Validate
+        run: |
+          node --check apps/orbit/app.js
+          node --check apps/orbit/app.min.js
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('apps/orbit')
+          for name in ['app.js','app.min.js']:
+            s=(p/name).read_text()
+            assert 'settings.locationMode===2' in s
+            assert '"Lat "+loc.lat.toFixed(4)' in s
+            assert '"Lon "+loc.lon.toFixed(4)' in s
+            assert '"Alt "+Math.round(loc.elevationM)+"m"' in s
+          assert json.loads((p/'metadata.json').read_text())['version']=='0.46'
+          print('Orbit v0.46 GPS coordinate label checks passed')
+          PY
+      - name: Commit Orbit v0.46
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+onisY@users.noreply.github.com'
+          git add apps/orbit/app.js apps/orbit/app.min.js apps/orbit/metadata.json apps/orbit/README.md
+          git commit -m 'Show GPS coordinates in Orbit clock label'
+          git push origin HEAD:master
