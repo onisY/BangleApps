@@ -1,0 +1,140 @@
+name: Orbit header power v0.51
+
+on:
+  push:
+    paths:
+      - '.github/workflows/orbit-header-power-v051.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Patch Orbit low-power minute header
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('apps/orbit')
+          ap=p/'app.js'
+          s=ap.read_text()
+
+          old='''  var tickTimer,eventTimer,headerClockTimer;\n  var headerClockMinute=-1;\n  var interactive = false, idleTimer, lcdHeaderTimer;'''
+          new='''  var tickTimer,eventTimer,headerClockTimer;\n  var interactive = false, idleTimer, lcdHeaderTimer;'''
+          assert old in s
+          s=s.replace(old,new,1)
+
+          anchor='''  function drawTallBoldString(str,y,fg,mode){\n    // 3-pixel-wide strokes. Character starts are distributed across almost\n    // the full 176 px width, making the shorter header substantially larger.\n    var pw=3,ph=3,gw=9;\n    var adv=str.length>1?(W-2-gw)/(str.length-1):0;\n    fillHeaderBg(y,mode);\n    g.setColor(fg);\n    for(var i=0;i<str.length;i++){\n      var rows=FONT3[str[i]]||FONT3[" "];\n      var bx=1+Math.round(i*adv);\n      for(var ry=0;ry<7;ry++){\n        var bits=rows[ry];\n        for(var rx=0;rx<3;rx++) if(bits&(4>>rx)){\n          var px=bx+rx*pw,py=y+ry*ph;\n          g.fillRect(px,py,px+pw-1,py+ph-1);\n        }\n      }\n    }\n  }\n'''
+          assert anchor in s
+          addition=anchor+'''  function fillHeaderCharBg(x0,x1,y,mode){\n    var y0=y,y1=y+20;\n    if(mode===2){\n      g.setColor(C.headInput).fillRect(x0,y0,x1,y1);\n    } else if(mode===1){\n      g.setColor(C.headBlue).fillRect(x0,y0,x1,y1);\n      g.setColor(C.headPurple);\n      for(var x=3;x<W;x+=8) if(x>=x0 && x<=x1) g.drawLine(x,y0,x,y1);\n    } else {\n      g.setColor(C.headOther).fillRect(x0,y0,x1,y1);\n    }\n  }\n  function drawTallBoldChar(ch,bx,y,fg){\n    var pw=3,ph=3;\n    var rows=FONT3[ch]||FONT3[" "];\n    g.setColor(fg);\n    for(var ry=0;ry<7;ry++){\n      var bits=rows[ry];\n      for(var rx=0;rx<3;rx++) if(bits&(4>>rx)){\n        var px=bx+rx*pw,py=y+ry*ph;\n        g.fillRect(px,py,px+pw-1,py+ph-1);\n      }\n    }\n  }\n'''
+          s=s.replace(anchor,addition,1)
+
+          old='''  function drawHeader(date,force){\n    // Header is intentionally independent from the expensive scene redraw.\n    // Input-enabled -> yellow; view-only -> blue-purple.\n    var mode=interactive?2:1;\n    var text=headerText(date);\n    if(!force && mode===lastHeaderMode && text===lastHeaderText) return;\n    var fg=(mode===1)?C.fg:C.bg;\n    drawTallBoldString(text,1,fg,mode);\n    lastHeaderMode=mode;\n    lastHeaderText=text;\n  }\n  function drawHeaderOnly(){\n    refreshBattery();\n    drawHeader(sceneDate(),false);\n  }'''
+          new='''  function drawHeader(date,force){\n    // Full header redraw is kept for complete scene redraws or color-mode changes.\n    var mode=interactive?2:1;\n    var text=headerText(date);\n    if(!force && mode===lastHeaderMode && text===lastHeaderText) return;\n    var fg=(mode===1)?C.fg:C.bg;\n    drawTallBoldString(text,1,fg,mode);\n    lastHeaderMode=mode;\n    lastHeaderText=text;\n  }\n  function drawHeaderDelta(date){\n    // Normal clock updates repaint only glyph boxes whose characters changed.\n    var mode=interactive?2:1;\n    var text=headerText(date);\n    if(mode!==lastHeaderMode || !lastHeaderText || text.length!==lastHeaderText.length){\n      drawHeader(date,true);\n      return;\n    }\n    if(text===lastHeaderText)return;\n    var gw=9,adv=text.length>1?(W-2-gw)/(text.length-1):0;\n    var fg=(mode===1)?C.fg:C.bg;\n    for(var i=0;i<text.length;i++) if(text[i]!==lastHeaderText[i]){\n      var bx=1+Math.round(i*adv);\n      fillHeaderCharBg(bx,bx+gw-1,1,mode);\n      drawTallBoldChar(text[i],bx,1,fg);\n    }\n    lastHeaderMode=mode;\n    lastHeaderText=text;\n  }\n  function drawHeaderOnly(){\n    refreshBattery();\n    drawHeaderDelta(sceneDate());\n  }'''
+          assert old in s
+          s=s.replace(old,new,1)
+
+          old='''  function queueHeaderClock(){\n    if(headerClockTimer)clearTimeout(headerClockTimer);\n    // Check once per second, but repaint only when the displayed minute changes.\n    // This timer is intentionally independent of the 5-minute scene redraw.\n    var wait=1000-(Date.now()%1000)+20;\n    headerClockTimer=setTimeout(function(){\n      headerClockTimer=undefined;\n      var d=new Date();\n      var minuteKey=Math.floor(d.valueOf()/60000);\n      if(minuteKey!==headerClockMinute){\n        headerClockMinute=minuteKey;\n        refreshBattery();\n        drawHeader(d,false);\n      }\n      queueHeaderClock();\n    },wait);\n  }'''
+          new='''  function queueHeaderClock(){\n    if(headerClockTimer)clearTimeout(headerClockTimer);\n    // One wake-up at the next minute boundary. No per-second polling.\n    // This remains independent of the 5-minute astronomical scene redraw.\n    var wait=60000-(Date.now()%60000)+20;\n    headerClockTimer=setTimeout(function(){\n      headerClockTimer=undefined;\n      refreshBattery();\n      drawHeaderDelta(new Date());\n      queueHeaderClock();\n    },wait);\n  }'''
+          assert old in s
+          s=s.replace(old,new,1)
+
+          s=s.replace('''      headerClockMinute=Math.floor(Date.now()/60000);\n      queueHeaderClock();''','''      queueHeaderClock();''',1)
+          s=s.replace('''  draw();\n  headerClockMinute=Math.floor(Date.now()/60000);\n  queueHeaderClock();''','''  draw();\n  queueHeaderClock();''',1)
+          assert 'headerClockMinute' not in s
+          assert '1000-(Date.now()%1000)' not in s
+          ap.write_text(s)
+
+          # Minimal safe minifier used by this fork for generated runtime.
+          def strip_comments(src):
+            out=[];i=0;state='code';q=''
+            while i<len(src):
+              ch=src[i];n=src[i+1] if i+1<len(src) else ''
+              if state=='code':
+                if ch in "'\"`":state='str';q=ch;out.append(ch);i+=1;continue
+                if ch=='/' and n=='/':state='line';i+=2;continue
+                if ch=='/' and n=='*':state='block';i+=2;continue
+                out.append(ch);i+=1;continue
+              if state=='str':
+                out.append(ch)
+                if ch=='\\' and i+1<len(src):out.append(src[i+1]);i+=2;continue
+                if ch==q:state='code'
+                i+=1;continue
+              if state=='line':
+                if ch=='\n':out.append('\n');state='code'
+                i+=1;continue
+              if state=='block':
+                if ch=='*' and n=='/':state='code';i+=2;continue
+                i+=1
+            return ''.join(out)
+          def mini(src):
+            src=strip_comments(src);out=[];i=0;state='code';q='';pending=False
+            def word(c):return bool(c) and (c.isalnum() or c in '_$')
+            while i<len(src):
+              ch=src[i]
+              if state=='code':
+                if ch in "'\"`":
+                  if pending:
+                    prev=out[-1] if out else ''
+                    if word(prev):out.append(' ')
+                    pending=False
+                  state='str';q=ch;out.append(ch);i+=1;continue
+                if ch.isspace():pending=True;i+=1;continue
+                if pending:
+                  prev=out[-1] if out else ''
+                  if (word(prev) and word(ch)) or (prev=='+' and ch=='+') or (prev=='-' and ch=='-'):out.append(' ')
+                  pending=False
+                out.append(ch);i+=1;continue
+              out.append(ch)
+              if ch=='\\' and i+1<len(src):out.append(src[i+1]);i+=2;continue
+              if ch==q:state='code'
+              i+=1
+            return ''.join(out).strip()+'\n'
+          (p/'app.min.js').write_text(mini(s))
+
+          mp=p/'metadata.json'
+          meta=json.loads(mp.read_text())
+          assert meta['version']=='0.50'
+          meta['version']='0.51'
+          mp.write_text(json.dumps(meta,indent=2,ensure_ascii=False)+'\n')
+
+          rp=p/'README.md'
+          rp.write_text(rp.read_text()+'''\n\n## Version 0.51 low-power minute header\n\n- Removed the once-per-second header polling introduced in v0.50.\n- Orbit now arms a single timeout for the next exact minute boundary, so the CPU does not wake every second just to check the time.\n- At a normal minute change, only character boxes whose glyphs actually changed are restored and redrawn. Most minutes therefore repaint just one 9 x 21 pixel digit box.\n- Header color-mode changes and full 5-minute astronomical scene refreshes still use a full header redraw when required.\n- The minute timer remains independent of the Sun/Earth/Moon scene timer and is stopped while the LCD is off.\n''')
+          PY
+      - name: Validate Orbit v0.51
+        run: |
+          node --check apps/orbit/app.js
+          node --check apps/orbit/app.min.js
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('apps/orbit')
+          a=(p/'app.js').read_text();m=(p/'app.min.js').read_text()
+          assert 'function drawHeaderDelta(date)' in a
+          assert 'function fillHeaderCharBg' in a
+          assert 'function drawTallBoldChar' in a
+          assert '60000-(Date.now()%60000)+20' in a
+          assert 'drawHeaderDelta(new Date())' in a
+          assert 'text[i]!==lastHeaderText[i]' in a
+          assert 'headerClockMinute' not in a
+          assert '1000-(Date.now()%1000)' not in a
+          assert 'var step=5*60000' in a
+          assert 'function drawHeaderDelta(date)' in m
+          assert json.loads((p/'metadata.json').read_text())['version']=='0.51'
+          print('Orbit v0.51 validation passed')
+          PY
+      - name: Commit Orbit v0.51
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+onisY@users.noreply.github.com'
+          git add apps/orbit/app.js apps/orbit/app.min.js apps/orbit/metadata.json apps/orbit/README.md
+          git commit -m 'Reduce Orbit header update power use'
+          git push origin HEAD:master
