@@ -478,3 +478,11 @@ Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot stat
 - Removed the final obsolete runtime altitude reference left from the old Tokyo-default migration.
 - Altitude/elevation is now absent from all runtime location calculations, location displays and location databases.
 - Only the one-time legacy-key deletion remains so watches upgrading from older Orbit versions can purge old altitude fields from `orbit.json`.
+
+
+## Version 0.50 independent minute header clock
+
+- The top clock now checks the current time once per second while the LCD is on.
+- Only when the minute changes is the header redrawn; the Sun/Earth/Moon scene is not redrawn by this clock update.
+- The existing lower-scene refresh remains on its separate 5-minute schedule.
+- The 1-second header monitor stops while the LCD is off and restarts when the LCD turns on.

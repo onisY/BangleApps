@@ -36,7 +36,8 @@ try {
            marker:"#f00",horizon:"#f0f",moon:"#fd4",moonDark:"#008",orbit:"#555",rise:"#ff0",set:"#f80",
            noon:"#ccc",penumbra:"#631",zenith:"#0f0",
            headInput:"#ff0",headBlue:"#00f",headPurple:"#f0f",headOther:"#fff"};
-  var tickTimer,eventTimer;
+  var tickTimer,eventTimer,headerClockTimer;
+  var headerClockMinute=-1;
   var interactive = false, idleTimer, lcdHeaderTimer;
   var lastHeaderMode=-1, lastHeaderText="";
   var batteryPct=E.getBattery(), batterySampleAt=Date.now();
@@ -676,6 +677,23 @@ try {
     if(up) startInteraction();
   }
 
+  function queueHeaderClock(){
+    if(headerClockTimer)clearTimeout(headerClockTimer);
+    // Check once per second, but repaint only when the displayed minute changes.
+    // This timer is intentionally independent of the 5-minute scene redraw.
+    var wait=1000-(Date.now()%1000)+20;
+    headerClockTimer=setTimeout(function(){
+      headerClockTimer=undefined;
+      var d=new Date();
+      var minuteKey=Math.floor(d.valueOf()/60000);
+      if(minuteKey!==headerClockMinute){
+        headerClockMinute=minuteKey;
+        refreshBattery();
+        drawHeader(d,false);
+      }
+      queueHeaderClock();
+    },wait);
+  }
   function queueTick(){
     if(tickTimer)clearTimeout(tickTimer);
     var step=5*60000;
@@ -699,9 +717,12 @@ try {
         lcdHeaderTimer=undefined;
         if(!interactive) drawHeaderOnly();
       },80);
+      headerClockMinute=Math.floor(Date.now()/60000);
+      queueHeaderClock();
       queueTick();
     } else {
       if(lcdHeaderTimer){clearTimeout(lcdHeaderTimer);lcdHeaderTimer=undefined;}
+      if(headerClockTimer){clearTimeout(headerClockTimer);headerClockTimer=undefined;}
       if(idleTimer){clearTimeout(idleTimer);idleTimer=undefined;}
       interactive=false;
       if(tickTimer){clearTimeout(tickTimer);tickTimer=undefined;}
@@ -748,6 +769,7 @@ try {
 
   function cleanup(){
     if(lcdHeaderTimer)clearTimeout(lcdHeaderTimer);
+    if(headerClockTimer)clearTimeout(headerClockTimer);
     if(idleTimer)clearTimeout(idleTimer);
     if(tickTimer)clearTimeout(tickTimer);
     if(eventTimer)clearTimeout(eventTimer);
@@ -768,6 +790,8 @@ try {
   try { Bangle.setBacklight(false); } catch(e) {}
   try { Bangle.setLocked(true); } catch(e) {}
   draw();
+  headerClockMinute=Math.floor(Date.now()/60000);
+  queueHeaderClock();
   queueTick();
   queueEventBuzz();
 })();
