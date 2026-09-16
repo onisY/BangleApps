@@ -1,0 +1,8 @@
+/* Orbit Dev runtime wrapper */
+(function(){
+  var Storage=require("Storage"), originalLauncher=Bangle.showLauncher;
+  function appSource(id,direct){var info=Storage.readJSON(id+".info",1);if(info&&info.src&&Storage.read(info.src)!==undefined)return info.src;if(Storage.read(direct)!==undefined)return direct;}
+  function openCalendarOrSettings(){var src=appSource("fivewcal","fivewcal.app.js")||appSource("calendar","calendar.app.js")||appSource("setting","setting.app.js");if(src){load(src);return;}if(originalLauncher)originalLauncher();}
+  Bangle.showLauncher=openCalendarOrSettings;
+  var core=Storage.read("orbit_dev.core.js");if(!core)throw new Error("orbit_dev.core.js missing");eval(core);
+})();

@@ -1,6 +1,6 @@
-# Orbit
+# Orbit Dev 0.51
 
-> **Public release 0.01:** this is the stable public stream. Ongoing experimental development continues separately as `orbit_dev`. The historical version notes below describe the pre-public development path that led to this release.
+> **Development stream:** this app is the experimental branch. Stable milestone releases are published separately as `orbit`, starting from public version 0.01.
 
 
 Orbit is a Bangle.js 2 **clock** and does not use GPS.
@@ -13,7 +13,7 @@ Version 0.03 changes this:
 
 - The clock does **not** load `orbitloc` at boot.
 - The 141-place table is used only inside the settings screen.
-- Selecting a place writes only one selected name, latitude and longitude to `orbit.json`.
+- Selecting a place writes only one selected name, latitude and longitude to `orbit_dev.json`.
 - The one-year lunar-event list is not built during boot. It is generated only when the bottom event slider is first touched.
 - The normal clock therefore begins by reading one small JSON file and drawing the current Sun/Earth/Moon view.
 
@@ -155,7 +155,7 @@ Tokyo entries are:
 - Machida-shi: 35.547 N, 139.439 E, 83 m
 - Okutama-machi: 35.809 N, 139.096 E, 337 m
 
-Manual mode stores the final selected values in `orbit.json` as `Manual / Custom`, and the Moon-horizon calculation uses those manual values exactly.
+Manual mode stores the final selected values in `orbit_dev.json` as `Manual / Custom`, and the Moon-horizon calculation uses those manual values exactly.
 
 
 ## Version 0.17 Moon sight-line fix
@@ -209,11 +209,11 @@ Manual mode stores the final selected values in `orbit.json` as `Manual / Custom
 ## Version 0.23 swipe screenshots
 
 - Swipe anywhere on the Orbit clock to save the current screen as a BMP.
-- Screenshots are stored as `orb00.bmp` through `orb19.bmp`.
+- Screenshots are stored as `ord00.bmp` through `ord19.bmp`.
 - Storage is circular: after 20 images, the oldest slot is overwritten.
 - A short vibration confirms a successful save; no on-screen message is drawn into the screenshot.
 - Orbit settings now show the saved screenshot count and provide **Delete shots** to erase all screenshot BMP files.
-- On a computer, connect the watch in Espruino Web IDE and use the Storage view to save the `orbNN.bmp` files to disk.
+- On a computer, connect the watch in Espruino Web IDE and use the Storage view to save the `ordNN.bmp` files to disk.
 
 
 ## Version 0.24 header, Moon size and Earth styles
@@ -302,7 +302,7 @@ Reduction: **10,106 bytes (25.9%)** overall. The main clock runtime alone is red
 
 The optimization removes unused legacy code and strips comments, indentation, line breaks and unnecessary whitespace from the installed copies. Functional logic, map coordinates, astronomical calculations, interactions, daily buzz scheduling, screenshots and settings are unchanged.
 
-Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot state are not included in the static program-size comparison.
+Dynamic user data such as `orbit_dev.json`, screenshot BMP files and screenshot state are not included in the static program-size comparison.
 
 
 ## Version 0.30 BLE reset helper
@@ -426,7 +426,7 @@ Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot stat
 - After a valid fix is saved, Orbit removes only its own GPS power request with `Bangle.setGPSPower(0,"orbitsettings")`. If another app still requests GPS under another tag, the receiver remains on.
 - Canceling GPS acquisition, leaving Orbit settings, or killing the settings app also removes Orbit's GPS listener and GPS power request.
 - A saved GPS location is retained after acquisition; reopening GPS mode does not continuously run GPS. Use **Get GPS fix** to refresh it.
-- Latitude, longitude and GPS altitude (when available) are stored in `orbit.json`.
+- Latitude, longitude and GPS altitude (when available) are stored in `orbit_dev.json`.
 
 
 ## Version 0.45 low-power GPS acquisition progress
@@ -471,7 +471,7 @@ Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot stat
 
 - Orbit now treats every location as latitude + longitude only.
 - Altitude/elevation has been removed from Place, Manual and GPS location data, settings and on-screen readouts.
-- Legacy altitude fields in `orbit.json` are removed automatically when the updated app/settings are opened.
+- Legacy altitude fields in `orbit_dev.json` are removed automatically when the updated app/settings are opened.
 - GPS acquisition now finishes as soon as a valid latitude/longitude fix is obtained; the former 20-second altitude sampling stage is removed.
 - Sunrise/sunset calculations remain based on latitude, longitude, solar declination and the standard -0.833 degree solar altitude, without observer-elevation correction.
 
@@ -480,7 +480,7 @@ Dynamic user data such as `orbit.json`, screenshot BMP files and screenshot stat
 
 - Removed the final obsolete runtime altitude reference left from the old Tokyo-default migration.
 - Altitude/elevation is now absent from all runtime location calculations, location displays and location databases.
-- Only the one-time legacy-key deletion remains so watches upgrading from older Orbit versions can purge old altitude fields from `orbit.json`.
+- Only the one-time legacy-key deletion remains so watches upgrading from older Orbit versions can purge old altitude fields from `orbit_dev.json`.
 
 
 ## Version 0.50 independent minute header clock

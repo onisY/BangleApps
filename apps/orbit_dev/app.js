@@ -1,0 +1,842 @@
+try {
+(function () {
+  var Storage = require("Storage");
+  var FILE = "orbit_dev.json";
+  var SHOT_STATE = "orbit_devshot.json";
+  var SHOT_MAX = 20;
+  var W = g.getWidth(), H = g.getHeight();
+  var PI = Math.PI, TAU = PI*2, RAD = PI/180;
+  var DAY = 86400000, J1970 = 2440588, J2000 = 2451545;
+  var SX = 145, SY = 50;
+  var EX = 74, EY = 101;
+
+  var def = {
+    locationMode:0,
+    locPref:"Tokyo",locName:"Chiyoda-ku",lat:35.694,lon:139.754,
+    sunSize:6,earthSize:30,moonSize:9,markerSize:2,
+    earthStyle:0,earthDayColor:6,earthNightColor:4,earthEdgeColor:7,
+    viewSide:0
+  };
+  var settings = Storage.readJSON(FILE,1);
+  if(!settings){ settings=Storage.readJSON("orbit.json",1)||{}; if(Object.keys(settings).length) Storage.writeJSON(FILE,settings); }
+  Object.keys(def).forEach(function(k){ if (settings[k]===undefined) settings[k]=def[k]; });
+  if(settings.elevationM!==undefined || settings.manualElevationM!==undefined){
+    delete settings.elevationM; delete settings.manualElevationM;
+    Storage.writeJSON(FILE,settings);
+  }
+  // Migrate old Tokyo default to the new Chiyoda-ku entry.
+  if(settings.locPref==="Tokyo" && settings.locName==="Tokyo"){
+    settings.locName="Chiyoda-ku";
+    settings.lat=35.694;
+    settings.lon=139.754;
+    Storage.writeJSON(FILE,settings);
+  }
+  var loc = {name:settings.locName,lat:settings.lat,lon:settings.lon,pref:settings.locPref};
+
+  var C = {bg:"#000",fg:"#fff",sun:"#f22",flare:"#f80",earth:"#5cf",
+           marker:"#f00",horizon:"#f0f",moon:"#fd4",moonDark:"#008",orbit:"#555",rise:"#ff0",set:"#f80",
+           noon:"#ccc",penumbra:"#631",zenith:"#0f0",
+           headInput:"#ff0",headBlue:"#00f",headPurple:"#f0f",headOther:"#fff"};
+  var tickTimer,eventTimer,headerClockTimer;
+  var interactive = false, idleTimer, lcdHeaderTimer;
+  var lastHeaderMode=-1, lastHeaderText="";
+  var batteryPct=E.getBattery(), batterySampleAt=Date.now();
+
+  function refreshBattery(){
+    var now=Date.now();
+    if(now-batterySampleAt>=600000){
+      batteryPct=E.getBattery();
+      batterySampleAt=now;
+    }
+  }
+
+  function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+  function norm(a){a%=TAU;return a<0?a+TAU:a;}
+  function wrapPi(a){a=norm(a);return a>PI?a-TAU:a;}
+  // Screen handedness for the orbital/polar view.
+  // North side: physical east/counterclockwise is decreasing screen angle
+  // because display Y increases downward. South side is the mirror image.
+  function viewSign(){ return settings.viewSide?1:-1; }
+  function toDays(date){return date.valueOf()/DAY-0.5+J1970-J2000;}
+  function f2(n){return ("0"+n).substr(-2);}
+  function headerText(d){
+    return f2(d.getMonth()+1)+"/"+f2(d.getDate())+" "+f2(d.getHours())+":"+f2(d.getMinutes())+" ."+batteryPct;
+  }
+  var FONT3={
+    "0":[7,5,5,5,5,5,7],"1":[2,6,2,2,2,2,7],"2":[7,1,1,7,4,4,7],
+    "3":[7,1,1,7,1,1,7],"4":[5,5,5,7,1,1,1],"5":[7,4,4,7,1,1,7],
+    "6":[7,4,4,7,5,5,7],"7":[7,1,1,2,2,2,2],"8":[7,5,5,7,5,5,7],
+    "9":[7,5,5,7,1,1,7],"R":[6,5,5,6,5,5,5],"B":[6,5,5,6,5,5,6],
+    "/":[1,1,1,2,4,4,4],":":[0,2,2,0,2,2,0],"%":[5,1,2,2,4,4,5],".":[0,2,7,7,2,0,0]," ":[0,0,0,0,0,0,0],
+    "-":[0,0,0,7,0,0,0],"+":[0,2,2,7,2,2,0],"H":[5,5,5,7,5,5,5]
+  };
+  function fillHeaderBg(y,mode){
+    var y0=y-1,y1=y+21;
+    if(mode===2){
+      g.setColor(C.headInput).fillRect(0,y0,W-1,y1);
+    } else if(mode===1){
+      // Blue-magenta fine stripes give a subdued blue-purple on the 3-bit LCD.
+      g.setColor(C.headBlue).fillRect(0,y0,W-1,y1);
+      g.setColor(C.headPurple);
+      for(var x=3;x<W;x+=8) g.drawLine(x,y0,x,y1);
+    } else {
+      g.setColor(C.headOther).fillRect(0,y0,W-1,y1);
+    }
+  }
+  function drawTallBoldString(str,y,fg,mode){
+    // 3-pixel-wide strokes. Character starts are distributed across almost
+    // the full 176 px width, making the shorter header substantially larger.
+    var pw=3,ph=3,gw=9;
+    var adv=str.length>1?(W-2-gw)/(str.length-1):0;
+    fillHeaderBg(y,mode);
+    g.setColor(fg);
+    for(var i=0;i<str.length;i++){
+      var rows=FONT3[str[i]]||FONT3[" "];
+      var bx=1+Math.round(i*adv);
+      for(var ry=0;ry<7;ry++){
+        var bits=rows[ry];
+        for(var rx=0;rx<3;rx++) if(bits&(4>>rx)){
+          var px=bx+rx*pw,py=y+ry*ph;
+          g.fillRect(px,py,px+pw-1,py+ph-1);
+        }
+      }
+    }
+  }
+  function fillHeaderCharBg(x0,x1,y,mode){
+    var y0=y,y1=y+20;
+    if(mode===2){
+      g.setColor(C.headInput).fillRect(x0,y0,x1,y1);
+    } else if(mode===1){
+      g.setColor(C.headBlue).fillRect(x0,y0,x1,y1);
+      g.setColor(C.headPurple);
+      for(var x=3;x<W;x+=8) if(x>=x0 && x<=x1) g.drawLine(x,y0,x,y1);
+    } else {
+      g.setColor(C.headOther).fillRect(x0,y0,x1,y1);
+    }
+  }
+  function drawTallBoldChar(ch,bx,y,fg){
+    var pw=3,ph=3;
+    var rows=FONT3[ch]||FONT3[" "];
+    g.setColor(fg);
+    for(var ry=0;ry<7;ry++){
+      var bits=rows[ry];
+      for(var rx=0;rx<3;rx++) if(bits&(4>>rx)){
+        var px=bx+rx*pw,py=y+ry*ph;
+        g.fillRect(px,py,px+pw-1,py+ph-1);
+      }
+    }
+  }
+
+  function sunLon(date){
+    var d=toDays(date), M=RAD*(357.5291+0.98560028*d);
+    var cc=RAD*(1.9148*Math.sin(M)+0.02*Math.sin(2*M)+0.0003*Math.sin(3*M));
+    return norm(M+cc+RAD*102.9372+PI);
+  }
+  function sunEquFromLon(l){
+    var e=RAD*23.4397;
+    return {ra:Math.atan2(Math.sin(l)*Math.cos(e),Math.cos(l)),dec:Math.asin(Math.sin(e)*Math.sin(l))};
+  }
+  function dayOfYear(date){
+    var jan1=new Date(date.getFullYear(),0,1,0,0,0,0);
+    return Math.floor((date.valueOf()-jan1.valueOf())/DAY)+1;
+  }
+  // Local apparent-solar hour angle for any selected longitude.
+  // At local solar noon this is 0, so the red location marker lies on the Sun-facing meridian.
+  function localSolarHourAngle(date){
+    var n=dayOfYear(date);
+    var b=TAU*(n-81)/364;
+    var eot=9.87*Math.sin(2*b)-7.53*Math.cos(b)-1.5*Math.sin(b); // minutes
+    // The Orbit header/watch clock is kept in Japan Standard Time.
+    // Convert that civil JST time to apparent solar time at the selected
+    // longitude. JST's standard meridian is 135 deg E.
+    var civilMin=date.getHours()*60+date.getMinutes()+date.getSeconds()/60;
+    var solarMin=civilMin + 4*(loc.lon-135) + eot;
+    return wrapPi((solarMin-720)*0.25*RAD);
+  }
+
+  function solarDayEvents(date){
+    var y=date.getFullYear(),m=date.getMonth(),dd=date.getDate();
+    var noonDate=new Date(y,m,dd,12,0,0,0);
+    var n=dayOfYear(noonDate);
+    var b=TAU*(n-81)/364;
+    var eot=9.87*Math.sin(2*b)-7.53*Math.cos(b)-1.5*Math.sin(b);
+    var dec=sunEquFromLon(sunLon(noonDate)).dec;
+    var phi=loc.lat*RAD;
+    var c0=(Math.sin(-0.833*RAD)-Math.sin(phi)*Math.sin(dec))/
+      (Math.cos(phi)*Math.cos(dec));
+
+    // Use the Bangle's configured civil timezone. In Japan, timezone=9
+    // gives the JST standard meridian 135 deg E.
+    var stdLon=135;
+    var solarNoonMin=720-4*(loc.lon-stdLon)-eot;
+
+    // 00:00 and civil noon 12:00 are exact clock-time events.
+    var ev=[{min:0},{min:720}];
+    if(c0>=-1 && c0<=1){
+      var h0=Math.acos(c0)/RAD;
+      ev.push({min:solarNoonMin-4*h0});
+      ev.push({min:solarNoonMin+4*h0});
+    }
+    return ev;
+  }
+  function eventDate(base,min){
+    var d=new Date(base.getFullYear(),base.getMonth(),base.getDate(),0,0,0,0);
+    d.setMinutes(min);
+    return d;
+  }
+  function queueEventBuzz(){
+    if(eventTimer){clearTimeout(eventTimer);eventTimer=undefined;}
+    var now=new Date(),nowMs=now.valueOf(),best=0;
+    for(var add=0;add<2;add++){
+      var base=new Date(now.getFullYear(),now.getMonth(),now.getDate()+add,12,0,0,0);
+      var ev=solarDayEvents(base);
+      for(var i=0;i<ev.length;i++){
+        var t=eventDate(base,ev[i].min).valueOf();
+        if(t>nowMs+1000 && (!best || t<best)) best=t;
+      }
+    }
+    if(!best)return;
+    eventTimer=setTimeout(function(){
+      eventTimer=undefined;
+      try{Bangle.buzz(7000,1);}catch(e){}
+      setTimeout(queueEventBuzz,8000);
+    },Math.max(100,best-nowMs));
+  }
+
+  function moonGeo(date){
+    var d=toDays(date);
+    var L=RAD*(218.3164477+13.17639648*d);
+    var D=RAD*(297.8501921+12.19074912*d);
+    var M=RAD*(357.5291092+0.98560028*d);
+    var Mp=RAD*(134.9633964+13.06499295*d);
+    var F=RAD*(93.2720950+13.22935024*d);
+    var lon=L+RAD*(6.289*Math.sin(Mp)+1.274*Math.sin(2*D-Mp)+0.658*Math.sin(2*D)+0.214*Math.sin(2*Mp)-0.186*Math.sin(M)-0.114*Math.sin(2*F)+0.059*Math.sin(2*D-2*Mp)+0.057*Math.sin(2*D-M-Mp)+0.053*Math.sin(2*D+Mp)+0.046*Math.sin(2*D-M)+0.041*Math.sin(M-Mp)-0.035*Math.sin(D)-0.031*Math.sin(M+Mp));
+    var lat=RAD*(5.128*Math.sin(F)+0.280*Math.sin(Mp+F)+0.277*Math.sin(Mp-F)+0.173*Math.sin(2*D-F)+0.055*Math.sin(2*D-Mp+F)+0.046*Math.sin(2*D-Mp-F)+0.033*Math.sin(2*D+F));
+    var dist=385000.56-20905.355*Math.cos(Mp)-3699.111*Math.cos(2*D-Mp)-2955.968*Math.cos(2*D)-569.925*Math.cos(2*Mp);
+    return {lon:norm(lon),lat:lat,dist:dist};
+  }
+
+  function sceneDate(){ return new Date(); }
+
+  function drawHeader(date,force){
+    // Full header redraw is kept for complete scene redraws or color-mode changes.
+    var mode=interactive?2:1;
+    var text=headerText(date);
+    if(!force && mode===lastHeaderMode && text===lastHeaderText) return;
+    var fg=(mode===1)?C.fg:C.bg;
+    drawTallBoldString(text,1,fg,mode);
+    lastHeaderMode=mode;
+    lastHeaderText=text;
+  }
+  function drawHeaderDelta(date){
+    // Normal clock updates repaint only glyph boxes whose characters changed.
+    var mode=interactive?2:1;
+    var text=headerText(date);
+    if(mode!==lastHeaderMode || !lastHeaderText || text.length!==lastHeaderText.length){
+      drawHeader(date,true);
+      return;
+    }
+    if(text===lastHeaderText)return;
+    var gw=9,adv=text.length>1?(W-2-gw)/(text.length-1):0;
+    var fg=(mode===1)?C.fg:C.bg;
+    for(var i=0;i<text.length;i++) if(text[i]!==lastHeaderText[i]){
+      var bx=1+Math.round(i*adv);
+      fillHeaderCharBg(bx,bx+gw-1,1,mode);
+      drawTallBoldChar(text[i],bx,1,fg);
+    }
+    lastHeaderMode=mode;
+    lastHeaderText=text;
+  }
+  function drawHeaderOnly(){
+    refreshBattery();
+    drawHeaderDelta(sceneDate());
+  }
+
+  function drawSun(){
+    g.setColor(C.flare);
+    for(var i=0;i<10;i++){
+      var a=i*TAU/10,r1=settings.sunSize+1,r2=settings.sunSize+3+(i%3);
+      g.drawLine(Math.round(SX+Math.cos(a)*r1),Math.round(SY+Math.sin(a)*r1),Math.round(SX+Math.cos(a)*r2),Math.round(SY+Math.sin(a)*r2));
+    }
+    g.setColor(C.sun).fillCircle(SX,SY,settings.sunSize);
+    g.setColor(C.flare).fillCircle(SX-Math.round(settings.sunSize/3),SY-Math.round(settings.sunSize/3),Math.max(1,Math.round(settings.sunSize/4)));
+  }
+
+  function solarReference(date,eq){
+    var lat=loc.lat*RAD;
+    var sunAng=Math.atan2(SY-EY,SX-EX);
+    var c=-Math.tan(lat)*Math.tan(eq.dec);
+    var h0=Math.acos(clamp(c,-1,1));
+    var len=settings.earthSize+17;
+    function ray(a,color){
+      g.setColor(color).drawLine(EX,EY,Math.round(EX+Math.cos(a)*len),Math.round(EY+Math.sin(a)*len));
+    }
+    g.setColor(C.noon).drawLine(EX,EY,SX,SY);
+    var vs=viewSign();
+    // Hour angle is negative at sunrise and positive at sunset.
+    ray(sunAng-vs*h0,C.rise);
+    ray(sunAng+vs*h0,C.set);
+    return {sunAng:sunAng,eq:eq};
+  }
+
+  // Fast scanline fill: O(radius) draw calls instead of O(radius^2) setPixel calls.
+  function fillLitHalf(cx,cy,r,ux,uy,color){
+    g.setColor(color);
+    for(var yy=-r;yy<=r;yy++){
+      var xmax=Math.floor(Math.sqrt(Math.max(0,r*r-yy*yy)));
+      var x0=-xmax, x1=xmax;
+      if(Math.abs(ux)<0.0001){
+        if(yy*uy<0) continue;
+      } else {
+        var cut=-yy*uy/ux;
+        if(ux>0) x0=Math.max(x0,Math.ceil(cut));
+        else x1=Math.min(x1,Math.floor(cut));
+      }
+      if(x0<=x1) g.drawLine(cx+x0,cy+yy,cx+x1,cy+yy);
+    }
+  }
+
+  function eraseMoonFarHalf(cx,cy,r){
+    var ux=EX-cx, uy=EY-cy;
+    var len=Math.sqrt(ux*ux+uy*uy)||1;
+    ux/=len; uy/=len;
+    // Delete the Earth-far hemisphere, including any orbit/rim pixels beneath it.
+    fillLitHalf(cx,cy,r+1,-ux,-uy,C.bg);
+  }
+
+  function fillDiskIntersection(cx,cy,r,ox,oy,sr,color){
+    if(sr<=0)return;
+    g.setColor(color);
+    for(var yy=-r;yy<=r;yy++){
+      var mh=Math.floor(Math.sqrt(Math.max(0,r*r-yy*yy)));
+      var sy=yy-oy;
+      if(Math.abs(sy)>sr) continue;
+      var sh=Math.sqrt(Math.max(0,sr*sr-sy*sy));
+      var x0=Math.max(-mh,Math.ceil(ox-sh));
+      var x1=Math.min(mh,Math.floor(ox+sh));
+      if(x0<=x1) g.drawLine(cx+x0,cy+yy,cx+x1,cy+yy);
+    }
+  }
+
+  function drawThickLine2(x0,y0,x1,y1){
+    var dx=x1-x0,dy=y1-y0;
+    var l=Math.sqrt(dx*dx+dy*dy)||1;
+    var ox=Math.round(-dy/l),oy=Math.round(dx/l);
+    g.drawLine(x0,y0,x1,y1);
+    g.drawLine(x0+ox,y0+oy,x1+ox,y1+oy);
+  }
+
+  // Actual Bangle.js 2 3-bit display colors used by Custom Earth mode.
+  var EARTH_COLORS=["#000","#f00","#0f0","#ff0","#00f","#f0f","#0ff","#fff"];
+
+  // Simplified northern-hemisphere land polygons: latitude, longitude pairs.
+  // Projection is polar/orthographic: north pole=center, equator=rim.
+  // Simplified but geographically ordered Northern Hemisphere coastlines.
+  // Each polygon is latitude/longitude pairs in clockwise geographic order.
+  // Separate polygons avoid the projection self-crossings that distorted East Asia.
+  // Coastlines use real longitude directly. Therefore angular east-west
+  // separation corresponds to local solar time at 15 degrees per hour.
+  var NH_LAND=[
+    // Alaska
+    [72,-168,69,-160,65,-154,61,-149,58,-143,55,-136,57,-131,
+     61,-134,65,-142,69,-151,72,-160],
+
+    // Canada + USA. Florida is exaggerated slightly to remain visible.
+    [70,-130,62,-136,55,-132,49,-127,44,-124,39,-123,35,-120,
+     32,-117,31,-111,29,-104,27,-98,28,-94,29,-90,30,-86,
+     29,-83,27,-82,24.5,-81,26,-80,29,-81,32,-80,35,-76,
+     39,-74,44,-69,49,-64,54,-58,59,-56,63,-63,67,-72,
+     71,-82,74,-96,74,-112],
+
+    // Mexico including Baja California and Yucatan.
+    [32,-117,29,-115,26,-113,23,-110,21,-106,19,-105,17,-101,
+     15,-96,16,-92,18,-89,21,-87,22,-90,20,-96,23,-101,
+     26,-104,29,-107,31,-112],
+
+    // Greenland
+    [59,-46,62,-52,67,-57,73,-58,78,-52,82,-42,83,-30,80,-20,
+     75,-18,70,-24,65,-31,61,-38],
+
+    // Main Eurasia. Far-east mainland coast deliberately stays west of Japan,
+    // leaving a visible Japan Sea gap.
+    [43,-1,49,-4,54,2,57,10,60,20,63,31,67,45,71,60,
+     73,80,72,100,70,120,67,140,63,158,59,175,55,170,51,158,
+     47,145,44,137,42,132,40,130,38,128,35,126,32,123,29,121,
+     24,117,18,111,13,106,9,101,10,95,15,88,20,82,24,76,
+     28,70,31,63,33,56,31,49,33,43,35,37,37,31,39,26,
+     41,21,43,16,44,11,43,5,41,0],
+
+    // Iberian Peninsula, separated by the Bay of Biscay / Mediterranean coast.
+    [43,-9,43,0,41,3,39,0,36,-1,36,-7,38,-9,41,-9],
+
+    // Italian Peninsula
+    [46,8,45,12,43,13,41,16,39,16,38,14,40,12,42,11,44,8],
+
+    // Balkan / Greece projection to suggest the eastern Mediterranean.
+    [45,14,44,20,42,23,40,24,38,23,39,20,41,18,43,16],
+
+    // North Africa, creating the Mediterranean as blue water between coasts.
+    [36,-6,35,2,37,10,36,18,34,25,31,32,27,34,22,32,20,25,
+     22,15,25,5,28,-3,31,-8,34,-9],
+
+    // Scandinavian Peninsula
+    [55,5,58,5,61,7,64,10,67,13,70,18,71,24,69,29,66,29,
+     63,26,60,22,58,18,56,13],
+
+    // Japan: Kyushu
+    [30.5,129,32,129.5,33.5,131,33,132.5,31.5,132,30.5,131],
+    // Japan: Shikoku + Honshu
+    [33,132,34,133.5,34.5,135.5,35,137.5,36,139.5,38,141,
+     40.5,141.5,40,140,38.5,138.5,37,136.5,35.5,134.5,34,133],
+    // Japan: Hokkaido
+    [41.5,140,42.5,141,43.5,143,45.5,145,45,142,43.5,140],
+
+    // Great Britain
+    [50,-5.5,51.5,-4.5,53,-4,55,-5,57,-4.5,58.5,-3,58,-1,
+     56,0,54,-1,52,0.5,50.5,-1]
+  ];
+
+  // Tiny islands: single-pixel references at real latitude/longitude.
+  // Ogasawara, Hawaii Big Island, Maui and Oahu.
+  var NH_ISLANDS=[
+    [27.1,142.2],
+    [19.7,-155.5],[20.8,-156.3],[21.4,-158.0]
+  ];
+
+  // Southern Hemisphere map used when View side = South.
+  var SH_LAND=[
+    // South America
+    [-2,-80,-8,-79,-15,-76,-22,-71,-30,-72,-38,-73,-46,-75,
+     -53,-70,-56,-66,-52,-60,-45,-55,-36,-52,-28,-49,-20,-44,
+     -12,-38,-5,-35,0,-45],
+
+    // Southern Africa
+    [0,9,-7,12,-15,13,-23,16,-30,18,-35,20,-34,27,-29,32,
+     -22,35,-15,39,-8,40,-2,35,0,29],
+
+    // Australia
+    [-12,113,-16,121,-20,129,-18,137,-22,145,-28,153,-35,151,
+     -39,145,-38,136,-34,128,-31,116,-24,113],
+
+    // Madagascar
+    [-12,49,-16,50,-21,48,-26,45,-23,43,-17,44],
+
+    // New Zealand
+    [-34,172,-39,176,-44,170,-47,168,-43,166,-38,169]
+  ];
+
+  var NH_ICE_LAT=78;
+  var SH_ICE_LAT=65;
+
+  function geoPoint(lat,lon,r,baseA){
+    var rr=r*Math.cos(lat*RAD);
+    var aa=baseA+viewSign()*(lon-loc.lon)*RAD;
+    return [Math.round(EX+rr*Math.cos(aa)),Math.round(EY+rr*Math.sin(aa))];
+  }
+  function geoPoly(src,r,baseA){
+    var p=[];
+    for(var i=0;i<src.length;i+=2){
+      var q=geoPoint(src[i],src[i+1],r,baseA);
+      p.push(q[0],q[1]);
+    }
+    return p;
+  }
+  function shadeEarthNight(r,ux,uy){
+    // Black alternate scanlines over the night hemisphere preserve geography
+    // while making day/night obvious on the 3-bit LCD.
+    g.setColor(C.bg);
+    ux=-ux;uy=-uy;
+    for(var yy=-r;yy<=r;yy+=2){
+      var xmax=Math.floor(Math.sqrt(Math.max(0,r*r-yy*yy)));
+      var x0=-xmax,x1=xmax;
+      if(Math.abs(ux)<0.0001){
+        if(yy*uy<0) continue;
+      } else {
+        var cut=-yy*uy/ux;
+        if(ux>0)x0=Math.max(x0,Math.ceil(cut));
+        else x1=Math.min(x1,Math.floor(cut));
+      }
+      if(x0<=x1)g.drawLine(EX+x0,EY+yy,EX+x1,EY+yy);
+    }
+  }
+  function drawHemisphereMap(r,baseA,ux,uy){
+    var south=!!settings.viewSide;
+    var land=south?SH_LAND:NH_LAND;
+
+    // Sea: blue on night base, cyan on directly illuminated half.
+    g.setColor("#00f").fillCircle(EX,EY,r);
+    fillLitHalf(EX,EY,r,ux,uy,"#0ff");
+
+    // Polar ice reference. North view = Arctic; South view = Antarctica.
+    var iceLat=south?SH_ICE_LAT:NH_ICE_LAT;
+    var iceR=Math.max(2,Math.round(r*Math.cos(iceLat*RAD)));
+    g.setColor("#fff").fillCircle(EX,EY,iceR);
+
+    // Land: green with coastline only.
+    for(var i=0;i<land.length;i++){
+      var p=geoPoly(land[i],r,baseA);
+      g.setColor("#0f0").fillPoly(p);
+      g.setColor("#000").drawPoly(p,true);
+    }
+
+    shadeEarthNight(r,ux,uy);
+
+    // Re-emphasize major coastlines after night shading.
+    g.setColor("#fff");
+    for(var j=0;j<land.length;j++)
+      g.drawPoly(geoPoly(land[j],r,baseA),true);
+
+    // Ogasawara and Hawaii: intentionally sub-rice-grain, one pixel each.
+    if(!south){
+      g.setColor("#0f0");
+      for(var k=0;k<NH_ISLANDS.length;k++){
+        var q=geoPoint(NH_ISLANDS[k][0],NH_ISLANDS[k][1],r,baseA);
+        g.setPixel(q[0],q[1]);
+      }
+    }
+
+    g.setColor("#fff").fillCircle(EX,EY,1);
+    g.drawCircle(EX,EY,r);
+  }
+
+  function drawEarth(date,ref,moonOrbitR){
+    var r=settings.earthSize;
+    var ux=SX-EX, uy=SY-EY, len=Math.sqrt(ux*ux+uy*uy)||1;
+    ux/=len; uy/=len;
+
+    var ha=localSolarHourAngle(date);
+    var a=ref.sunAng+viewSign()*ha;
+    var style=settings.earthStyle|0;
+
+    if(style===2){
+      drawHemisphereMap(r,a,ux,uy);
+    } else if(style===1){
+      var dc=EARTH_COLORS[settings.earthDayColor|0]||"#0ff";
+      var nc=EARTH_COLORS[settings.earthNightColor|0]||"#00f";
+      var ec=EARTH_COLORS[settings.earthEdgeColor|0]||"#fff";
+      g.setColor(nc).fillCircle(EX,EY,r);
+      fillLitHalf(EX,EY,r,ux,uy,dc);
+      g.setColor(ec).drawCircle(EX,EY,r);
+    } else {
+      // Current/original Orbit Earth.
+      g.setColor(C.bg).fillCircle(EX,EY,r);
+      fillLitHalf(EX,EY,r,ux,uy,C.earth);
+      g.setColor(C.earth).drawCircle(EX,EY,r);
+    }
+    var d=r*Math.cos(loc.lat*RAD);
+    var px=EX+d*Math.cos(a), py=EY+d*Math.sin(a);
+
+    // Observer radial direction in this north-polar schematic.
+    var rx=px-EX, ry=py-EY;
+    var radial=Math.sqrt(rx*rx+ry*ry) || 1;
+    var zx=rx/radial, zy=ry/radial;
+
+    // Local horizon: perpendicular to the observer's zenith and extended
+    // beyond Earth so it remains unmistakable on the watch display.
+    var hx=-zy, hy=zx;
+    var horizonHalf=settings.earthSize+8;
+    g.setColor(C.horizon).drawLine(
+      Math.round(px-hx*horizonHalf),Math.round(py-hy*horizonHalf),
+      Math.round(px+hx*horizonHalf),Math.round(py+hy*horizonHalf));
+
+    // Local zenith: starts at the observer and extends strictly outward from Earth.
+    var toOrbit=Math.max(4,moonOrbitR-radial);
+    var zenLen=2*toOrbit;
+    var x0=Math.round(px), y0=Math.round(py);
+    var x1=Math.round(px+zx*zenLen), y1=Math.round(py+zy*zenLen);
+    g.setColor(C.zenith);
+    drawThickLine2(x0,y0,x1,y1);
+
+    g.setColor(C.marker).fillCircle(x0,y0,settings.markerSize);
+    return {x:x0,y:y0};
+  }
+
+  function shadowGeometry(m,s,r){
+    var dx=wrapPi(m.lon-norm(s+PI)),dy=m.lat;
+    var moonAng=Math.asin(1737.4/m.dist);
+    var ru=6378.1-m.dist*(696340-6378.1)/149597870;
+    var rp=6378.1+m.dist*(696340+6378.1)/149597870;
+    return {ox:-dx/moonAng*r,oy:dy/moonAng*r,ur:Math.max(0,Math.atan(ru/m.dist)/moonAng*r),pr:Math.atan(rp/m.dist)/moonAng*r};
+  }
+
+  function drawMoon(mx,my,m,s){
+    // Parallel sunlight direction: the Sun is effectively at infinity
+    // on the Earth-Moon scale.
+    var r=settings.moonSize;
+    var sux=SX-EX, suy=SY-EY, slen=Math.sqrt(sux*sux+suy*suy)||1;
+    sux/=slen; suy/=slen;
+
+    // Earth-facing direction as seen from the Moon.
+    var eux=EX-mx, euy=EY-my, elen=Math.sqrt(eux*eux+euy*euy)||1;
+    eux/=elen; euy/=elen;
+
+    // Start from a completely blank Moon disk.  The Earth-facing hemisphere
+    // is deep blue where it receives no direct sunlight.
+    g.setColor(C.bg).fillCircle(mx,my,r+1);
+    fillLitHalf(mx,my,r,eux,euy,C.moonDark);
+
+    // Direct sunlight is gold. It is painted first over the full Sun-facing
+    // half, then the Earth-far half is erased below, leaving only the
+    // Earth-facing AND directly illuminated intersection.
+    fillLitHalf(mx,my,r,sux,suy,C.moon);
+
+    // Lunar-eclipse shadow remains applicable to the visible Earth-facing side.
+    var sh=shadowGeometry(m,s,r);
+    fillDiskIntersection(mx,my,r,sh.ox,sh.oy,sh.pr,C.penumbra);
+    fillDiskIntersection(mx,my,r,sh.ox,sh.oy,sh.ur,C.bg);
+
+    // Final clipping: erase the entire Earth-far hemisphere. No outline is
+    // redrawn afterward, so its outer rim cannot remain visible.
+    eraseMoonFarHalf(mx,my,r);
+  }
+
+  function coordText(v,pos,neg){
+    return Math.abs(v).toFixed(4)+(v<0?neg:pos);
+  }
+  function circleRectHit(cx,cy,r,x0,y0,x1,y1){
+    var qx=clamp(cx,x0,x1),qy=clamp(cy,y0,y1);
+    var dx=cx-qx,dy=cy-qy,rr=r+2;
+    return dx*dx+dy*dy<=rr*rr;
+  }
+  function drawLocationReadout(mx,my){
+    g.setFont("6x8",1);
+    if(settings.locationMode===0){
+      g.setColor(C.fg).setFontAlign(1,0);
+      g.drawString(loc.pref,W-1,H-17);
+      g.drawString(loc.name,W-1,H-8);
+      return;
+    }
+
+    var lines=[
+      settings.locationMode===2?"GPS":"manual",
+      coordText(loc.lat,"N","S"),
+      coordText(loc.lon,"E","W")
+    ];
+    // Longest coordinate is 9 glyphs at 6 px = 54 px. Keep this narrow
+    // right-side column outside the fixed Earth as much as possible.
+    var x1=W-1,x0=x1-53,blockH=26;
+    var ys=[H-blockH,H-blockH-36,76],y0=ys[0];
+    for(var i=0;i<ys.length;i++){
+      var yy=ys[i],safe=true;
+      if(circleRectHit(mx,my,settings.moonSize+1,x0,yy,x1,yy+blockH-1))safe=false;
+      if(circleRectHit(EX,EY,settings.earthSize+1,x0,yy,x1,yy+blockH-1))safe=false;
+      if(circleRectHit(SX,SY,settings.sunSize+5,x0,yy,x1,yy+blockH-1))safe=false;
+      if(safe){y0=yy;break;}
+    }
+    // Clear only the chosen safe label box so orbit/ray lines cannot make
+    // coordinates hard to read. The box has already been checked against
+    // Sun/Earth/Moon before erasing.
+    g.setColor(C.bg).fillRect(x0-1,y0-1,x1,y0+blockH);
+    g.setColor(C.fg).setFontAlign(1,-1);
+    for(var j=0;j<lines.length;j++)g.drawString(lines[j],x1,y0+j*9);
+  }
+
+  function draw(){
+    var date=sceneDate();
+    var sLon=sunLon(date);
+    var mGeo=moonGeo(date);
+    var phase=norm(mGeo.lon-sLon);
+    var eq=sunEquFromLon(sLon);
+    var sunAng=Math.atan2(SY-EY,SX-EX);
+    var moonOrbitR=settings.earthSize+settings.moonSize+5;
+    // Lunar ecliptic longitude increases eastward. North view therefore
+    // moves counterclockwise on screen; South view is the mirror image.
+    var ma=sunAng+viewSign()*phase;
+    var mx=Math.round(EX+moonOrbitR*Math.cos(ma));
+    var my=Math.round(EY+moonOrbitR*Math.sin(ma));
+    g.setBgColor(C.bg).setColor(C.bg).clear();
+    drawHeader(date,true);
+    g.setColor(C.orbit).drawCircle(EX,EY,moonOrbitR);
+    var ref=solarReference(date,eq);
+    drawSun();
+    drawEarth(date,ref,moonOrbitR);
+    drawMoon(mx,my,mGeo,sLon);
+    drawLocationReadout(mx,my);
+  }
+
+  function shotName(i){
+    return "ord"+(i<10?"0":"")+i+".bmp";
+  }
+  function saveScreenshot(){
+    try {
+      var bmp=g.asBMP();
+      if(!bmp){
+        Bangle.buzz(150);
+        return;
+      }
+      var st=Storage.readJSON(SHOT_STATE,1) || {next:0,count:0};
+      var idx=st.next|0;
+      if(idx<0 || idx>=SHOT_MAX) idx=0;
+      if(Storage.write(shotName(idx),bmp)===false){
+        Bangle.buzz(150);
+        return;
+      }
+      st.next=(idx+1)%SHOT_MAX;
+      st.count=Math.min(SHOT_MAX,(st.count|0)+1);
+      Storage.writeJSON(SHOT_STATE,st);
+      Bangle.buzz(60);
+      armIdle();
+    } catch(e) {
+      try { Storage.write("orbit_dev.err","screenshot: "+e); } catch(x) {}
+      try { Bangle.buzz(150); } catch(x2) {}
+    }
+  }
+  function onSwipe(lr,ud){
+    if(!lr && !ud) return;
+    startInteraction();
+    saveScreenshot();
+  }
+
+  function armIdle(){
+    if(idleTimer) clearTimeout(idleTimer);
+    if(!interactive) return;
+    idleTimer=setTimeout(goIdle,8000);
+  }
+  function startInteraction(){
+    // Cancel a pending view-only repaint from lcdPower.  faceUp/input state wins.
+    if(lcdHeaderTimer){ clearTimeout(lcdHeaderTimer); lcdHeaderTimer=undefined; }
+    if(!interactive){
+      interactive=true;
+      // Immediate 23-pixel differential repaint: do not wait for Earth/Moon/map.
+      drawHeaderOnly();
+    }
+    try { Bangle.setLocked(false); } catch(e) {}
+    try { Bangle.setBacklight(true); } catch(e) {}
+    armIdle();
+  }
+  function goIdle(){
+    if(idleTimer){ clearTimeout(idleTimer); idleTimer=undefined; }
+    if(interactive){
+      interactive=false;
+      // Return to view-only color immediately, without a full scene redraw.
+      drawHeaderOnly();
+    }
+    try { Bangle.setBacklight(false); } catch(e) {}
+    try { Bangle.setLocked(true); } catch(e) {}
+    queueTick();
+  }
+  function onFaceUp(up){
+    if(up) startInteraction();
+  }
+
+  function queueHeaderClock(){
+    if(headerClockTimer)clearTimeout(headerClockTimer);
+    // One wake-up at the next minute boundary. No per-second polling.
+    // This remains independent of the 5-minute astronomical scene redraw.
+    var wait=60000-(Date.now()%60000)+20;
+    headerClockTimer=setTimeout(function(){
+      headerClockTimer=undefined;
+      refreshBattery();
+      drawHeaderDelta(new Date());
+      queueHeaderClock();
+    },wait);
+  }
+  function queueTick(){
+    if(tickTimer)clearTimeout(tickTimer);
+    var step=5*60000;
+    var wait=step-(Date.now()%step)+20;
+    tickTimer=setTimeout(function(){
+      tickTimer=undefined;
+      if(!interactive){
+        refreshBattery();
+        draw();
+      }
+      queueTick();
+    },wait);
+  }
+  function onLCD(on){
+    if(on){
+      // lcdPower often arrives just before faceUp.  Delay only the cheap blue
+      // header repaint briefly so a following faceUp can switch directly to
+      // yellow without a misleading blue flash.  Never redraw the full scene here.
+      if(lcdHeaderTimer) clearTimeout(lcdHeaderTimer);
+      lcdHeaderTimer=setTimeout(function(){
+        lcdHeaderTimer=undefined;
+        if(!interactive) drawHeaderOnly();
+      },80);
+      queueHeaderClock();
+      queueTick();
+    } else {
+      if(lcdHeaderTimer){clearTimeout(lcdHeaderTimer);lcdHeaderTimer=undefined;}
+      if(headerClockTimer){clearTimeout(headerClockTimer);headerClockTimer=undefined;}
+      if(idleTimer){clearTimeout(idleTimer);idleTimer=undefined;}
+      interactive=false;
+      if(tickTimer){clearTimeout(tickTimer);tickTimer=undefined;}
+    }
+  }
+  // ===== BEGIN ORBIT BLE DOUBLE CLICK =====
+  // Easy-to-remove development helper.
+  // IMPORTANT: button handling is done with setWatch(), not clock UI,
+  // so Bangle's default clock->launcher action cannot pre-empt click #2.
+  // One release  -> launcher after 1000 ms
+  // Two releases -> BLE disconnect + restart, bonds kept
+  var bleBtnTimer,bleBtnClicks=0,bleBtnWatch;
+  function orbitBleReset(){
+    if(bleBtnTimer){clearTimeout(bleBtnTimer);bleBtnTimer=undefined;}
+    bleBtnClicks=0;
+    try{NRF.disconnect();}catch(e){}
+    setTimeout(function(){
+      try{NRF.restart();}catch(e){}
+      setTimeout(function(){try{Bangle.buzz(80);}catch(e){}},700);
+    },500);
+  }
+  function onSideButtonRelease(){
+    bleBtnClicks++;
+    if(bleBtnClicks>=2){
+      orbitBleReset();
+      return;
+    }
+    if(bleBtnTimer)clearTimeout(bleBtnTimer);
+    // If no second click arrives within 1 second, treat this as a normal
+    // single press and open the launcher.
+    bleBtnTimer=setTimeout(function(){
+      bleBtnTimer=undefined;
+      bleBtnClicks=0;
+      Bangle.showLauncher();
+    },1000);
+  }
+  function installBleButtonWatch(){
+    if(bleBtnWatch)clearWatch(bleBtnWatch);
+    bleBtnWatch=setWatch(onSideButtonRelease,BTN1,{
+      repeat:true,edge:"rising",debounce:30
+    });
+  }
+  // ===== END ORBIT BLE DOUBLE CLICK =====
+
+  function cleanup(){
+    if(lcdHeaderTimer)clearTimeout(lcdHeaderTimer);
+    if(headerClockTimer)clearTimeout(headerClockTimer);
+    if(idleTimer)clearTimeout(idleTimer);
+    if(tickTimer)clearTimeout(tickTimer);
+    if(eventTimer)clearTimeout(eventTimer);
+    if(bleBtnTimer)clearTimeout(bleBtnTimer);
+    bleBtnClicks=0;
+    if(bleBtnWatch){clearWatch(bleBtnWatch);bleBtnWatch=undefined;}
+    Bangle.removeListener("lcdPower",onLCD);
+    Bangle.removeListener("faceUp",onFaceUp);
+    Bangle.removeListener("swipe",onSwipe);
+  }
+
+  Bangle.setUI({mode:"custom",remove:cleanup});
+  installBleButtonWatch();
+  Bangle.on("lcdPower",onLCD);
+  Bangle.on("faceUp",onFaceUp);
+  Bangle.on("swipe",onSwipe);
+
+  try { Bangle.setBacklight(false); } catch(e) {}
+  try { Bangle.setLocked(true); } catch(e) {}
+  draw();
+  queueHeaderClock();
+  queueTick();
+  queueEventBuzz();
+})();
+
+} catch (e) {
+  try { require("Storage").write("orbit.err", String(e)); } catch (x) {}
+  try {
+    g.reset().clear();
+    g.setFont("6x8",2).setFontAlign(0,0).drawString("Orbit Dev error",g.getWidth()/2,65);
+    g.setFont("6x8",1).drawString(String(e).substr(0,42),g.getWidth()/2,90);
+    Bangle.setUI({mode:"clock"});
+  } catch (x2) {}
+}
