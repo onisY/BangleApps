@@ -8,7 +8,7 @@ if (cfg.ukRegion!=="ew" && cfg.ukRegion!=="sc") cfg.ukRegion="ew";
 var W=g.getWidth(),H=g.getHeight();
 var BLACK=0x0000,WHITE=0xFFFF,BLUE=0x001F,RED=0xF800,GREEN=0x07E0,GRAY=0x4208;
 var today,homeStart,pageStart;
-var autoTimer,btnTimer,tapTimer;
+var autoTimer,btnTimer,tapTimer,tapCount=0;
 
 function midnight(d){return new Date(d.getFullYear(),d.getMonth(),d.getDate());}
 function copyDate(d){return new Date(d.getFullYear(),d.getMonth(),d.getDate());}
@@ -242,17 +242,18 @@ function drawCalendar(){
 }
 
 function clearTimer(t){if(t)clearTimeout(t);}
+function clearTaps(){clearTimer(tapTimer);tapTimer=undefined;tapCount=0;}
 function save(){Storage.writeJSON("fivewcal.json",cfg);}
 function armExit(){clearTimer(autoTimer);autoTimer=setTimeout(exitClock,cfg.timeout*1000);}
-function exitClock(){clearTimer(autoTimer);clearTimer(btnTimer);clearTimer(tapTimer);Bangle.showClock();}
-function openLauncher(){clearTimer(autoTimer);clearTimer(btnTimer);clearTimer(tapTimer);Bangle.showLauncher();}
+function exitClock(){clearTimer(autoTimer);clearTimer(btnTimer);clearTaps();Bangle.showClock();}
+function openLauncher(){clearTimer(autoTimer);clearTimer(btnTimer);clearTaps();Bangle.showLauncher();}
 function backFromAppSettings(){
   E.showMenu();
   today=midnight(new Date());homeStart=mondayOf(today);
   installUI();drawCalendar();armExit();
 }
 function showAppSettings(){
-  clearTimer(autoTimer);clearTimer(btnTimer);clearTimer(tapTimer);tapTimer=undefined;
+  clearTimer(autoTimer);clearTimer(btnTimer);clearTaps();
   E.showMenu({
     "":{title:"5wCal"},
     "< Back":backFromAppSettings,
@@ -275,20 +276,25 @@ function showAppSettings(){
 }
 function onTouch(){
   armExit();
-  if(tapTimer){
-    clearTimer(tapTimer);tapTimer=undefined;
+  tapCount++;
+  clearTimer(tapTimer);tapTimer=undefined;
+  if(tapCount>=3){
+    tapCount=0;
     showAppSettings();
     return;
   }
   tapTimer=setTimeout(function(){
-    tapTimer=undefined;
-    pageStart=copyDate(homeStart);
-    drawCalendar();
-  },300);
+    var n=tapCount;
+    tapTimer=undefined;tapCount=0;
+    if(n===1){
+      pageStart=copyDate(homeStart);
+      drawCalendar();
+    }
+  },400);
 }
 function onSwipe(lr,ud){
   if(!ud)return;
-  clearTimer(tapTimer);tapTimer=undefined;armExit();
+  clearTaps();armExit();
   pageStart=addDays(pageStart,ud<0?35:-35);drawCalendar();
 }
 function onButton(){
@@ -297,7 +303,7 @@ function onButton(){
   btnTimer=setTimeout(function(){btnTimer=undefined;openLauncher();},1000);
 }
 function installUI(){
-  Bangle.setUI({mode:"custom",touch:onTouch,swipe:onSwipe,btn:onButton,remove:function(){clearTimer(autoTimer);clearTimer(btnTimer);clearTimer(tapTimer);}});
+  Bangle.setUI({mode:"custom",touch:onTouch,swipe:onSwipe,btn:onButton,remove:function(){clearTimer(autoTimer);clearTimer(btnTimer);clearTaps();}});
 }
 function showError(e){
   g.reset().setBgColor(BLACK).setColor(WHITE).clear();
