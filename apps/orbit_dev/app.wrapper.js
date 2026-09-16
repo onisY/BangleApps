@@ -15,6 +15,7 @@
   var blinkOn=true;
   var batteryPct=E.getBattery();
   var charging=false;
+  var lastTap=0,openingSettings=false;
   try{charging=Bangle.isCharging();}catch(e){}
 
   var FONT3={
@@ -128,6 +129,7 @@
       stopBlink();
       stopBatteryTimer();
       stopMinuteFix();
+      lastTap=0;
     }
   }
   function onCharging(on){
@@ -144,12 +146,45 @@
     }
   }
 
-  Bangle.on("lcdPower",onLCD);
-  Bangle.on("charging",onCharging);
-  E.on("kill",function(){
+  function removeWrapperListeners(){
     stopBlink();stopBatteryTimer();stopMinuteFix();
     Bangle.removeListener("lcdPower",onLCD);
     Bangle.removeListener("charging",onCharging);
-  });
+    Bangle.removeListener("touch",onTouch);
+  }
+  function returnToOrbit(){load("orbit_dev.app.js");}
+  function openOrbitSettings(){
+    if(openingSettings)return;
+    openingSettings=true;
+    removeWrapperListeners();
+    /* The core's E.showMenu call will replace its custom UI and trigger its
+       own cleanup. Restore the native drawing primitive before leaving Orbit. */
+    g.fillCircle=originalFillCircle;
+    try{
+      var src=Storage.read("orbit_dev.settings.js");
+      if(!src)throw new Error("orbit_dev.settings.js missing");
+      var fn=eval(src);
+      if(typeof fn!=="function")throw new Error("invalid Orbit Dev settings");
+      fn(returnToOrbit);
+    }catch(e){
+      try{Storage.write("orbit_dev.err","settings: "+e);}catch(x){}
+      returnToOrbit();
+    }
+  }
+  function onTouch(button,xy){
+    /* Double tap is active only during Orbit's yellow/unlocked operation
+       state. A lone tap deliberately remains a no-op. */
+    if(!Bangle.isLCDOn()||Bangle.isLocked()){lastTap=0;return;}
+    var now=Date.now();
+    if(lastTap&&now-lastTap<=450){
+      lastTap=0;
+      openOrbitSettings();
+    }else lastTap=now;
+  }
+
+  Bangle.on("lcdPower",onLCD);
+  Bangle.on("charging",onCharging);
+  Bangle.on("touch",onTouch);
+  E.on("kill",function(){removeWrapperListeners();});
   if(Bangle.isLCDOn())onLCD(true);
 })();
