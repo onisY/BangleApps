@@ -1,157 +1,21 @@
-name: Orbit split dev/public
+name: Orbit split validation
 
 on:
   push:
     paths:
       - '.github/workflows/orbit-split-dev-public.yml'
 
-permissions:
-  contents: write
-
 jobs:
-  split:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: master
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-node@v4
         with:
-          python-version: '3.12'
-      - name: Split Orbit into public and development apps
-        run: |
-          python - <<'PY'
-          import json, shutil
-          from pathlib import Path
-
-          root=Path('apps')
-          pub=root/'orbit'
-          dev=root/'orbit_dev'
-          assert pub.exists()
-          assert not dev.exists()
-          shutil.copytree(pub,dev)
-
-          def strip_comments(src):
-            out=[];i=0;state='code';q=''
-            while i<len(src):
-              ch=src[i];n=src[i+1] if i+1<len(src) else ''
-              if state=='code':
-                if ch in "'\"`":state='str';q=ch;out.append(ch);i+=1;continue
-                if ch=='/' and n=='/':state='line';i+=2;continue
-                if ch=='/' and n=='*':state='block';i+=2;continue
-                out.append(ch);i+=1;continue
-              if state=='str':
-                out.append(ch)
-                if ch=='\\' and i+1<len(src):out.append(src[i+1]);i+=2;continue
-                if ch==q:state='code'
-                i+=1;continue
-              if state=='line':
-                if ch=='\n':out.append('\n');state='code'
-                i+=1;continue
-              if state=='block':
-                if ch=='*' and n=='/':state='code';i+=2;continue
-                i+=1
-            return ''.join(out)
-
-          def mini(src):
-            src=strip_comments(src);out=[];i=0;state='code';q='';pending=False
-            def word(c):return bool(c) and (c.isalnum() or c in '_$')
-            while i<len(src):
-              ch=src[i]
-              if state=='code':
-                if ch in "'\"`":
-                  if pending:
-                    prev=out[-1] if out else ''
-                    if word(prev):out.append(' ')
-                    pending=False
-                  state='str';q=ch;out.append(ch);i+=1;continue
-                if ch.isspace():pending=True;i+=1;continue
-                if pending:
-                  prev=out[-1] if out else ''
-                  if (word(prev) and word(ch)) or (prev=='+' and ch=='+') or (prev=='-' and ch=='-'):out.append(' ')
-                  pending=False
-                out.append(ch);i+=1;continue
-              out.append(ch)
-              if ch=='\\' and i+1<len(src):out.append(src[i+1]);i+=2;continue
-              if ch==q:state='code'
-              i+=1
-            return ''.join(out).strip()+'\n'
-
-          # ---- Development app: orbit_dev 0.51 ----
-          meta=json.loads((dev/'metadata.json').read_text())
-          assert meta['id']=='orbit' and meta['version']=='0.51'
-          meta['id']='orbit_dev'
-          meta['name']='Orbit Dev'
-          meta['shortName']='OrbitDev'
-          meta['description']='Development build of Orbit. '+meta['description']
-          meta['storage']=[
-            {'name':'orbit_dev.app.js','url':'app.wrapper.js'},
-            {'name':'orbit_dev.core.js','url':'app.min.js'},
-            {'name':'orbit_dev.settings.js','url':'settings.min.js'},
-            {'name':'orbit_devloc','url':'locations.js'},
-            {'name':'orbit_dev.img','url':'app-icon.js','evaluate':True}
-          ]
-          meta['data']=[{'name':'orbit_dev.json'},{'name':'orbit_devshot.json'}]
-          (dev/'metadata.json').write_text(json.dumps(meta,indent=2,ensure_ascii=False)+'\n')
-
-          a=(dev/'app.js').read_text()
-          a=a.replace('var FILE = "orbit.json";','var FILE = "orbit_dev.json";')
-          a=a.replace('var SHOT_STATE = "orbitshot.json";','var SHOT_STATE = "orbit_devshot.json";')
-          a=a.replace('var settings = Storage.readJSON(FILE,1) || {};',
-                      'var settings = Storage.readJSON(FILE,1);\n  if(!settings){ settings=Storage.readJSON("orbit.json",1)||{}; if(Object.keys(settings).length) Storage.writeJSON(FILE,settings); }')
-          a=a.replace('return "orb"+(i<10?"0":"")+i+".bmp";','return "ord"+(i<10?"0":"")+i+".bmp";')
-          a=a.replace('Storage.write("orbit.err"','Storage.write("orbit_dev.err"')
-          a=a.replace('drawString("Orbit error"','drawString("Orbit Dev error"')
-          (dev/'app.js').write_text(a)
-          (dev/'app.min.js').write_text(mini(a))
-
-          w=(dev/'app.wrapper.js').read_text()
-          w=w.replace('/* Orbit runtime wrapper v0.38 */','/* Orbit Dev runtime wrapper */')
-          w=w.replace('Storage.read("orbit.core.js")','Storage.read("orbit_dev.core.js")')
-          w=w.replace('"orbit.core.js missing"','"orbit_dev.core.js missing"')
-          (dev/'app.wrapper.js').write_text(w)
-
-          s=(dev/'settings.js').read_text()
-          s=s.replace('require("orbitloc")','require("orbit_devloc")')
-          s=s.replace('var FILE="orbit.json", SHOT_STATE="orbitshot.json", SHOT_MAX=20;',
-                      'var FILE="orbit_dev.json", SHOT_STATE="orbit_devshot.json", SHOT_MAX=20;')
-          s=s.replace('var GPS_ID="orbitsettings";','var GPS_ID="orbitdevsettings";')
-          s=s.replace('var s=Storage.readJSON(FILE,1)||{};',
-                      'var s=Storage.readJSON(FILE,1);\n  if(!s){s=Storage.readJSON("orbit.json",1)||{};if(Object.keys(s).length)Storage.writeJSON(FILE,s);}')
-          s=s.replace('return "orb"+(i<10?"0":"")+i+".bmp";','return "ord"+(i<10?"0":"")+i+".bmp";')
-          s=s.replace('title:"Orbit"','title:"Orbit Dev"')
-          s=s.replace('"Orbit GPS"','"Orbit Dev GPS"')
-          s=s.replace('"Orbit location"','"Orbit Dev location"')
-          s=s.replace('"Orbit shots"','"Orbit Dev shots"')
-          (dev/'settings.js').write_text(s)
-          (dev/'settings.min.js').write_text(mini(s))
-
-          dr=(dev/'README.md').read_text()
-          if dr.startswith('# Orbit 0.03'):
-            dr=dr.replace('# Orbit 0.03','# Orbit Dev 0.51',1)
-          else:
-            dr='# Orbit Dev 0.51\n\n'+dr
-          dr=dr.replace('`orbit.json`','`orbit_dev.json`').replace('`orbitshot.json`','`orbit_devshot.json`')
-          dr=dr.replace('`orb00.bmp`','`ord00.bmp`').replace('`orb19.bmp`','`ord19.bmp`').replace('`orbNN.bmp`','`ordNN.bmp`')
-          notice='\n\n> **Development stream:** this app is the experimental branch. Stable milestone releases are published separately as `orbit`, starting from public version 0.01.\n'
-          dr=dr.replace('\n',notice+'\n',1)
-          (dev/'README.md').write_text(dr)
-          (dev/'ChangeLog').write_text('0.51: Development snapshot split from Orbit before the first public release.\n')
-
-          # ---- Public app: orbit 0.01 ----
-          pm=json.loads((pub/'metadata.json').read_text())
-          assert pm['id']=='orbit' and pm['version']=='0.51'
-          pm['version']='0.01'
-          (pub/'metadata.json').write_text(json.dumps(pm,indent=2,ensure_ascii=False)+'\n')
-          pr=(pub/'README.md').read_text()
-          if pr.startswith('# Orbit 0.03'):
-            pr=pr.replace('# Orbit 0.03','# Orbit',1)
-          public_notice='\n\n> **Public release 0.01:** this is the stable public stream. Ongoing experimental development continues separately as `orbit_dev`. The historical version notes below describe the pre-public development path that led to this release.\n'
-          pr=pr.replace('\n',public_notice+'\n',1)
-          (pub/'README.md').write_text(pr)
-          (pub/'ChangeLog').write_text('0.01: Initial public release based on the Orbit 0.51 development snapshot.\n')
-          PY
-      - name: Validate split
+          node-version: 18.x
+      - name: Validate Orbit and Orbit Dev syntax and metadata
         run: |
           node --check apps/orbit/app.js
           node --check apps/orbit/app.min.js
@@ -161,33 +25,17 @@ jobs:
           node --check apps/orbit_dev/app.min.js
           node --check apps/orbit_dev/settings.js
           node --check apps/orbit_dev/settings.min.js
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          pub=Path('apps/orbit');dev=Path('apps/orbit_dev')
-          p=json.loads((pub/'metadata.json').read_text())
-          d=json.loads((dev/'metadata.json').read_text())
-          assert p['id']=='orbit' and p['version']=='0.01'
-          assert d['id']=='orbit_dev' and d['version']=='0.51'
-          names={x['name'] for x in d['storage']}
-          assert names=={'orbit_dev.app.js','orbit_dev.core.js','orbit_dev.settings.js','orbit_devloc','orbit_dev.img'}
-          assert {x['name'] for x in d['data']}=={'orbit_dev.json','orbit_devshot.json'}
-          a=(dev/'app.js').read_text();s=(dev/'settings.js').read_text();w=(dev/'app.wrapper.js').read_text()
-          assert 'var FILE = "orbit_dev.json";' in a
-          assert 'var SHOT_STATE = "orbit_devshot.json";' in a
-          assert 'return "ord"+' in a
-          assert 'Storage.read("orbit_dev.core.js")' in w
-          assert 'require("orbit_devloc")' in s
-          assert 'var GPS_ID="orbitdevsettings";' in s
-          assert 'return "ord"+' in s
-          assert (pub/'ChangeLog').read_text().startswith('0.01:')
-          assert (dev/'ChangeLog').read_text().startswith('0.51:')
-          print('Orbit public/dev split validation passed')
-          PY
-      - name: Commit split
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+onisY@users.noreply.github.com'
-          git add apps/orbit apps/orbit_dev
-          git commit -m 'Split Orbit into public and development apps'
-          git push origin HEAD:master
+          node - <<'NODE'
+          const fs=require('fs');
+          const p=JSON.parse(fs.readFileSync('apps/orbit/metadata.json'));
+          const d=JSON.parse(fs.readFileSync('apps/orbit_dev/metadata.json'));
+          if(p.id!=='orbit'||p.version!=='0.01') throw new Error('public metadata mismatch');
+          if(d.id!=='orbit_dev'||d.version!=='0.51') throw new Error('dev metadata mismatch');
+          const names=d.storage.map(x=>x.name).sort().join(',');
+          const expected=['orbit_dev.app.js','orbit_dev.core.js','orbit_dev.img','orbit_dev.settings.js','orbit_devloc'].sort().join(',');
+          if(names!==expected) throw new Error('dev storage collision risk');
+          NODE
+      - name: Install dependencies
+        run: npm ci
+      - name: Run BangleApps test suite
+        run: npm test
