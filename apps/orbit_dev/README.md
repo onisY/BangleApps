@@ -498,3 +498,14 @@ Dynamic user data such as `orbit_dev.json`, screenshot BMP files and screenshot 
 - At a normal minute change, only character boxes whose glyphs actually changed are restored and redrawn. Most minutes therefore repaint just one 9 x 21 pixel digit box.
 - Header color-mode changes and full 5-minute astronomical scene refreshes still use a full header redraw when required.
 - The minute timer remains independent of the Sun/Earth/Moon scene timer and is stopped while the LCD is off.
+
+
+## Version 0.52 refined north/south hemisphere maps
+
+- Reworked the low-detail N/S Hemi map specifically for the watch-scale Earth size 40 target.
+- North view follows the selected Candidate C direction: more recognizable North America/Eurasia, a visible Mediterranean and Japan Sea, white Greenland, and a compact Arctic ice pack.
+- South view follows the selected Candidate B direction: simplified South America, southern Africa and Australia, with Madagascar, two New Zealand islands and Tasmania kept distinct.
+- South view now draws an irregular Antarctica polygon instead of a generic circular polar cap.
+- North and South maps are separate vector datasets rather than mirrored copies.
+- Added a black size-2 pole marker at the center for both North and South views.
+- Other Earth styles and astronomical calculations are unchanged.
