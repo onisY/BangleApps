@@ -2,9 +2,9 @@
   "id": "fivewcal",
   "name": "5wCal",
   "shortName": "5wCal",
-  "version": "0.08",
+  "version": "0.09",
   "author": "onisY",
-  "description": "Five-week Monday-first calendar for Bangle.js 2 with Japanese/English display modes, Japanese holidays in Japanese mode, selectable England and Wales or Scotland bank holidays in English mode, color-coded weekends, swipe paging, tap-to-today, widgets and timed return to the clock.",
+  "description": "Five-week Monday-first calendar for Bangle.js 2 with Japanese/English display modes, Japanese holidays in Japanese mode, selectable England and Wales or Scotland bank holidays in English mode, color-coded weekends, swipe paging, tap-to-today, triple-tap settings, widgets and timed return to the clock.",
   "icon": "app.png",
   "tags": "calendar,tool,japan,uk",
   "supports": [
