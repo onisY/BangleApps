@@ -2,8 +2,14 @@
 (function(){
   var Storage=require("Storage"), originalLauncher=Bangle.showLauncher;
   function appSource(id,direct){var info=Storage.readJSON(id+".info",1);if(info&&info.src&&Storage.read(info.src)!==undefined)return info.src;if(Storage.read(direct)!==undefined)return direct;}
-  function openCalendarOrSettings(){var src=appSource("fivewcal","fivewcal.app.js")||appSource("calendar","calendar.app.js")||appSource("setting","setting.app.js");if(src){load(src);return;}if(originalLauncher)originalLauncher();}
-  Bangle.showLauncher=openCalendarOrSettings;
+  function openSystemSettings(){
+    var src=appSource("setting","setting.app.js");
+    if(src){load(src);return;}
+    if(originalLauncher)originalLauncher();
+  }
+  /* Core handles the side button and calls Bangle.showLauncher() after a
+     confirmed single click. Redirect that call to the global Settings app. */
+  Bangle.showLauncher=openSystemSettings;
 
   /* Hide the polar centre marker only; keep the polar map itself unchanged. */
   var originalFillCircle=g.fillCircle;
@@ -11,11 +17,11 @@
 
   var core=Storage.read("orbit_dev.core.js");if(!core)throw new Error("orbit_dev.core.js missing");eval(core);
 
-  var blinkTimer,batteryTimer,minuteFixTimer;
+  var blinkTimer,batteryTimer,minuteFixTimer,tapTimer;
   var blinkOn=true;
   var batteryPct=E.getBattery();
   var charging=false;
-  var lastTap=0,openingSettings=false;
+  var openingSettings=false,leavingOrbit=false;
   try{charging=Bangle.isCharging();}catch(e){}
 
   var FONT3={
@@ -119,6 +125,7 @@
       scheduleMinuteFix();
     },wait);
   }
+  function stopTapTimer(){if(tapTimer){clearTimeout(tapTimer);tapTimer=undefined;}}
 
   function onLCD(on){
     if(on){
@@ -129,7 +136,7 @@
       stopBlink();
       stopBatteryTimer();
       stopMinuteFix();
-      lastTap=0;
+      stopTapTimer();
     }
   }
   function onCharging(on){
@@ -147,19 +154,32 @@
   }
 
   function removeWrapperListeners(){
-    stopBlink();stopBatteryTimer();stopMinuteFix();
+    stopBlink();stopBatteryTimer();stopMinuteFix();stopTapTimer();
     Bangle.removeListener("lcdPower",onLCD);
     Bangle.removeListener("charging",onCharging);
     Bangle.removeListener("touch",onTouch);
+    Bangle.showLauncher=originalLauncher;
+  }
+  function prepareToLeave(){
+    if(leavingOrbit)return false;
+    leavingOrbit=true;
+    removeWrapperListeners();
+    g.fillCircle=originalFillCircle;
+    return true;
   }
   function returnToOrbit(){load("orbit_dev.app.js");}
+  function openCalendar(){
+    if(!prepareToLeave())return;
+    var src=appSource("fivewcal","fivewcal.app.js")||appSource("calendar","calendar.app.js");
+    if(src){load(src);return;}
+    if(originalLauncher)originalLauncher();
+  }
   function openOrbitSettings(){
     if(openingSettings)return;
     openingSettings=true;
-    removeWrapperListeners();
-    /* The core's E.showMenu call will replace its custom UI and trigger its
-       own cleanup. Restore the native drawing primitive before leaving Orbit. */
-    g.fillCircle=originalFillCircle;
+    if(!prepareToLeave())return;
+    /* E.showMenu replaces Orbit's custom UI; the settings module receives a
+       callback that reloads Orbit when < Back is selected. */
     try{
       var src=Storage.read("orbit_dev.settings.js");
       if(!src)throw new Error("orbit_dev.settings.js missing");
@@ -172,14 +192,16 @@
     }
   }
   function onTouch(button,xy){
-    /* Double tap is active only during Orbit's yellow/unlocked operation
-       state. A lone tap deliberately remains a no-op. */
-    if(!Bangle.isLCDOn()||Bangle.isLocked()){lastTap=0;return;}
-    var now=Date.now();
-    if(lastTap&&now-lastTap<=450){
-      lastTap=0;
+    /* Touch actions are available only during Orbit's yellow/unlocked
+       operation state. One tap opens 5wCal/Calendar; a second tap arriving
+       within 450 ms cancels that action and opens Orbit Dev settings. */
+    if(!Bangle.isLCDOn()||Bangle.isLocked()){stopTapTimer();return;}
+    if(tapTimer){
+      stopTapTimer();
       openOrbitSettings();
-    }else lastTap=now;
+      return;
+    }
+    tapTimer=setTimeout(function(){tapTimer=undefined;openCalendar();},450);
   }
 
   Bangle.on("lcdPower",onLCD);
