@@ -89,11 +89,28 @@
     if(openingSettings)return;
     openingSettings=true;
     if(!prepareToLeave())return;
+    var originalShowMenu=E.showMenu;
+    function settingsBack(){
+      E.showMenu=originalShowMenu;
+      returnToOrbit();
+    }
+    E.showMenu=function(menu){
+      if(menu&&menu[""]&&menu[""].title==="Orbit Dev"&&menu["< Back"]&&!menu["Exit settings"]){
+        /* Use the exact same safe leave() handler as < Back, but expose an
+           explicit end-of-settings item at the bottom of the main menu. */
+        menu["Exit settings"]=menu["< Back"];
+      }
+      return originalShowMenu(menu);
+    };
     try{
       var src=Storage.read("orbit_dev.settings.js");if(!src)throw new Error("orbit_dev.settings.js missing");
       var fn=eval(src);if(typeof fn!=="function")throw new Error("invalid Orbit Dev settings");
-      fn(returnToOrbit);
-    }catch(e){try{Storage.write("orbit_dev.err","settings: "+e);}catch(x){}returnToOrbit();}
+      fn(settingsBack);
+    }catch(e){
+      E.showMenu=originalShowMenu;
+      try{Storage.write("orbit_dev.err","settings: "+e);}catch(x){}
+      returnToOrbit();
+    }
   }
   function onTouch(button,xy){
     if(!Bangle.isLCDOn()||Bangle.isLocked()){stopTapTimer();return;}
