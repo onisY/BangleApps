@@ -15,9 +15,13 @@
   var originalFillCircle=g.fillCircle;
   g.fillCircle=function(x,y,r){if(x===74&&y===101&&r===2)return this;return originalFillCircle.apply(this,arguments);};
 
-  var core=Storage.read("orbit_dev.core.js");if(!core)throw new Error("orbit_dev.core.js missing");eval(core);
+  var core=Storage.read("orbit_dev.core.js");if(!core)throw new Error("orbit_dev.core.js missing");
+  /* Keep the core header text on the same NN% format used by the overlay,
+     regardless of blue/yellow/white background mode. */
+  core=core.replace('+" ."+batteryPct','+" "+batteryPct+"%"');
+  eval(core);
 
-  var blinkTimer,batteryTimer,minuteFixTimer,tapTimer;
+  var blinkTimer,batteryTimer,minuteFixTimer,tapTimer,overlayTimer;
   var blinkOn=true;
   var batteryPct=E.getBattery();
   var charging=false;
@@ -26,7 +30,7 @@
 
   var FONT3={
     "0":[7,5,5,5,5,5,7],"1":[2,6,2,2,2,2,7],"2":[7,1,1,7,4,4,7],
-    "3":[7,1,1,7,1,1,7],"4":[5,5,5,7,1,1,1],"5":[7,4,4,7,1,1,7],
+    "3":[7,1,1,7,1,1,7],"4":[5,5,5,7,1,1,1],"5":[7,4,4,7,5,5,7],
     "6":[7,4,4,7,5,5,7],"7":[7,1,1,2,2,2,2],"8":[7,5,5,7,5,5,7],
     "9":[7,5,5,7,1,1,7],":":[0,2,2,0,2,2,0],"%":[5,1,2,2,4,4,5]
   };
@@ -37,9 +41,8 @@
     return {gw:gw,adv:len>1?(W-2-gw)/(len-1):0};
   }
 
-  /* Copy the actual header background already on screen.  Row 0 contains
-     background only (no glyph pixels), so copying its per-column colour
-     preserves blue/magenta stripes, yellow, or white exactly. */
+  /* Copy the actual header background already on screen. Row 0 contains
+     background only, so this preserves blue/magenta stripes, yellow, or white. */
   function restoreHeaderBg(x0,x1){
     for(var x=x0;x<=x1;x++){
       var c=g.getPixel(x,0);
@@ -48,8 +51,6 @@
   }
   function headerFgAt(x){
     var c=g.getPixel(x,0);
-    /* Bangle.js 2 3-bit colours: yellow/white backgrounds need black text;
-       blue or magenta backgrounds need white text. */
     return (c===6||c===7)?"#000":"#fff";
   }
   function drawHeaderChar(ch,bx,fg){
@@ -78,6 +79,17 @@
       restoreHeaderBg(bx,bx+L.gw-1);
       if(show)drawHeaderChar(btxt[i],bx,batteryPct<=20?"#f00":headerFgAt(bx));
     }
+  }
+  function stopOverlayTimer(){if(overlayTimer){clearTimeout(overlayTimer);overlayTimer=undefined;}}
+  function syncHeaderOverlay(delay){
+    stopOverlayTimer();
+    if(!Bangle.isLCDOn())return;
+    overlayTimer=setTimeout(function(){
+      overlayTimer=undefined;
+      if(!Bangle.isLCDOn())return;
+      paintBattery();
+      paintColon();
+    },delay||0);
   }
 
   function stopBlink(){if(blinkTimer){clearTimeout(blinkTimer);blinkTimer=undefined;}}
@@ -132,12 +144,21 @@
       startBatteryTimer();
       scheduleMinuteFix();
       startBlink();
+      /* Core may repaint the blue header about 80 ms after LCD-on. Re-apply
+         the unified overlay after that repaint. */
+      syncHeaderOverlay(120);
     }else{
       stopBlink();
       stopBatteryTimer();
       stopMinuteFix();
       stopTapTimer();
+      stopOverlayTimer();
     }
+  }
+  function onFaceUpOverlay(up){
+    /* Core switches to the yellow operation header in its faceUp handler.
+       Re-apply exactly the same colon/battery rules immediately afterward. */
+    if(up&&Bangle.isLCDOn())syncHeaderOverlay(20);
   }
   function onCharging(on){
     charging=!!on;
@@ -154,8 +175,9 @@
   }
 
   function removeWrapperListeners(){
-    stopBlink();stopBatteryTimer();stopMinuteFix();stopTapTimer();
+    stopBlink();stopBatteryTimer();stopMinuteFix();stopTapTimer();stopOverlayTimer();
     Bangle.removeListener("lcdPower",onLCD);
+    Bangle.removeListener("faceUp",onFaceUpOverlay);
     Bangle.removeListener("charging",onCharging);
     Bangle.removeListener("touch",onTouch);
     Bangle.showLauncher=originalLauncher;
@@ -178,8 +200,6 @@
     if(openingSettings)return;
     openingSettings=true;
     if(!prepareToLeave())return;
-    /* E.showMenu replaces Orbit's custom UI; the settings module receives a
-       callback that reloads Orbit when < Back is selected. */
     try{
       var src=Storage.read("orbit_dev.settings.js");
       if(!src)throw new Error("orbit_dev.settings.js missing");
@@ -192,9 +212,6 @@
     }
   }
   function onTouch(button,xy){
-    /* Touch actions are available only during Orbit's yellow/unlocked
-       operation state. One tap opens 5wCal/Calendar; a second tap arriving
-       within 450 ms cancels that action and opens Orbit Dev settings. */
     if(!Bangle.isLCDOn()||Bangle.isLocked()){stopTapTimer();return;}
     if(tapTimer){
       stopTapTimer();
@@ -205,6 +222,7 @@
   }
 
   Bangle.on("lcdPower",onLCD);
+  Bangle.on("faceUp",onFaceUpOverlay);
   Bangle.on("charging",onCharging);
   Bangle.on("touch",onTouch);
   E.on("kill",function(){removeWrapperListeners();});
