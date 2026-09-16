@@ -19,15 +19,17 @@ jobs:
         with:
           python-version: '3.12'
       - name: Patch Orbit v0.52
-        run: python .github/orbit_patch_v052.py
+        run: |
+          sed -i "s|Path('apps/orbit')|Path('apps/orbit_dev')|" .github/orbit_patch_v052.py
+          python .github/orbit_patch_v052.py
       - name: Validate JavaScript
         run: |
-          node --check apps/orbit/app.js
-          node --check apps/orbit/app.min.js
+          node --check apps/orbit_dev/app.js
+          node --check apps/orbit_dev/app.min.js
       - name: Commit Orbit v0.52
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+onisY@users.noreply.github.com'
-          git add apps/orbit/app.js apps/orbit/app.min.js apps/orbit/metadata.json apps/orbit/README.md
+          git add apps/orbit_dev/app.js apps/orbit_dev/app.min.js apps/orbit_dev/metadata.json apps/orbit_dev/README.md
           git commit -m 'Refine Orbit hemisphere maps for watch display'
           git push origin HEAD:master
