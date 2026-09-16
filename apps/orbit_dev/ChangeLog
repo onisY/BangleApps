@@ -1,1 +1,2 @@
+0.53: LCD-only 1 s colon blink; battery shown as NN%, blinks while charging, red at 20% or below; pole centre dot removed.
 0.51: Development snapshot split from Orbit before the first public release.
