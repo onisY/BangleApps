@@ -1,3 +1,4 @@
+0.58: Header rendering is unified across blue, yellow, and white background modes. Core header text now uses NN% instead of the legacy dot-battery format; faceUp/LCD repaints re-apply the same colon blink, charging blink, and <=20% red-battery rules in every background mode.
 0.57: In the yellow/unlocked operation state, single tap opens 5wCal (falling back to Calendar), while double tap within 450 ms opens Orbit Dev settings. A confirmed single side-button press now exits Orbit and opens the global Settings app; the existing double side-button BLE reset remains unchanged.
 0.56: While Orbit is in the yellow/unlocked operation state, double-tap within 450 ms opens Orbit Dev settings. A single tap remains a no-op. Leaving settings with < Back reloads orbit_dev.app.js and returns to the Orbit display.
 0.55: Colon blink repaint now copies the actual displayed header background so the colon background always matches the surrounding header colour.
