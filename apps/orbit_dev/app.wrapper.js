@@ -7,17 +7,12 @@
     if(src){load(src);return;}
     if(originalLauncher)originalLauncher();
   }
-  /* Core handles the side button and calls Bangle.showLauncher() after a
-     confirmed single click. Redirect that call to the global Settings app. */
   Bangle.showLauncher=openSystemSettings;
 
-  /* Hide the polar centre marker only; keep the polar map itself unchanged. */
   var originalFillCircle=g.fillCircle;
   g.fillCircle=function(x,y,r){if(x===74&&y===101&&r===2)return this;return originalFillCircle.apply(this,arguments);};
 
   var core=Storage.read("orbit_dev.core.js");if(!core)throw new Error("orbit_dev.core.js missing");
-  /* Keep the core header text on the same NN% format used by the overlay,
-     regardless of blue/yellow/white background mode. */
   core=core.replace('+" ."+batteryPct','+" "+batteryPct+"%"');
   eval(core);
 
@@ -30,7 +25,7 @@
 
   var FONT3={
     "0":[7,5,5,5,5,5,7],"1":[2,6,2,2,2,2,7],"2":[7,1,1,7,4,4,7],
-    "3":[7,1,1,7,1,1,7],"4":[5,5,5,7,1,1,1],"5":[7,4,4,7,5,5,7],
+    "3":[7,1,1,7,1,1,7],"4":[5,5,5,7,1,1,1],"5":[7,4,4,7,1,1,7],
     "6":[7,4,4,7,5,5,7],"7":[7,1,1,2,2,2,2],"8":[7,5,5,7,5,5,7],
     "9":[7,5,5,7,1,1,7],":":[0,2,2,0,2,2,0],"%":[5,1,2,2,4,4,5]
   };
@@ -40,9 +35,6 @@
     var len=13+digits,gw=9,W=g.getWidth();
     return {gw:gw,adv:len>1?(W-2-gw)/(len-1):0};
   }
-
-  /* Copy the actual header background already on screen. Row 0 contains
-     background only, so this preserves blue/magenta stripes, yellow, or white. */
   function restoreHeaderBg(x0,x1){
     for(var x=x0;x<=x1;x++){
       var c=g.getPixel(x,0);
@@ -144,20 +136,12 @@
       startBatteryTimer();
       scheduleMinuteFix();
       startBlink();
-      /* Core may repaint the blue header about 80 ms after LCD-on. Re-apply
-         the unified overlay after that repaint. */
       syncHeaderOverlay(120);
     }else{
-      stopBlink();
-      stopBatteryTimer();
-      stopMinuteFix();
-      stopTapTimer();
-      stopOverlayTimer();
+      stopBlink();stopBatteryTimer();stopMinuteFix();stopTapTimer();stopOverlayTimer();
     }
   }
   function onFaceUpOverlay(up){
-    /* Core switches to the yellow operation header in its faceUp handler.
-       Re-apply exactly the same colon/battery rules immediately afterward. */
     if(up&&Bangle.isLCDOn())syncHeaderOverlay(20);
   }
   function onCharging(on){
@@ -169,9 +153,7 @@
       paintBattery();
       stopBlink();
       blinkTimer=setTimeout(blinkTick,1000);
-    }else{
-      paintBattery();
-    }
+    }else paintBattery();
   }
 
   function removeWrapperListeners(){
@@ -213,11 +195,7 @@
   }
   function onTouch(button,xy){
     if(!Bangle.isLCDOn()||Bangle.isLocked()){stopTapTimer();return;}
-    if(tapTimer){
-      stopTapTimer();
-      openOrbitSettings();
-      return;
-    }
+    if(tapTimer){stopTapTimer();openOrbitSettings();return;}
     tapTimer=setTimeout(function(){tapTimer=undefined;openCalendar();},450);
   }
 
