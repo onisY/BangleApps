@@ -2,7 +2,7 @@
   "id": "orbit_dev",
   "name": "Orbit Dev",
   "shortName": "OrbitDev",
-  "version": "0.54",
+  "version": "0.55",
   "author": "onisY",
   "description": "Development build of Orbit. Lightweight Sun-Earth-Moon clock for Bangle.js 2 with world-capital, manual and on-demand GPS locations, Japan regional locations, North/South views, daily solar-event buzzes, swipe screenshots, optional calendar launch and BLE reset.",
   "icon": "app.png",
