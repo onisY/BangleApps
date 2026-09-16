@@ -24,21 +24,26 @@
     "9":[7,5,5,7,1,1,7],":":[0,2,2,0,2,2,0],"%":[5,1,2,2,4,4,5]
   };
 
-  function headerMode(){return Bangle.isLocked()?1:2;}
   function layout(){
     var digits=(""+batteryPct).length;
     var len=13+digits,gw=9,W=g.getWidth();
     return {gw:gw,adv:len>1?(W-2-gw)/(len-1):0};
   }
-  function fillHeaderCharBg(x0,x1,mode){
-    var y0=1,y1=21;
-    if(mode===2){
-      g.setColor("#ff0").fillRect(x0,y0,x1,y1);
-    }else{
-      g.setColor("#00f").fillRect(x0,y0,x1,y1);
-      g.setColor("#f0f");
-      for(var x=3;x<g.getWidth();x+=8)if(x>=x0&&x<=x1)g.drawLine(x,y0,x,y1);
+
+  /* Copy the actual header background already on screen.  Row 0 contains
+     background only (no glyph pixels), so copying its per-column colour
+     preserves blue/magenta stripes, yellow, or white exactly. */
+  function restoreHeaderBg(x0,x1){
+    for(var x=x0;x<=x1;x++){
+      var c=g.getPixel(x,0);
+      g.setColor(c).drawLine(x,1,x,21);
     }
+  }
+  function headerFgAt(x){
+    var c=g.getPixel(x,0);
+    /* Bangle.js 2 3-bit colours: yellow/white backgrounds need black text;
+       blue or magenta backgrounds need white text. */
+    return (c===6||c===7)?"#000":"#fff";
   }
   function drawHeaderChar(ch,bx,fg){
     var rows=FONT3[ch];if(!rows)return;
@@ -53,21 +58,18 @@
   }
   function paintColon(){
     if(!Bangle.isLCDOn())return;
-    var L=layout(),mode=headerMode(),fg=mode===2?"#000":"#fff";
-    var bx=1+Math.round(8*L.adv);
-    fillHeaderCharBg(bx,bx+L.gw-1,mode);
-    if(blinkOn)drawHeaderChar(":",bx,fg);
+    var L=layout(),bx=1+Math.round(8*L.adv);
+    restoreHeaderBg(bx,bx+L.gw-1);
+    if(blinkOn)drawHeaderChar(":",bx,headerFgAt(bx));
   }
   function paintBattery(){
     if(!Bangle.isLCDOn())return;
-    var L=layout(),mode=headerMode(),normalFg=mode===2?"#000":"#fff";
-    var btxt=(""+batteryPct)+"%";
+    var L=layout(),btxt=(""+batteryPct)+"%";
     var show=!charging||blinkOn;
-    var fg=batteryPct<=20?"#f00":normalFg;
     for(var i=0;i<btxt.length;i++){
       var bx=1+Math.round((12+i)*L.adv);
-      fillHeaderCharBg(bx,bx+L.gw-1,mode);
-      if(show)drawHeaderChar(btxt[i],bx,fg);
+      restoreHeaderBg(bx,bx+L.gw-1);
+      if(show)drawHeaderChar(btxt[i],bx,batteryPct<=20?"#f00":headerFgAt(bx));
     }
   }
 
@@ -78,8 +80,6 @@
     blinkOn=!blinkOn;
     paintColon();
     if(charging)paintBattery();
-    /* Schedule from the actual execution time.  A delayed frame therefore
-       never causes a fast catch-up flash. */
     blinkTimer=setTimeout(blinkTick,1000);
   }
   function startBlink(){
@@ -96,7 +96,7 @@
     if(!Bangle.isLCDOn())return;
     batteryPct=E.getBattery();
     paintBattery();
-    batteryTimer=setTimeout(batteryTick,300000); /* 5 min */
+    batteryTimer=setTimeout(batteryTick,300000);
   }
   function startBatteryTimer(){
     stopBatteryTimer();
@@ -113,8 +113,6 @@
     minuteFixTimer=setTimeout(function(){
       minuteFixTimer=undefined;
       if(!Bangle.isLCDOn())return;
-      /* Core redraws the header each minute using its legacy battery text.
-         Restore the cached NN% format without re-sampling the battery. */
       paintBattery();
       paintColon();
       scheduleMinuteFix();
@@ -136,7 +134,6 @@
     charging=!!on;
     if(!Bangle.isLCDOn())return;
     if(charging){
-      /* Start the charge indication immediately and synchronise it with ':'. */
       blinkOn=true;
       paintColon();
       paintBattery();
