@@ -1,13 +1,32 @@
-/* Orbclo Dev Orbit 0.12 - component render profiler */
+/* Orbclo Dev Orbit 0.13 - optimized Earth night fill */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800;
   var busy=false,killed=false,touchCount=0,transitionTimer,minuteTimer,unlockTimer;
   var SUNX=W-28,SUNY=52,EARTHX=54,EARTHY=116,EARTHR=30;
+  var NIGHTPOLY=[],TERM=[];
 
   function clear(t){if(t)clearTimeout(t);}
   function pad(n){return n<10?"0"+n:""+n;}
   function ms(a,b){return Math.round((b-a)*1000);}
+
+  function buildEarthGeometry(){
+    var dx=SUNX-EARTHX,dy=SUNY-EARTHY;
+    var len=Math.sqrt(dx*dx+dy*dy);
+    var nightA=Math.atan2(-dy,-dx);
+    for(var i=0;i<=12;i++){
+      var a=nightA-Math.PI/2+i*Math.PI/12;
+      NIGHTPOLY.push(
+        Math.round(EARTHX+Math.cos(a)*EARTHR),
+        Math.round(EARTHY+Math.sin(a)*EARTHR)
+      );
+    }
+    var tx=-dy/len,ty=dx/len;
+    TERM=[
+      Math.round(EARTHX-tx*(EARTHR-1)),Math.round(EARTHY-ty*(EARTHR-1)),
+      Math.round(EARTHX+tx*(EARTHR-1)),Math.round(EARTHY+ty*(EARTHR-1))
+    ];
+  }
 
   function drawHeader(){
     var d=new Date(),bat=E.getBattery();
@@ -30,21 +49,9 @@
   }
 
   function drawEarth(){
-    var dx=SUNX-EARTHX,dy=SUNY-EARTHY;
     g.setColor(CYAN).fillCircle(EARTHX,EARTHY,EARTHR);
-    g.setColor(DARKBLUE);
-    for(var yy=-EARTHR;yy<=EARTHR;yy++){
-      var span=Math.floor(Math.sqrt(Math.max(0,EARTHR*EARTHR-yy*yy)));
-      if(span<=0)continue;
-      var cut=-yy*dy/dx;
-      var end=Math.min(span,Math.floor(cut-0.5));
-      if(end>=-span)g.drawLine(EARTHX-span,EARTHY+yy,EARTHX+end,EARTHY+yy);
-    }
-    var len=Math.sqrt(dx*dx+dy*dy),tx=-dy/len,ty=dx/len;
-    g.setColor(WHITE).drawLine(
-      Math.round(EARTHX-tx*(EARTHR-1)),Math.round(EARTHY-ty*(EARTHR-1)),
-      Math.round(EARTHX+tx*(EARTHR-1)),Math.round(EARTHY+ty*(EARTHR-1))
-    );
+    g.setColor(DARKBLUE).fillPoly(NIGHTPOLY);
+    g.setColor(WHITE).drawLine(TERM[0],TERM[1],TERM[2],TERM[3]);
     g.setColor(WHITE).drawCircle(EARTHX,EARTHY,EARTHR);
   }
 
@@ -99,6 +106,7 @@
     try{Bangle.removeListener("lock",onLock);}catch(e){}
   }
 
+  buildEarthGeometry();
   try{Bangle.setUI({mode:"custom",touch:onTouch,btn:function(){if(!busy)Bangle.showLauncher();},remove:cleanup});}catch(e){}
   Bangle.on("lock",onLock);
   try{Bangle.setLocked(false);}catch(e){}
