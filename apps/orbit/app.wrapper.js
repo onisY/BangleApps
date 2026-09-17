@@ -47,6 +47,13 @@
     blinkTimer=setTimeout(blinkTick,1000);
   }
   function stopTapTimer(){if(tapTimer){clearTimeout(tapTimer);tapTimer=undefined;}tapCount=0;}
+  function showTransition(){
+    if(!Bangle.isLCDOn())return;
+    try{
+      g.reset().setBgColor(0x0010).setColor(0x0010).clear();
+      if(g.flip)g.flip();
+    }catch(e){}
+  }
 
   function buildCore(){
     var core=Storage.read("orbit.core.js");
@@ -98,9 +105,10 @@
 
   function openCalendar(){
     if(leaving||mode!=="orbit")return;
+    showTransition();
     stopTapTimer();stopBlink();restoreFillCircle();mode="calendar";
     var focus=state.hasSelection?sceneDate():new Date();
-    calendar.start({focusDate:focus,selectedDate:state.hasSelection?focus:undefined,onReturn:function(d){setDateFromCalendar(d);startOrbit();}});
+    calendar.start({focusDate:focus,selectedDate:state.hasSelection?focus:undefined,onReturn:function(d){showTransition();setDateFromCalendar(d);startOrbit();}});
     releaseOrbitHelpers();
   }
 
@@ -112,9 +120,10 @@
     if(menu["< Back"]&&!menu["Back to Orbit"])menu["Back to Orbit"]=menu["< Back"];
   }
 
-  function settingsBack(){cleanupSettingsHelper();restoreSettingsMenu();startOrbit();}
+  function settingsBack(){showTransition();cleanupSettingsHelper();restoreSettingsMenu();startOrbit();}
   function openSettings(){
     if(leaving||mode!=="orbit")return;
+    showTransition();
     stopTapTimer();stopBlink();restoreFillCircle();mode="settings";
     settingsShowMenuOriginal=E.showMenu;
     E.showMenu=function(menu){if(menu&&menu[""]&&menu[""].title==="Orbit")calendarConfigMenu(menu);return settingsShowMenuOriginal(menu);};
@@ -161,7 +170,7 @@
     Bangle.removeListener("lcdPower",onLCD);Bangle.removeListener("charging",onCharging);Bangle.removeListener("touch",onTouch);Bangle.removeListener("swipe",onSwipe);
     restoreFillCircle();releaseOrbitHelpers();try{delete Bangle._orbitSceneDate;}catch(e){}
   }
-  function exitToLauncher(){if(leaving)return;leaving=true;controllerCleanup();if(originalLauncher)originalLauncher();}
+  function exitToLauncher(){if(leaving)return;showTransition();leaving=true;controllerCleanup();if(originalLauncher)originalLauncher();}
 
   useOrbitFillCircle();eval(buildCore());
   try{headerCharge(Bangle.isCharging());}catch(e){}
