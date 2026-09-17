@@ -1,0 +1,23 @@
+{
+  "id": "orbclo_dev",
+  "name": "Orbclo Dev",
+  "shortName": "OrbcloDev",
+  "version": "0.01",
+  "author": "onisY",
+  "description": "Development channel for Orbclo. Used for experimental changes before promotion to the public Orbclo app.",
+  "icon": "app.png",
+  "type": "clock",
+  "tags": "clock,science,astronomy,moon,calendar,development",
+  "supports": ["BANGLEJS2"],
+  "readme": "README.md",
+  "allow_emulator": true,
+  "storage": [
+    {"name":"orbclo_dev.app.js","url":"app.js"},
+    {"name":"orbclo_dev.core.js","url":"core.js"},
+    {"name":"orbclo_dev.img","url":"app-icon.js","evaluate":true}
+  ],
+  "data": [
+    {"name":"orbclo_dev.json"},
+    {"name":"orbclo_devshot.json"}
+  ]
+}
