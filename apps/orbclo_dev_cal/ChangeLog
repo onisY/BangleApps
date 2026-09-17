@@ -1,0 +1,1 @@
+0.01: Isolated five-week calendar test. Tests rendering, date selection, blinking and five-week swipes without Orbit/settings integration.

@@ -1,0 +1,1 @@
+0.01: Isolated settings-menu test based on the old Orbit settings structure. GPS and full location database are intentionally deferred until menu/storage behavior is verified.
