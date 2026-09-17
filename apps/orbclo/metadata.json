@@ -1,0 +1,26 @@
+{
+  "id": "orbclo",
+  "name": "Orbclo",
+  "shortName": "Orbclo",
+  "version": "0.01",
+  "author": "onisY",
+  "description": "Fresh lightweight Sun-Earth-Moon clock with an integrated five-week calendar, fast in-app date switching, combined settings, manual/GPS location, solar event buzzes and screenshots.",
+  "icon": "app.png",
+  "type": "clock",
+  "tags": "clock,science,astronomy,moon,calendar",
+  "supports": ["BANGLEJS2"],
+  "readme": "README.md",
+  "allow_emulator": true,
+  "storage": [
+    {"name":"orbclo.app.js","url":"app.js"},
+    {"name":"orbclo.img","url":"app-icon.js","evaluate":true}
+  ],
+  "data": [
+    {"name":"orbclo.json"},
+    {"name":"orbcloshot.json"},
+    {"name":"oc00.bmp"},{"name":"oc01.bmp"},{"name":"oc02.bmp"},{"name":"oc03.bmp"},{"name":"oc04.bmp"},
+    {"name":"oc05.bmp"},{"name":"oc06.bmp"},{"name":"oc07.bmp"},{"name":"oc08.bmp"},{"name":"oc09.bmp"},
+    {"name":"oc10.bmp"},{"name":"oc11.bmp"},{"name":"oc12.bmp"},{"name":"oc13.bmp"},{"name":"oc14.bmp"},
+    {"name":"oc15.bmp"},{"name":"oc16.bmp"},{"name":"oc17.bmp"},{"name":"oc18.bmp"},{"name":"oc19.bmp"}
+  ]
+}
