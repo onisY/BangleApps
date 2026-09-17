@@ -193,8 +193,14 @@
     function dateAt(xy){if(!xy||xy.x<0||xy.x>=W||xy.y<48||xy.y>=H)return undefined;var c=Math.floor(xy.x*7/W),r=Math.floor((xy.y-48)*5/(H-48));if(c<0||c>6||r<0||r>4)return undefined;return addDays(pageStart,r*7+c);}
     function selectAt(xy){var old=selectedIndex(),d=dateAt(xy);selected=d?copyDate(d):undefined;blinkWhite=true;if(old>=0)drawCell(old);var ni=selectedIndex();if(ni>=0)drawCell(ni);if(selected)startBlink();else stopBlink();}
     function touch(xy){
-      if(!active)return;armAuto();tapCount++;lastXY=xy;clearTimer(tapTimer);
-      tapTimer=setTimeout(function(){var n=tapCount,xy0=lastXY;tapTimer=undefined;tapCount=0;lastXY=undefined;if(!active)return;if(n===1)returnToOrbit();else if(n===2)selectAt(xy0);},400);
+      if(!active)return;armAuto();
+      if(tapTimer){
+        clearTimer(tapTimer);tapTimer=undefined;tapCount=0;lastXY=undefined;
+        selectAt(xy);
+        return;
+      }
+      tapCount=1;lastXY=xy;
+      tapTimer=setTimeout(function(){tapTimer=undefined;tapCount=0;lastXY=undefined;if(active)returnToOrbit();},400);
     }
     function swipe(lr,ud){if(!active||!ud)return;clearTaps();armAuto();pageStart=addDays(pageStart,ud<0?35:-35);drawCalendar();}
     function start(opts){
