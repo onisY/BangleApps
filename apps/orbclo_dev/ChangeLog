@@ -1,1 +1,2 @@
+0.02: Fix touch handling so Orbclo accepts taps even while the watch is locked, and add an input-busy gate so taps/swipes/button presses received during screen transitions or heavy redraws are discarded instead of being replayed afterward.
 0.01: Initial Orbclo Dev channel created from the public Orbclo 0.01 baseline. Development state, GPS tag and screenshots are isolated from the public app.
