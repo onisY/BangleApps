@@ -1,1 +1,11 @@
+0.11: Shorten the diagnostic navy transition from 400 ms to 80 ms and display measured scene render time.
+0.10: Align the Earth terminator geometrically to the Earth-to-Sun direction.
+0.09: Make the fixed Earth day/night split clearly visible with dark-blue night, cyan day and a white terminator.
+0.08: Add a fixed Earth day/night terminator stage.
+0.07: Add a simple Earth disk while preserving the proven input/header path.
+0.06: Add the Sun display while preserving the proven input/header path.
+0.05: Restore the proven minimal input/header baseline after the 0.04 astronomy regression.
+0.04: Attempt to restore the astronomy scene; reverted after a startup regression on hardware.
+0.03: Minimal unlocked touch/header diagnostic; confirmed stable on hardware.
+0.02: Register touch through custom setUI, hold the navy transition visibly, and restore the header.
 0.01: Isolated Orbit-screen test. No calendar or settings integration. Touch only performs an immediate navy transition/self-redraw stress test.
