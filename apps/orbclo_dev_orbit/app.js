@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.10 - proven baseline + Sun-aligned Earth terminator */
+/* Orbclo Dev Orbit 0.11 - proven baseline + faster transition + render timing */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800;
@@ -42,7 +42,6 @@
       if(end>=-span)g.drawLine(EARTHX-span,EARTHY+yy,EARTHX+end,EARTHY+yy);
     }
 
-    /* Visible test terminator: line through Earth center, perpendicular to Earth->Sun. */
     var len=Math.sqrt(dx*dx+dy*dy),tx=-dy/len,ty=dx/len;
     g.setColor(WHITE).drawLine(
       Math.round(EARTHX-tx*(EARTHR-1)),Math.round(EARTHY-ty*(EARTHR-1)),
@@ -52,11 +51,13 @@
   }
 
   function drawBase(){
+    var t0=getTime();
     g.reset().setBgColor(BLACK).setColor(BLACK).clear();
     drawSun();
     drawEarth();
-    g.setColor(WHITE).setBgColor(BLACK).setFont("Vector",13).setFontAlign(0,0).drawString("Sun-aligned 0.10",W>>1,H-22);
     drawHeader();
+    var ms=Math.round((getTime()-t0)*1000);
+    g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(0,0).drawString("draw "+ms+" ms",W>>1,H-12);
     try{g.flip();}catch(e){}
     busy=false;
   }
@@ -68,7 +69,7 @@
     g.setColor(WHITE).setBgColor(NAVY).setFont("Vector",24).setFontAlign(0,0).drawString("TOUCH "+touchCount,W>>1,H>>1);
     try{g.flip();}catch(e){}
     clear(transitionTimer);
-    transitionTimer=setTimeout(function(){transitionTimer=undefined;if(!killed)drawBase();},400);
+    transitionTimer=setTimeout(function(){transitionTimer=undefined;if(!killed)drawBase();},80);
   }
 
   function onTouch(){
