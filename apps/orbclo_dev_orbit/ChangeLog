@@ -1,3 +1,4 @@
+0.14: Add current-time solar azimuth/elevation calculation for the default Chiyoda coordinates and profile the astronomy calculation separately.
 0.13: Replace Earth night-side scanline rendering with one precomputed semicircle polygon fill and keep per-component timing.
 0.12: Add per-component render timing for screen clear, Sun, Earth, header and total redraw.
 0.11: Shorten the diagnostic navy transition from 400 ms to 80 ms and display measured scene render time.
