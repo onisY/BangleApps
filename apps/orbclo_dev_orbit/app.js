@@ -1,8 +1,9 @@
-/* Orbclo Dev Orbit 0.09 - proven baseline + Sun + obvious Earth day/night */
+/* Orbclo Dev Orbit 0.10 - proven baseline + Sun-aligned Earth terminator */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800;
   var busy=false,killed=false,touchCount=0,transitionTimer,minuteTimer,unlockTimer;
+  var SUNX=W-28,SUNY=52,EARTHX=54,EARTHY=116,EARTHR=30;
 
   function clear(t){if(t)clearTimeout(t);}
   function pad(n){return n<10?"0"+n:""+n;}
@@ -18,35 +19,43 @@
   }
 
   function drawSun(){
-    var x=W-28,y=52,r=6;
+    var r=6;
     g.setColor(ORANGE);
     for(var i=0;i<8;i++){
       var a=i*Math.PI/4;
-      g.drawLine(Math.round(x+Math.cos(a)*(r+1)),Math.round(y+Math.sin(a)*(r+1)),Math.round(x+Math.cos(a)*(r+4)),Math.round(y+Math.sin(a)*(r+4)));
+      g.drawLine(Math.round(SUNX+Math.cos(a)*(r+1)),Math.round(SUNY+Math.sin(a)*(r+1)),Math.round(SUNX+Math.cos(a)*(r+4)),Math.round(SUNY+Math.sin(a)*(r+4)));
     }
-    g.setColor(YELLOW).fillCircle(x,y,r);
+    g.setColor(YELLOW).fillCircle(SUNX,SUNY,r);
   }
 
   function drawEarth(){
-    var x=54,y=116,r=30;
-    g.setColor(CYAN).fillCircle(x,y,r);
+    var dx=SUNX-EARTHX,dy=SUNY-EARTHY;
+    g.setColor(CYAN).fillCircle(EARTHX,EARTHY,EARTHR);
 
-    /* Diagnostic fixed terminator: left = night, right = day. */
+    /* Night side is the half of the disk facing away from the Sun. */
     g.setColor(DARKBLUE);
-    for(var yy=-r;yy<=r;yy++){
-      var span=Math.floor(Math.sqrt(Math.max(0,r*r-yy*yy)));
-      if(span>0)g.drawLine(x-span,y+yy,x-1,y+yy);
+    for(var yy=-EARTHR;yy<=EARTHR;yy++){
+      var span=Math.floor(Math.sqrt(Math.max(0,EARTHR*EARTHR-yy*yy)));
+      if(span<=0)continue;
+      var cut=-yy*dy/dx;
+      var end=Math.min(span,Math.floor(cut-0.5));
+      if(end>=-span)g.drawLine(EARTHX-span,EARTHY+yy,EARTHX+end,EARTHY+yy);
     }
 
-    g.setColor(WHITE).drawLine(x,y-r+1,x,y+r-1);
-    g.setColor(WHITE).drawCircle(x,y,r);
+    /* Visible test terminator: line through Earth center, perpendicular to Earth->Sun. */
+    var len=Math.sqrt(dx*dx+dy*dy),tx=-dy/len,ty=dx/len;
+    g.setColor(WHITE).drawLine(
+      Math.round(EARTHX-tx*(EARTHR-1)),Math.round(EARTHY-ty*(EARTHR-1)),
+      Math.round(EARTHX+tx*(EARTHR-1)),Math.round(EARTHY+ty*(EARTHR-1))
+    );
+    g.setColor(WHITE).drawCircle(EARTHX,EARTHY,EARTHR);
   }
 
   function drawBase(){
     g.reset().setBgColor(BLACK).setColor(BLACK).clear();
     drawSun();
     drawEarth();
-    g.setColor(WHITE).setBgColor(BLACK).setFont("Vector",13).setFontAlign(0,0).drawString("Day/night stage 0.09",W>>1,H-22);
+    g.setColor(WHITE).setBgColor(BLACK).setFont("Vector",13).setFontAlign(0,0).drawString("Sun-aligned 0.10",W>>1,H-22);
     drawHeader();
     try{g.flip();}catch(e){}
     busy=false;
