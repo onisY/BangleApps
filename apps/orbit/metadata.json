@@ -2,7 +2,7 @@
   "id": "orbit",
   "name": "Orbit",
   "shortName": "Orbit",
-  "version": "0.61",
+  "version": "0.62",
   "author": "onisY",
   "description": "Sun-Earth-Moon clock for Bangle.js 2 with an integrated 5-week calendar, shared date selection, combined settings, location modes, North/South views, solar-event buzzes and screenshots.",
   "icon": "app.png",
