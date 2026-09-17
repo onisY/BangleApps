@@ -4,7 +4,7 @@
   "shortName":"OrbOrbit",
   "version":"0.09",
   "author":"onisY",
-  "description":"Proven Orbclo input/header baseline with Sun and an explicitly visible fixed Earth day/night split for staged regression testing. No dynamic astronomy/Moon/calendar/settings integration yet.",
+  "description":"Staged regression test using the proven Orbclo input/header path, with Sun and an explicitly visible fixed Earth day/night split. No dynamic astronomy/Moon/calendar/settings integration yet.",
   "icon":"app.png",
   "type":"clock",
   "tags":"clock,development,test",
