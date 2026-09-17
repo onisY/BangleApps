@@ -1,7 +1,7 @@
-/* Orbclo Dev Orbit 0.08 - proven baseline + Sun + Earth + fixed day/night */
+/* Orbclo Dev Orbit 0.09 - proven baseline + Sun + obvious Earth day/night */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
-  var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800;
+  var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800;
   var busy=false,killed=false,touchCount=0,transitionTimer,minuteTimer,unlockTimer;
 
   function clear(t){if(t)clearTimeout(t);}
@@ -31,13 +31,14 @@
     var x=54,y=116,r=30;
     g.setColor(CYAN).fillCircle(x,y,r);
 
-    /* Fixed test terminator: left hemisphere = night, right = day. */
-    g.setColor(BLACK);
+    /* Diagnostic fixed terminator: left = night, right = day. */
+    g.setColor(DARKBLUE);
     for(var yy=-r;yy<=r;yy++){
-      var span=Math.floor(Math.sqrt(r*r-yy*yy));
-      g.drawLine(x-span,y+yy,x,y+yy);
+      var span=Math.floor(Math.sqrt(Math.max(0,r*r-yy*yy)));
+      if(span>0)g.drawLine(x-span,y+yy,x-1,y+yy);
     }
 
+    g.setColor(WHITE).drawLine(x,y-r+1,x,y+r-1);
     g.setColor(WHITE).drawCircle(x,y,r);
   }
 
@@ -45,7 +46,7 @@
     g.reset().setBgColor(BLACK).setColor(BLACK).clear();
     drawSun();
     drawEarth();
-    g.setColor(WHITE).setBgColor(BLACK).setFont("Vector",13).setFontAlign(0,0).drawString("Day/night stage 0.08",W>>1,H-22);
+    g.setColor(WHITE).setBgColor(BLACK).setFont("Vector",13).setFontAlign(0,0).drawString("Day/night stage 0.09",W>>1,H-22);
     drawHeader();
     try{g.flip();}catch(e){}
     busy=false;
