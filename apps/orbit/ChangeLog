@@ -1,2 +1,3 @@
 0.01: Initial public release based on the Orbit 0.51 development snapshot.
 0.61: Integrate 5wCal into Orbit as an in-app module with shared date selection, 400 ms single/double tap handling, combined settings, LCD-off transient reset, and clean launcher exit.
+0.62: Immediately fill the display navy when a screen-transition input is accepted, before starting calendar, settings, Orbit return, or launcher transition work.
