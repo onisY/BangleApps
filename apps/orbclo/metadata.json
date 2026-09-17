@@ -18,6 +18,9 @@
   "data": [
     {"name":"orbclo.json"},
     {"name":"orbcloshot.json"},
-    {"name":"oc*.bmp"}
+    {"name":"oc00.bmp"},{"name":"oc01.bmp"},{"name":"oc02.bmp"},{"name":"oc03.bmp"},{"name":"oc04.bmp"},
+    {"name":"oc05.bmp"},{"name":"oc06.bmp"},{"name":"oc07.bmp"},{"name":"oc08.bmp"},{"name":"oc09.bmp"},
+    {"name":"oc10.bmp"},{"name":"oc11.bmp"},{"name":"oc12.bmp"},{"name":"oc13.bmp"},{"name":"oc14.bmp"},
+    {"name":"oc15.bmp"},{"name":"oc16.bmp"},{"name":"oc17.bmp"},{"name":"oc18.bmp"},{"name":"oc19.bmp"}
   ]
 }
