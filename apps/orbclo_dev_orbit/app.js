@@ -1,7 +1,7 @@
-/* Orbclo Dev Orbit 0.05 - restored proven input/header baseline */
+/* Orbclo Dev Orbit 0.06 - proven baseline + Sun only */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
-  var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,CYAN=0x07FF,YELLOW=0xFFE0,RED=0xF800;
+  var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800;
   var busy=false,killed=false,touchCount=0,transitionTimer,minuteTimer,unlockTimer;
 
   function clear(t){if(t)clearTimeout(t);}
@@ -17,13 +17,20 @@
     g.setFontAlign(1,0).setColor(bat<=20?RED:BLACK).drawString(right,W-3,11);
   }
 
+  function drawSun(){
+    var x=W-28,y=52,r=6;
+    g.setColor(ORANGE);
+    for(var i=0;i<8;i++){
+      var a=i*Math.PI/4;
+      g.drawLine(Math.round(x+Math.cos(a)*(r+1)),Math.round(y+Math.sin(a)*(r+1)),Math.round(x+Math.cos(a)*(r+4)),Math.round(y+Math.sin(a)*(r+4)));
+    }
+    g.setColor(YELLOW).fillCircle(x,y,r);
+  }
+
   function drawBase(){
     g.reset().setBgColor(BLACK).setColor(BLACK).clear();
-    g.setColor(YELLOW).fillCircle(W-28,52,7);
-    g.setColor(CYAN).fillCircle(54,116,30);
-    g.setColor(BLACK).fillCircle(46,116,24);
-    g.setColor(WHITE).drawCircle(54,116,30);
-    g.setColor(WHITE).setBgColor(BLACK).setFont("Vector",14).setFontAlign(0,0).drawString("Orbit input test",W>>1,H-22);
+    drawSun();
+    g.setColor(WHITE).setBgColor(BLACK).setFont("Vector",14).setFontAlign(0,0).drawString("Sun stage 0.06",W>>1,H-22);
     drawHeader();
     try{g.flip();}catch(e){}
     busy=false;
