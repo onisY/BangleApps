@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.11 - proven baseline + faster transition + render timing */
+/* Orbclo Dev Orbit 0.12 - component render profiler */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800;
@@ -7,6 +7,7 @@
 
   function clear(t){if(t)clearTimeout(t);}
   function pad(n){return n<10?"0"+n:""+n;}
+  function ms(a,b){return Math.round((b-a)*1000);}
 
   function drawHeader(){
     var d=new Date(),bat=E.getBattery();
@@ -31,8 +32,6 @@
   function drawEarth(){
     var dx=SUNX-EARTHX,dy=SUNY-EARTHY;
     g.setColor(CYAN).fillCircle(EARTHX,EARTHY,EARTHR);
-
-    /* Night side is the half of the disk facing away from the Sun. */
     g.setColor(DARKBLUE);
     for(var yy=-EARTHR;yy<=EARTHR;yy++){
       var span=Math.floor(Math.sqrt(Math.max(0,EARTHR*EARTHR-yy*yy)));
@@ -41,7 +40,6 @@
       var end=Math.min(span,Math.floor(cut-0.5));
       if(end>=-span)g.drawLine(EARTHX-span,EARTHY+yy,EARTHX+end,EARTHY+yy);
     }
-
     var len=Math.sqrt(dx*dx+dy*dy),tx=-dy/len,ty=dx/len;
     g.setColor(WHITE).drawLine(
       Math.round(EARTHX-tx*(EARTHR-1)),Math.round(EARTHY-ty*(EARTHR-1)),
@@ -53,12 +51,18 @@
   function drawBase(){
     var t0=getTime();
     g.reset().setBgColor(BLACK).setColor(BLACK).clear();
+    var t1=getTime();
     drawSun();
+    var t2=getTime();
     drawEarth();
+    var t3=getTime();
     drawHeader();
-    var ms=Math.round((getTime()-t0)*1000);
-    g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(0,0).drawString("draw "+ms+" ms",W>>1,H-12);
-    try{g.flip();}catch(e){}
+    var t4=getTime();
+
+    var c=ms(t0,t1),s=ms(t1,t2),e=ms(t2,t3),h=ms(t3,t4),tot=ms(t0,t4);
+    g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(0,0);
+    g.drawString("C"+c+" S"+s+" E"+e+" H"+h+" T"+tot,W>>1,H-12);
+    try{g.flip();}catch(err){}
     busy=false;
   }
 
