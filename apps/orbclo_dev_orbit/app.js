@@ -1,7 +1,7 @@
-/* Orbclo Dev Orbit 0.06 - proven baseline + Sun only */
+/* Orbclo Dev Orbit 0.07 - proven baseline + Sun + Earth only */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
-  var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800;
+  var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800;
   var busy=false,killed=false,touchCount=0,transitionTimer,minuteTimer,unlockTimer;
 
   function clear(t){if(t)clearTimeout(t);}
@@ -27,10 +27,17 @@
     g.setColor(YELLOW).fillCircle(x,y,r);
   }
 
+  function drawEarth(){
+    var x=54,y=116,r=30;
+    g.setColor(CYAN).fillCircle(x,y,r);
+    g.setColor(WHITE).drawCircle(x,y,r);
+  }
+
   function drawBase(){
     g.reset().setBgColor(BLACK).setColor(BLACK).clear();
     drawSun();
-    g.setColor(WHITE).setBgColor(BLACK).setFont("Vector",14).setFontAlign(0,0).drawString("Sun stage 0.06",W>>1,H-22);
+    drawEarth();
+    g.setColor(WHITE).setBgColor(BLACK).setFont("Vector",14).setFontAlign(0,0).drawString("Earth stage 0.07",W>>1,H-22);
     drawHeader();
     try{g.flip();}catch(e){}
     busy=false;
