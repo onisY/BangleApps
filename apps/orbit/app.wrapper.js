@@ -146,8 +146,13 @@
     if(mode==="calendar"){calendar.touch(xy);return;}
     if(mode!=="orbit")return;
     if(!Bangle.isLCDOn()||Bangle.isLocked()){stopTapTimer();return;}
-    tapCount++;if(tapTimer)clearTimeout(tapTimer);
-    tapTimer=setTimeout(function(){var n=tapCount;tapTimer=undefined;tapCount=0;if(mode!=="orbit")return;if(n===1)openCalendar();else if(n===2)openSettings();},400);
+    if(tapTimer){
+      clearTimeout(tapTimer);tapTimer=undefined;tapCount=0;
+      openSettings();
+      return;
+    }
+    tapCount=1;
+    tapTimer=setTimeout(function(){tapTimer=undefined;tapCount=0;if(mode==="orbit")openCalendar();},400);
   }
   function onSwipe(lr,ud){if(mode==="calendar")calendar.swipe(lr,ud);}
 
