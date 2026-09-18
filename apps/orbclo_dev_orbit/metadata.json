@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.44",
+  "version": "0.45",
   "author": "onisY",
-  "description": "Lightweight Hemisphere Earth texture test: add simplified cached northern-hemisphere land polygons and Arctic cap while retaining the fast seasonal day/night polygon. Diagnostics now show Earth draw time E alongside M/H/T for hardware comparison.",
+  "description": "Hemisphere Earth refinement: make Mexico visible in the North America outline, cut Hudson Bay back out as sea, and reduce per-redraw allocations by reusing fixed screen-coordinate polygon arrays. E/M/H/T timing remains on screen.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,7 +15,7 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app44.js"
+      "url": "app45.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
