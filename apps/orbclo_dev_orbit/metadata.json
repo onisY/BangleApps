@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.46",
+  "version": "0.47",
   "author": "onisY",
-  "description": "Earth rendering performance test: preserve the V0.45 Hemisphere appearance (Mexico and Hudson Bay included) but render the Earth into a small reusable 4-bpp RAM buffer and transfer it to the LCD with one image draw. Lighting polygons are also reused. Direct rendering remains as a fallback.",
+  "description": "Restore the approved V0.45 Earth appearance after the V0.46 paletted-buffer colour/shape distortion. Earth is again drawn directly with native Bangle.js 2 colours, while retaining reusable coastline and seasonal-lighting arrays to avoid redraw-time geometry allocations.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,7 +15,7 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app46.js"
+      "url": "app47.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
