@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.37 - sunrise/sunset rays + seasonal Earth lighting */
+/* Orbclo Dev Orbit 0.38 - tap advances virtual time by 10.5 days */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
@@ -19,12 +19,15 @@
   var TESTLAT=(cfg.lat===undefined?35.694:Math.max(-90,Math.min(90,+cfg.lat)));
   var TESTLON=(cfg.lon===undefined?139.754:Math.max(-180,Math.min(180,+cfg.lon)));
   var LIGHTSPAN=[],LIGHTBX=[],LIGHTBY=[],LIGHTLIMB=[],LIGHTSTEPS=6,LUX=0,LUY=0,LVX=0,LVY=0;
+  var VIRTUAL_OFFSET=0,DEV_STEP_MS=907200000;
 
   function clear(t){if(t)clearTimeout(t);}
   function pad(n){return n<10?"0"+n:""+n;}
   function ms(a,b){return Math.round((b-a)*1000);}
   function rad(d){return d*Math.PI/180;}
   function deg(r){return r*180/Math.PI;}
+  function virtualNowMs(){return Date.now()+VIRTUAL_OFFSET;}
+  function virtualDate(){return new Date(virtualNowMs());}
 
   function layoutBodies(){
     /* The complete Moon envelope is tangent to the physical left and bottom edges. */
@@ -73,7 +76,7 @@
   }
 
   function safeSolar(){
-    try{return solarPosition(new Date(),TESTLAT,TESTLON);}
+    try{return solarPosition(virtualDate(),TESTLAT,TESTLON);}
     catch(e){return {az:0,el:-99,ha:0,dec:0};}
   }
 
@@ -158,7 +161,7 @@
   }
 
   function drawHeader(){
-    var d=new Date();
+    var d=virtualDate();
     var pre=pad(d.getMonth()+1)+"/"+pad(d.getDate())+" "+pad(d.getHours());
     var post=pad(d.getMinutes());
     var x=1,adv=13;
@@ -252,7 +255,7 @@
 
 
   function moonData(){
-    var age=(Date.now()-NEWMOON)/86400000;
+    var age=(virtualNowMs()-NEWMOON)/86400000;
     age=age%SYNODIC;
     if(age<0)age+=SYNODIC;
     var phase=age/SYNODIC;
@@ -341,7 +344,7 @@
     var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),m=ms(t5,t6),h=ms(t6,t7),tot=ms(t0,t7);
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(-1,-1);
     g.drawString("M"+m+" H"+h+" T"+tot,2,26);
-    g.setFont("4x6",1).drawString("V037 E"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
+    g.setFont("4x6",1).drawString("V038 E"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
     try{g.flip();}catch(err){}
     busy=false;
   }
@@ -358,6 +361,7 @@
 
   function onTouch(){
     if(killed||busy)return;
+    VIRTUAL_OFFSET+=DEV_STEP_MS;
     showTouch();
   }
 
