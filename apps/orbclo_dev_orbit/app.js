@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.35 - battery header refinement */
+/* Orbclo Dev Orbit 0.36 - forced-delivery battery header */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
@@ -139,6 +139,7 @@
       .setFont("12x20")
       .setFontAlign(1,-1);
     g.drawString(txt,W-1,2);
+    g.drawString(txt,W-2,2);
   }
 
   function drawHeader(){
@@ -313,7 +314,7 @@
     var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),m=ms(t5,t6),h=ms(t6,t7),tot=ms(t0,t7);
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(-1,-1);
     g.drawString("M"+m+" H"+h+" T"+tot,2,26);
-    g.setFont("4x6",1).drawString("0.35 E"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
+    g.setFont("4x6",1).drawString("V036 E"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
     try{g.flip();}catch(err){}
     busy=false;
   }
