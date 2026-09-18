@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.14 - solar position calculation stage */
+/* Orbclo Dev Orbit 0.15 - observer marker stage */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800;
@@ -43,12 +43,12 @@
     var az=deg(Math.atan2(Math.sin(ha),Math.cos(ha)*Math.sin(la)-Math.tan(dec)*Math.cos(la)))+180;
     if(az<0)az+=360;
     if(az>=360)az-=360;
-    return {az:az,el:el};
+    return {az:az,el:el,ha:ha};
   }
 
   function safeSolar(){
     try{return solarPosition(new Date(),TESTLAT,TESTLON);}
-    catch(e){return {az:0,el:-99};}
+    catch(e){return {az:0,el:-99,ha:0};}
   }
 
   function buildEarthGeometry(){
@@ -96,6 +96,29 @@
     g.setColor(WHITE).drawCircle(EARTHX,EARTHY,EARTHR);
   }
 
+
+  function drawObserver(sol){
+    var sunAng=Math.atan2(SUNY-EARTHY,SUNX-EARTHX);
+    var rr=EARTHR*Math.cos(rad(TESTLAT));
+    var a=sunAng-sol.ha;
+    var px=EARTHX+rr*Math.cos(a),py=EARTHY+rr*Math.sin(a);
+    var rx=px-EARTHX,ry=py-EARTHY;
+    var len=Math.sqrt(rx*rx+ry*ry)||1;
+    var ux=rx/len,uy=ry/len;
+    var hx=-uy,hy=ux;
+    var x=Math.round(px),y=Math.round(py);
+
+    g.setColor(0xF81F).drawLine(
+      Math.round(px-hx*16),Math.round(py-hy*16),
+      Math.round(px+hx*16),Math.round(py+hy*16)
+    );
+    g.setColor(0x07E0).drawLine(
+      x,y,
+      Math.round(px+ux*18),Math.round(py+uy*18)
+    );
+    g.setColor(RED).fillCircle(x,y,2);
+  }
+
   function drawBase(){
     var t0=getTime();
     g.reset().setBgColor(BLACK).setColor(BLACK).clear();
@@ -106,13 +129,15 @@
     var t3=getTime();
     drawEarth();
     var t4=getTime();
-    drawHeader();
+    drawObserver(sol);
     var t5=getTime();
+    drawHeader();
+    var t6=getTime();
 
-    var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),h=ms(t4,t5),tot=ms(t0,t5);
+    var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),h=ms(t5,t6),tot=ms(t0,t6);
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(0,0);
     g.drawString("Az"+Math.round(sol.az)+" El"+Math.round(sol.el),W>>1,H-22);
-    g.drawString("C"+c+" S"+s+" A"+a+" E"+e+" H"+h+" T"+tot,W>>1,H-10);
+    g.drawString("C"+c+" S"+s+" A"+a+" E"+e+" O"+o+" H"+h+" T"+tot,W>>1,H-10);
     try{g.flip();}catch(err){}
     busy=false;
   }
