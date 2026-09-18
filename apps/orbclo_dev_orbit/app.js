@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.28 - Moon phase + unobstructed diagnostics */
+/* Orbclo Dev Orbit 0.29 - larger readable diagnostics */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800;
@@ -264,8 +264,9 @@
     var t7=getTime();
 
     var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),m=ms(t5,t6),h=ms(t6,t7),tot=ms(t0,t7);
-    g.setColor(WHITE).setBgColor(BLACK).setFont("4x6",1).setFontAlign(-1,-1);
-    g.drawString("0.28  M"+m+" H"+h+" T"+tot+"  Age"+moon.age.toFixed(1),2,26);
+    g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(-1,-1);
+    g.drawString("M"+m+" H"+h+" T"+tot,2,26);
+    g.setFont("4x6",1).drawString("0.29 Age "+moon.age.toFixed(1),2,36);
     try{g.flip();}catch(err){}
     busy=false;
   }
