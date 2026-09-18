@@ -1,3 +1,4 @@
+0.16: Add an explicit OBS 0.16 on-screen marker to verify that the new observer-stage app.js is actually delivered to the watch.
 0.15: Add the Chiyoda observer marker, outward green zenith line and magenta local horizon line, with observer draw timing.
 0.14: Add current-time solar azimuth/elevation calculation for the default Chiyoda coordinates and profile the astronomy calculation separately.
 0.13: Replace Earth night-side scanline rendering with one precomputed semicircle polygon fill and keep per-component timing.
