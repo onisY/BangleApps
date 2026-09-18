@@ -1,3 +1,4 @@
+0.23: Keep native 12x20 header rendering, add about 1 px extra character spacing and a 1 px overdraw for a bolder date/time appearance, while preserving differential colon blinking and performance profiling.
 0.22: Replace all custom header glyph construction/buffering with the native 12x20 bitmap font. Keep large date/time and battery digits, use a small percent sign for 100% fit, and blink only the 12x20 colon cell.
 0.21: Keep the 21 px custom header appearance but render it into a 2-bpp RAM buffer and transfer it with one drawImage call; use a prebuilt 10x21 image for colon blinking to eliminate hundreds of LCD fillRect calls.
 0.20: Replace the width-limited Vector header with a compact 5x7 glyph set scaled to 21 px high, keeping date/time/battery uniformly larger and retaining colon-only differential blinking.
