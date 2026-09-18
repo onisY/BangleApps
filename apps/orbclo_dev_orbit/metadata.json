@@ -1,18 +1,31 @@
 {
-  "id":"orbclo_dev_orbit",
-  "name":"Orbclo Dev Orbit",
-  "shortName":"OrbOrbit",
-  "version":"0.15",
-  "author":"onisY",
-  "description":"Staged Orbclo regression test adding the observer marker, outward zenith line and local horizon line from the default Chiyoda coordinates while retaining solar calculation and render profiling.",
-  "icon":"app.png",
-  "type":"clock",
-  "tags":"clock,development,test",
-  "supports":["BANGLEJS2"],
-  "allow_emulator":true,
-  "storage":[
-    {"name":"orbclo_dev_orbit.app.js","url":"app.js"},
-    {"name":"orbclo_dev_orbit.img","url":"app-icon.js","evaluate":true}
+  "id": "orbclo_dev_orbit",
+  "name": "Orbclo Dev Orbit",
+  "shortName": "OrbOrbit",
+  "version": "0.16",
+  "author": "onisY",
+  "description": "Delivery-check build for the observer stage. Shows OBS 0.16 on-screen so the installed app.js version is unmistakable; observer marker, zenith, horizon and timing remain unchanged.",
+  "icon": "app.png",
+  "type": "clock",
+  "tags": "clock,development,test",
+  "supports": [
+    "BANGLEJS2"
   ],
-  "data":[{"name":"orbclo_orbitdev.json"}]
+  "allow_emulator": true,
+  "storage": [
+    {
+      "name": "orbclo_dev_orbit.app.js",
+      "url": "app.js"
+    },
+    {
+      "name": "orbclo_dev_orbit.img",
+      "url": "app-icon.js",
+      "evaluate": true
+    }
+  ],
+  "data": [
+    {
+      "name": "orbclo_orbitdev.json"
+    }
+  ]
 }
