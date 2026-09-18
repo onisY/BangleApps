@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.33 - configurable body sizes + automatic layout */
+/* Orbclo Dev Orbit 0.34 - Moon clearance + full Sun corona */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
@@ -9,10 +9,10 @@
   var SUNR=(cfg.sunSize===undefined?6:Math.max(4,Math.min(15,cfg.sunSize|0)));
   var EARTHR=(cfg.earthSize===undefined?30:Math.max(25,Math.min(50,cfg.earthSize|0)));
   var MOONR=(cfg.moonSize===undefined?7:Math.max(4,Math.min(15,cfg.moonSize|0)));
-  var MOONORBIT=(cfg.moonOrbit===undefined?44:Math.max(40,Math.min(70,cfg.moonOrbit|0)));
-  var minOrbit=EARTHR+MOONR+2;
+  var MOONORBIT=(cfg.moonOrbit===undefined?44:Math.max(40,Math.min(80,cfg.moonOrbit|0)));
+  var minOrbit=EARTHR+2*MOONR;
   if(MOONORBIT<minOrbit)MOONORBIT=minOrbit;
-  var SUNX=0,SUNY=0,EARTHX=0,EARTHY=0;
+  var SUNRAY=4,SUNX=0,SUNY=0,EARTHX=0,EARTHY=0;
   var SYNODIC=29.530588853,NEWMOON=947182440000;
   var MOONLIT=[];
   var TESTLAT=35.694,TESTLON=139.754;
@@ -30,10 +30,11 @@
     EARTHX=env;
     EARTHY=H-1-env;
 
-    /* Keep the Sun visible: tangent to the right edge and to the top edge
-       of the celestial area immediately below the 24 px header. */
-    SUNX=W-1-SUNR;
-    SUNY=24+SUNR;
+    /* Keep the entire corona visible. Its outer tip, not the solar disk,
+       is tangent to the right edge and the celestial area's top edge. */
+    var sunOuter=SUNR+SUNRAY;
+    SUNX=W-1-sunOuter;
+    SUNY=24+sunOuter;
   }
 
   function dayOfYear(d){
@@ -183,7 +184,7 @@
     g.setColor(ORANGE);
     for(var i=0;i<8;i++){
       var a=i*Math.PI/4;
-      g.drawLine(Math.round(SUNX+Math.cos(a)*(r+1)),Math.round(SUNY+Math.sin(a)*(r+1)),Math.round(SUNX+Math.cos(a)*(r+4)),Math.round(SUNY+Math.sin(a)*(r+4)));
+      g.drawLine(Math.round(SUNX+Math.cos(a)*(r+1)),Math.round(SUNY+Math.sin(a)*(r+1)),Math.round(SUNX+Math.cos(a)*(r+SUNRAY)),Math.round(SUNY+Math.sin(a)*(r+SUNRAY)));
     }
     g.setColor(YELLOW).fillCircle(SUNX,SUNY,r);
   }
@@ -297,7 +298,7 @@
     var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),m=ms(t5,t6),h=ms(t6,t7),tot=ms(t0,t7);
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(-1,-1);
     g.drawString("M"+m+" H"+h+" T"+tot,2,26);
-    g.setFont("4x6",1).drawString("0.33 E"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
+    g.setFont("4x6",1).drawString("0.34 E"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
     try{g.flip();}catch(err){}
     busy=false;
   }
