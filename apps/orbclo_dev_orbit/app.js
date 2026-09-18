@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.24 - seasonal curved terminator */
+/* Orbclo Dev Orbit 0.25 - cached seasonal terminator geometry */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800;
@@ -6,6 +6,7 @@
   var colonX=0,colonVisible=true;
   var SUNX=W-28,SUNY=52,EARTHX=54,EARTHY=116,EARTHR=30;
   var TESTLAT=35.694,TESTLON=139.754;
+  var LIGHTV=[],LIGHTSPAN=[],LIGHTSTEPS=12;
 
   function clear(t){if(t)clearTimeout(t);}
   function pad(n){return n<10?"0"+n:""+n;}
@@ -49,6 +50,15 @@
   function safeSolar(){
     try{return solarPosition(new Date(),TESTLAT,TESTLON);}
     catch(e){return {az:0,el:-99,ha:0,dec:0};}
+  }
+
+  function buildLightingCache(){
+    LIGHTV=[];LIGHTSPAN=[];
+    for(var i=0;i<=LIGHTSTEPS;i++){
+      var v=-EARTHR+2*EARTHR*i/LIGHTSTEPS;
+      LIGHTV.push(v);
+      LIGHTSPAN.push(Math.sqrt(Math.max(0,EARTHR*EARTHR-v*v)));
+    }
   }
 
   function drawBoldSpaced(str,x,y,advance,color){
@@ -131,13 +141,12 @@
     var vx=-uy,vy=ux;
     var sd=Math.sin(dec);
     var term=[],night=[];
-    var steps=12,i,v,span,u,x,y;
+    var i,v,span,u,x,y;
 
-    /* Orthographic north-pole view of the spherical solar terminator.
-       u is along the projected Earth->Sun direction, v is perpendicular. */
-    for(i=0;i<=steps;i++){
-      v=-EARTHR+2*EARTHR*i/steps;
-      span=Math.sqrt(Math.max(0,EARTHR*EARTHR-v*v));
+    /* The expensive sqrt(R^2-v^2) values are cached once at startup. */
+    for(i=0;i<=LIGHTSTEPS;i++){
+      v=LIGHTV[i];
+      span=LIGHTSPAN[i];
       u=-sd*span;
       x=Math.round(EARTHX+ux*u+vx*v);
       y=Math.round(EARTHY+uy*u+vy*v);
@@ -145,10 +154,9 @@
       night.push(x,y);
     }
 
-    /* Return along the anti-solar limb. This closes only the night region. */
-    for(i=steps;i>=0;i--){
-      v=-EARTHR+2*EARTHR*i/steps;
-      span=Math.sqrt(Math.max(0,EARTHR*EARTHR-v*v));
+    for(i=LIGHTSTEPS;i>=0;i--){
+      v=LIGHTV[i];
+      span=LIGHTSPAN[i];
       u=-span;
       night.push(
         Math.round(EARTHX+ux*u+vx*v),
@@ -206,7 +214,7 @@
 
     var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),h=ms(t5,t6),tot=ms(t0,t6);
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(0,0);
-    g.drawString("OBS 0.24 D"+Math.round(deg(sol.dec))+" Az"+Math.round(sol.az)+" El"+Math.round(sol.el),W>>1,H-22);
+    g.drawString("OBS 0.25 D"+Math.round(deg(sol.dec))+" Az"+Math.round(sol.az)+" El"+Math.round(sol.el),W>>1,H-22);
     g.drawString("C"+c+" S"+s+" A"+a+" E"+e+" O"+o+" H"+h+" T"+tot,W>>1,H-10);
     try{g.flip();}catch(err){}
     busy=false;
@@ -248,6 +256,7 @@
     try{Bangle.removeListener("lock",onLock);}catch(e){}
   }
 
+  buildLightingCache();
   try{Bangle.setUI({mode:"custom",touch:onTouch,btn:function(){if(!busy)Bangle.showLauncher();},remove:cleanup});}catch(e){}
   Bangle.on("lock",onLock);
   try{Bangle.setLocked(false);}catch(e){}
