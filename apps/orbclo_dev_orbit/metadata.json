@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.42",
+  "version": "0.43",
   "author": "onisY",
-  "description": "Observer-line visibility refinement: make the green zenith line about 2 pixels thick and extend it from the red observer point to about half a Moon radius beyond the lunar orbit. V0.41 lunar performance optimization is retained.",
+  "description": "Zenith-line width refinement: retain the V0.42 length, but render the green zenith as a filled strip with half-width 2 px so its visual thickness matches the red observer marker (radius 2, about 5 px across). V0.41 lunar performance changes remain.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,7 +15,7 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app42.js"
+      "url": "app43.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
