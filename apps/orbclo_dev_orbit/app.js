@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.47 - restore native Earth colors, keep low-allocation geometry */
+/* Orbclo Dev Orbit 0.48 - reduced coastline redraw */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
@@ -52,6 +52,10 @@
   ];
 
   var HEMI_XY=[],HEMI_WATER_XY=[],HEMI_SCREEN=[],HEMI_WATER_SCREEN=[],HEMI_ICE_R=0;
+  /* Post-night white coastline redraw is the expensive part on Bangle.js 2.
+     Keep only the large/diagnostic shapes that materially aid recognition:
+     North America, Greenland, Eurasia and Japan. */
+  var HEMI_COAST=[0,1,2,4];
 
   var VIRTUAL_OFFSET=0,DEV_STEP_MS=907200000;
 
@@ -341,11 +345,15 @@
       g.fillPoly(HEMI_WATER_SCREEN[i]);
     }
 
-    /* Restore the exact native LCD colours used by the approved V0.45 view. */
+    /* Night overlay stays unchanged.  Redraw only the major white coastlines
+       instead of every small land polygon.  Green fills for North Africa,
+       Hokkaido and Great Britain remain, so the overall texture is retained. */
     g.setColor(DARKBLUE).fillPoly(LIGHTNIGHT);
     g.setColor(WHITE);
-    for(i=0;i<HEMI_SCREEN.length;i++)g.drawPoly(HEMI_SCREEN[i],true);
-    for(i=0;i<HEMI_WATER_SCREEN.length;i++)g.drawPoly(HEMI_WATER_SCREEN[i],true);
+    for(i=0;i<HEMI_COAST.length;i++)
+      g.drawPoly(HEMI_SCREEN[HEMI_COAST[i]],true);
+    /* Keep Hudson Bay outlined because it was specifically added for recognition. */
+    g.drawPoly(HEMI_WATER_SCREEN[0],true);
 
     g.fillCircle(EARTHX,EARTHY,HEMI_ICE_R);
     g.drawPoly(LIGHTTERM,false);
@@ -470,7 +478,7 @@
     var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),m=ms(t5,t6),h=ms(t6,t7),tot=ms(t0,t7);
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(-1,-1);
     g.drawString("E"+e+" M"+m+" H"+h+" T"+tot,2,26);
-    g.setFont("4x6",1).drawString("V047 R"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
+    g.setFont("4x6",1).drawString("V048 R"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
     try{g.flip();}catch(err){}
     busy=false;
   }
