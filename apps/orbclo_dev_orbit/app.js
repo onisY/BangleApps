@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.46 - buffered Hemisphere Earth rendering */
+/* Orbclo Dev Orbit 0.47 - restore native Earth colors, keep low-allocation geometry */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
@@ -20,7 +20,6 @@
   var TESTLON=(cfg.lon===undefined?139.754:Math.max(-180,Math.min(180,+cfg.lon)));
   var LIGHTSPAN=[],LIGHTBX=[],LIGHTBY=[],LIGHTLIMB=[],LIGHTSTEPS=6,LUX=0,LUY=0,LVX=0,LVY=0;
   var LIGHTTERM=[],LIGHTNIGHT=[];
-  var EARTHBUF,EARTHIMG,EARTHD=0,EARTHC=0;
 
   /* Lightweight Hemisphere map.  The full Orbit map used many more coastline
      vertices.  At a 25-50 px Earth radius these coarser polygons preserve the
@@ -204,25 +203,6 @@
     }
   }
 
-  function initEarthBuffer(){
-    /* Rendering all land/night/coast operations in RAM and transferring one
-       small paletted bitmap avoids many slow direct LCD polygon operations. */
-    try{
-      EARTHD=EARTHR*2+3;
-      EARTHC=EARTHR+1;
-      EARTHBUF=Graphics.createArrayBuffer(EARTHD,EARTHD,4,{msb:true});
-      EARTHBUF.transparent=0;
-      EARTHBUF.palette=new Uint16Array([
-        0x0000,WHITE,CYAN,DARKBLUE,GREEN,
-        0,0,0,0,0,0,0,0,0,0,0
-      ]);
-      EARTHBUF.setBgColor(0).clear();
-      EARTHIMG=EARTHBUF.asImage();
-    }catch(e){
-      EARTHBUF=undefined;EARTHIMG=undefined;
-    }
-  }
-
   function buildMoonCache(){
     /* Sunlight is parallel to the Earth-Sun line. */
     MOONLIT=[];MOONFAR=[];MOONFAROUT=[];
@@ -335,59 +315,42 @@
     g.setColor(YELLOW).fillCircle(SUNX,SUNY,r);
   }
 
-  function renderEarthTo(q,cx,cy,sol,buffered){
-    buildLightingInto(sol.dec,cx,cy);
+  function drawEarth(sol){
+    /* V0.46's paletted RAM image changed the Bangle.js 2 native 3-bit colour
+       appearance.  Draw directly to the LCD again, but retain the V0.46
+       reusable map/lighting arrays so geometry does not allocate each redraw. */
+    buildLightingInto(sol.dec,EARTHX,EARTHY);
 
-    /* Rotate the cached polar map so the configured longitude lies on the
-       observer meridian used by drawObserver(). */
     var sunAng=Math.atan2(SUNY-EARTHY,SUNX-EARTHX);
     var baseA=sunAng-sol.ha;
     var ca=Math.cos(baseA),sa=Math.sin(baseA);
     var i;
-    var sea=buffered?2:CYAN;
-    var land=buffered?4:GREEN;
-    var night=buffered?3:DARKBLUE;
-    var white=buffered?1:WHITE;
 
-    q.setColor(sea).fillCircle(cx,cy,EARTHR);
-    q.setColor(land);
+    g.setColor(CYAN).fillCircle(EARTHX,EARTHY,EARTHR);
+
+    g.setColor(GREEN);
     for(i=0;i<HEMI_XY.length;i++){
-      mapPolyInto(HEMI_XY[i],HEMI_SCREEN[i],ca,sa,cx,cy);
-      q.fillPoly(HEMI_SCREEN[i]);
+      mapPolyInto(HEMI_XY[i],HEMI_SCREEN[i],ca,sa,EARTHX,EARTHY);
+      g.fillPoly(HEMI_SCREEN[i]);
     }
 
-    q.setColor(sea);
+    /* Hudson Bay remains a cyan sea cutout. */
+    g.setColor(CYAN);
     for(i=0;i<HEMI_WATER_XY.length;i++){
-      mapPolyInto(HEMI_WATER_XY[i],HEMI_WATER_SCREEN[i],ca,sa,cx,cy);
-      q.fillPoly(HEMI_WATER_SCREEN[i]);
+      mapPolyInto(HEMI_WATER_XY[i],HEMI_WATER_SCREEN[i],ca,sa,EARTHX,EARTHY);
+      g.fillPoly(HEMI_WATER_SCREEN[i]);
     }
 
-    q.setColor(night).fillPoly(LIGHTNIGHT);
-    q.setColor(white);
-    for(i=0;i<HEMI_SCREEN.length;i++)q.drawPoly(HEMI_SCREEN[i],true);
-    for(i=0;i<HEMI_WATER_SCREEN.length;i++)q.drawPoly(HEMI_WATER_SCREEN[i],true);
+    /* Restore the exact native LCD colours used by the approved V0.45 view. */
+    g.setColor(DARKBLUE).fillPoly(LIGHTNIGHT);
+    g.setColor(WHITE);
+    for(i=0;i<HEMI_SCREEN.length;i++)g.drawPoly(HEMI_SCREEN[i],true);
+    for(i=0;i<HEMI_WATER_SCREEN.length;i++)g.drawPoly(HEMI_WATER_SCREEN[i],true);
 
-    q.fillCircle(cx,cy,HEMI_ICE_R);
-    q.drawPoly(LIGHTTERM,false);
-    q.drawCircle(cx,cy,EARTHR);
+    g.fillCircle(EARTHX,EARTHY,HEMI_ICE_R);
+    g.drawPoly(LIGHTTERM,false);
+    g.drawCircle(EARTHX,EARTHY,EARTHR);
   }
-
-  function drawEarth(sol){
-    if(EARTHBUF&&EARTHIMG){
-      try{
-        EARTHBUF.setBgColor(0).clear();
-        renderEarthTo(EARTHBUF,EARTHC,EARTHC,sol,true);
-        g.drawImage(EARTHIMG,EARTHX-EARTHC,EARTHY-EARTHC);
-        return;
-      }catch(e){
-        /* Fail open on older firmware: disable buffering and keep the proven
-           V0.45 direct renderer for this and subsequent redraws. */
-        EARTHBUF=undefined;EARTHIMG=undefined;
-      }
-    }
-    renderEarthTo(g,EARTHX,EARTHY,sol,false);
-  }
-
 
   function moonData(){
     var age=(virtualNowMs()-NEWMOON)/86400000;
@@ -507,7 +470,7 @@
     var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),m=ms(t5,t6),h=ms(t6,t7),tot=ms(t0,t7);
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(-1,-1);
     g.drawString("E"+e+" M"+m+" H"+h+" T"+tot,2,26);
-    g.setFont("4x6",1).drawString("V046 R"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
+    g.setFont("4x6",1).drawString("V047 R"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
     try{g.flip();}catch(err){}
     busy=false;
   }
@@ -552,7 +515,6 @@
   layoutBodies();
   buildLightingCache();
   buildEarthMapCache();
-  initEarthBuffer();
   buildMoonCache();
   try{Bangle.setUI({mode:"custom",touch:onTouch,btn:function(){if(!busy)Bangle.showLauncher();},remove:cleanup});}catch(e){}
   Bangle.on("lock",onLock);
