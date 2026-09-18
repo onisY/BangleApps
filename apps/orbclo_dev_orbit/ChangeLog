@@ -1,3 +1,4 @@
+0.28: Add lightweight Moon phase shading and move diagnostics from the bottom edge to a compact line below the header so the lunar orbit remains unobstructed.
 0.27: Add the Moon orbit and current lunar-age position only. New Moon is placed toward the Sun and the Moon moves around Earth with the synodic cycle; phase shading is deferred. Add M timing.
 0.26: Reduce seasonal terminator points from 13 to 7 and cache the fixed Sun-direction basis, projected base points and anti-solar limb, minimizing per-redraw geometry while preserving the curved seasonal boundary.
 0.25: Cache all sqrt(R^2-v^2) terminator span values at startup and reuse them on redraw, preserving the 0.24 seasonal terminator appearance while reducing floating-point cost.
