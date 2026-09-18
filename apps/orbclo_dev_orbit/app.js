@@ -1,24 +1,9 @@
-/* Orbclo Dev Orbit 0.21 - buffered 21px header */
+/* Orbclo Dev Orbit 0.22 - native 12x20 header */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800;
   var busy=false,killed=false,touchCount=0,transitionTimer,minuteTimer,secondTimer,unlockTimer;
-  var colonX=0,colonW=10,colonVisible=true;
-  var HBUF=Graphics.createArrayBuffer(W,24,2,{msb:true});
-  var HIMG={width:W,height:24,bpp:2,buffer:HBUF.buffer,palette:new Uint16Array([WHITE,BLACK,RED,WHITE])};
-  var CBUFON=Graphics.createArrayBuffer(10,21,1,{msb:true});
-  var CBUFOFF=Graphics.createArrayBuffer(10,21,1,{msb:true});
-  var CIMGON={width:10,height:21,bpp:1,buffer:CBUFON.buffer,palette:new Uint16Array([WHITE,BLACK])};
-  var CIMGOFF={width:10,height:21,bpp:1,buffer:CBUFOFF.buffer,palette:new Uint16Array([WHITE,BLACK])};
-  var HDR={
-    '0':[14,17,19,21,25,17,14],'1':[4,12,4,4,4,4,14],
-    '2':[14,17,1,2,4,8,31],'3':[30,1,1,14,1,1,30],
-    '4':[2,6,10,18,31,2,2],'5':[31,16,16,30,1,1,30],
-    '6':[14,16,16,30,17,17,14],'7':[31,1,2,4,8,8,8],
-    '8':[14,17,17,14,17,17,14],'9':[14,17,17,15,1,1,14],
-    '/':[1,2,2,4,8,8,16],':':[0,4,4,0,4,4,0],
-    '%':[17,2,4,4,8,16,17],' ':[0,0,0,0,0,0,0]
-  };
+  var colonX=0,colonVisible=true;
   var SUNX=W-28,SUNY=52,EARTHX=54,EARTHY=116,EARTHR=30;
   var TESTLAT=35.694,TESTLON=139.754;
   var NIGHTPOLY=[],TERM=[];
@@ -85,54 +70,35 @@
     ];
   }
 
-  function drawHdrCharTo(buf,ch,x,y,ci){
-    var rows=HDR[ch]||HDR[' '];
-    buf.setColor(ci);
-    for(var ry=0;ry<7;ry++){
-      var bits=rows[ry];
-      for(var rx=0;rx<5;rx++) if(bits&(16>>rx)){
-        var px=x+rx*2,py=y+ry*3;
-        buf.fillRect(px,py,px+1,py+2);
-      }
-    }
-  }
-
-  function hdrWidth(str){return str.length?str.length*11-1:0;}
-
-  function drawHdrStringTo(buf,str,x,ci){
-    for(var i=0;i<str.length;i++) drawHdrCharTo(buf,str[i],x+i*11,1,ci);
-  }
-
-  function prepareColonImages(){
-    CBUFON.clear();
-    CBUFOFF.clear();
-    drawHdrCharTo(CBUFON,":",0,0,1);
-  }
-
   function drawHeader(){
     var d=new Date(),bat=E.getBattery();
     var pre=pad(d.getMonth()+1)+"/"+pad(d.getDate())+" "+pad(d.getHours());
     var post=pad(d.getMinutes());
-    var right=bat+"%";
-    var rw=hdrWidth(right);
-    var x=2;
+    var x=1;
 
-    HBUF.clear();
-    drawHdrStringTo(HBUF,pre,x,1);
-    colonX=x+hdrWidth(pre)+1;
-    colonW=10;
+    g.setColor(WHITE).fillRect(0,0,W-1,23);
+    g.setBgColor(WHITE).setColor(BLACK).setFont("12x20").setFontAlign(-1,-1);
+
+    g.drawString(pre,x,2);
+    colonX=x+g.stringWidth(pre);
     colonVisible=(d.getSeconds()%2)===0;
-    if(colonVisible)drawHdrCharTo(HBUF,":",colonX,1,1);
-    drawHdrStringTo(HBUF,post,colonX+11,1);
+    if(colonVisible)g.drawString(":",colonX,2);
+    g.drawString(post,colonX+g.stringWidth(":"),2);
 
-    var rx=W-2-rw;
-    drawHdrStringTo(HBUF,right,rx,bat<=20?2:1);
-    g.drawImage(HIMG,0,0);
+    /* Battery digits stay full-height; a small percent sign leaves room for 100%. */
+    var pctX=W-7;
+    g.setFont("12x20").setFontAlign(1,-1).setColor(bat<=20?RED:BLACK);
+    g.drawString(""+bat,pctX-1,2);
+    g.setFont("6x8").setFontAlign(-1,-1).drawString("%",pctX,11);
   }
 
   function drawColon(show){
     if(killed||busy)return;
-    g.drawImage(show?CIMGON:CIMGOFF,colonX,1);
+    g.setColor(WHITE).fillRect(colonX,2,colonX+11,21);
+    if(show){
+      g.setBgColor(WHITE).setColor(BLACK).setFont("12x20").setFontAlign(-1,-1);
+      g.drawString(":",colonX,2);
+    }
     colonVisible=show;
   }
 
@@ -205,7 +171,7 @@
 
     var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),h=ms(t5,t6),tot=ms(t0,t6);
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(0,0);
-    g.drawString("OBS 0.21  Az"+Math.round(sol.az)+" El"+Math.round(sol.el),W>>1,H-22);
+    g.drawString("OBS 0.22  Az"+Math.round(sol.az)+" El"+Math.round(sol.el),W>>1,H-22);
     g.drawString("C"+c+" S"+s+" A"+a+" E"+e+" O"+o+" H"+h+" T"+tot,W>>1,H-10);
     try{g.flip();}catch(err){}
     busy=false;
@@ -248,7 +214,6 @@
   }
 
   buildEarthGeometry();
-  prepareColonImages();
   try{Bangle.setUI({mode:"custom",touch:onTouch,btn:function(){if(!busy)Bangle.showLauncher();},remove:cleanup});}catch(e){}
   Bangle.on("lock",onLock);
   try{Bangle.setLocked(false);}catch(e){}
