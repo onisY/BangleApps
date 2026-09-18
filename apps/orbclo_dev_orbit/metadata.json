@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.40",
+  "version": "0.41",
   "author": "onisY",
-  "description": "Lunar visibility refinement: the Moon hemisphere facing away from Earth is erased through the outer rim, and only the Earth-facing semicircular limb is outlined. Solar yellow/navy illumination and the +10.5-day development tap stepping remain enabled.",
+  "description": "Performance refinement of V0.40 lunar clipping: reuse Moon orbital direction from moonData, cache the +1 px erase arc, and combine far/near arc transforms to avoid redraw-time sqrt/division while preserving the same visible Moon.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,7 +15,7 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app40.js"
+      "url": "app41.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
