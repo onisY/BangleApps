@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.52",
+  "version": "0.53",
   "author": "onisY",
-  "description": "Moon performance optimization: keep the V0.51 appearance and fast Earth path, but replace per-point Moon illumination/far-side/near-limb JavaScript transforms with Graphics.transformVertices using three reusable matrices. Cache the fixed Earth-to-Sun screen angle. Q1/Q0 reports whether the native Moon path is active.",
+  "description": "Moon geometry cache: retain V0.52 native Moon transforms, but reuse the transformed yellow/far-side/near-limb polygons for 30-minute intervals because Moon motion is subpixel over that period. Development +10.5-day taps invalidate immediately. K1/K0 reports cache hit/miss.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,7 +15,7 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app52.js"
+      "url": "app53.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
