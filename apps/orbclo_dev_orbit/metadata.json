@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.35",
+  "version": "0.36",
   "author": "onisY",
-  "description": "Header battery refinement: remove the percent sign, right-align the battery number at the same 12x20 height as the clock, show green normally and red at 20% or below, and blink the battery in phase with the clock colon while charging.",
+  "description": "Forced-delivery battery header test: battery number only, right-aligned in bold native 12x20, green normally and red at 20% or below, blinking in phase with the clock colon while charging. Uses a cache-busting app36.js payload.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,7 +15,7 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app.js"
+      "url": "app36.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
