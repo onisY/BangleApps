@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.52 - native Moon vertex transforms */
+/* Orbclo Dev Orbit 0.53 - cached Moon raster geometry */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
@@ -18,6 +18,8 @@
   var MOONLIT=[],MOONFAR=[],MOONFAROUT=[];
   var MOON_LIT_MAT=[1,0,0,1,0,0],MOON_FAR_MAT=[1,0,0,1,0,0],MOON_NEAR_MAT=[1,0,0,1,0,0];
   var MOON_NATIVE=(typeof g.transformVertices==="function"),SUNANG=0;
+  var MOON_CACHE_MS=1800000,MOON_CACHE_BUCKET=-1,MOON_CACHE_DATA;
+  var MOON_CACHE_LIT,MOON_CACHE_FAR,MOON_CACHE_NEAR,MOON_CACHE_HIT=false;
   var TESTLAT=(cfg.lat===undefined?35.694:Math.max(-90,Math.min(90,+cfg.lat)));
   var TESTLON=(cfg.lon===undefined?139.754:Math.max(-180,Math.min(180,+cfg.lon)));
   var LIGHTSPAN=[],LIGHTBX=[],LIGHTBY=[],LIGHTLIMB=[],LIGHTSTEPS=6,LUX=0,LUY=0,LVX=0,LVY=0;
@@ -374,8 +376,9 @@
     g.drawCircle(EARTHX,EARTHY,EARTHR);
   }
 
-  function moonData(){
-    var age=(virtualNowMs()-NEWMOON)/86400000;
+  function moonData(nowMs){
+    if(nowMs===undefined)nowMs=virtualNowMs();
+    var age=(nowMs-NEWMOON)/86400000;
     age=age%SYNODIC;
     if(age<0)age+=SYNODIC;
     var phase=age/SYNODIC;
@@ -392,17 +395,11 @@
     };
   }
 
-  function drawMoon(){
-    var m=moonData();
-
-    g.setColor(0x8410).drawCircle(EARTHX,EARTHY,MOONORBIT);
-    g.setColor(NAVY).fillCircle(m.x,m.y,MOONR);
-
+  function rebuildMoonGeometry(nowMs){
+    var m=moonData(nowMs);
     var lit,far,near,i,j,fx,fy,nx,ny;
     var ux=m.ux,uy=m.uy,vx=m.vx,vy=m.vy;
 
-    /* Use the same native vertex helper that cut Earth geometry time sharply.
-       Three small affine transforms replace all per-point Moon JS arithmetic. */
     if(MOON_NATIVE){
       try{
         MOON_LIT_MAT[4]=m.x; MOON_LIT_MAT[5]=m.y;
@@ -439,9 +436,31 @@
       }
     }
 
-    g.setColor(YELLOW).fillPoly(lit);
-    g.setColor(BLACK).fillPoly(far);
-    g.setColor(WHITE).drawPoly(near,false);
+    MOON_CACHE_DATA=m;
+    MOON_CACHE_LIT=lit;
+    MOON_CACHE_FAR=far;
+    MOON_CACHE_NEAR=near;
+  }
+
+  function drawMoon(){
+    var nowMs=virtualNowMs();
+    var bucket=Math.floor(nowMs/MOON_CACHE_MS);
+
+    /* The Moon moves only ~0.2 px along a 44 px orbit in 30 minutes.
+       Reuse the already-rasterized polygon geometry inside that interval.
+       A +10.5-day development tap necessarily changes the bucket immediately. */
+    MOON_CACHE_HIT=(bucket===MOON_CACHE_BUCKET && MOON_CACHE_DATA!==undefined);
+    if(!MOON_CACHE_HIT){
+      rebuildMoonGeometry(nowMs);
+      MOON_CACHE_BUCKET=bucket;
+    }
+
+    var m=MOON_CACHE_DATA;
+    g.setColor(0x8410).drawCircle(EARTHX,EARTHY,MOONORBIT);
+    g.setColor(NAVY).fillCircle(m.x,m.y,MOONR);
+    g.setColor(YELLOW).fillPoly(MOON_CACHE_LIT);
+    g.setColor(BLACK).fillPoly(MOON_CACHE_FAR);
+    g.setColor(WHITE).drawPoly(MOON_CACHE_NEAR,false);
     return m;
   }
 
@@ -511,7 +530,7 @@
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(-1,-1);
     g.drawString("E"+e+" M"+m+" H"+h+" T"+tot,2,26);
     g.setFont("4x6",1);
-    g.drawString("V052 X"+(HEMI_NATIVE?1:0)+" Q"+(MOON_NATIVE?1:0)+" R"+EARTHR+" M"+MOONR,2,36);
+    g.drawString("V053 X"+(HEMI_NATIVE?1:0)+" Q"+(MOON_NATIVE?1:0)+" K"+(MOON_CACHE_HIT?1:0)+" R"+EARTHR,2,36);
     try{g.flip();}catch(err){}
     busy=false;
   }
