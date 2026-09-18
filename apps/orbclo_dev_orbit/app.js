@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.32 - Moon finish + shared size setting + Sun-Earth axis */
+/* Orbclo Dev Orbit 0.33 - configurable body sizes + automatic layout */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
@@ -6,8 +6,14 @@
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800;
   var busy=false,killed=false,touchCount=0,transitionTimer,minuteTimer,secondTimer,unlockTimer;
   var colonX=0,colonVisible=true;
-  var SUNX=W-28,SUNY=52,EARTHX=54,EARTHY=116,EARTHR=30;
-  var MOONORBIT=44,MOONR=(cfg.moonSize===undefined?7:Math.max(3,Math.min(15,cfg.moonSize|0))),SYNODIC=29.530588853,NEWMOON=947182440000;
+  var SUNR=(cfg.sunSize===undefined?6:Math.max(4,Math.min(15,cfg.sunSize|0)));
+  var EARTHR=(cfg.earthSize===undefined?30:Math.max(25,Math.min(50,cfg.earthSize|0)));
+  var MOONR=(cfg.moonSize===undefined?7:Math.max(4,Math.min(15,cfg.moonSize|0)));
+  var MOONORBIT=(cfg.moonOrbit===undefined?44:Math.max(40,Math.min(70,cfg.moonOrbit|0)));
+  var minOrbit=EARTHR+MOONR+2;
+  if(MOONORBIT<minOrbit)MOONORBIT=minOrbit;
+  var SUNX=0,SUNY=0,EARTHX=0,EARTHY=0;
+  var SYNODIC=29.530588853,NEWMOON=947182440000;
   var MOONLIT=[];
   var TESTLAT=35.694,TESTLON=139.754;
   var LIGHTSPAN=[],LIGHTBX=[],LIGHTBY=[],LIGHTLIMB=[],LIGHTSTEPS=6,LUX=0,LUY=0,LVX=0,LVY=0;
@@ -17,6 +23,18 @@
   function ms(a,b){return Math.round((b-a)*1000);}
   function rad(d){return d*Math.PI/180;}
   function deg(r){return r*180/Math.PI;}
+
+  function layoutBodies(){
+    /* The complete Moon envelope is tangent to the physical left and bottom edges. */
+    var env=MOONORBIT+MOONR;
+    EARTHX=env;
+    EARTHY=H-1-env;
+
+    /* Keep the Sun visible: tangent to the right edge and to the top edge
+       of the celestial area immediately below the 24 px header. */
+    SUNX=W-1-SUNR;
+    SUNY=24+SUNR;
+  }
 
   function dayOfYear(d){
     var md=[0,31,59,90,120,151,181,212,243,273,304,334];
@@ -159,7 +177,7 @@
   }
 
   function drawSun(){
-    var r=6;
+    var r=SUNR;
     /* Reference axis is intentionally behind both bodies. */
     g.setColor(0x8410).drawLine(EARTHX,EARTHY,SUNX,SUNY);
     g.setColor(ORANGE);
@@ -251,9 +269,10 @@
       Math.round(px-hx*(EARTHR+8)),Math.round(py-hy*(EARTHR+8)),
       Math.round(px+hx*(EARTHR+8)),Math.round(py+hy*(EARTHR+8))
     );
+    var zen=Math.round(EARTHR*1.3);
     g.setColor(0x07E0).drawLine(
       x,y,
-      Math.round(px+ux*39),Math.round(py+uy*39)
+      Math.round(px+ux*zen),Math.round(py+uy*zen)
     );
     g.setColor(RED).fillCircle(x,y,2);
   }
@@ -278,7 +297,7 @@
     var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),m=ms(t5,t6),h=ms(t6,t7),tot=ms(t0,t7);
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(-1,-1);
     g.drawString("M"+m+" H"+h+" T"+tot,2,26);
-    g.setFont("4x6",1).drawString("0.32 R"+MOONR+" Age "+moon.age.toFixed(1),2,36);
+    g.setFont("4x6",1).drawString("0.33 E"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
     try{g.flip();}catch(err){}
     busy=false;
   }
@@ -319,6 +338,7 @@
     try{Bangle.removeListener("lock",onLock);}catch(e){}
   }
 
+  layoutBodies();
   buildLightingCache();
   buildMoonCache();
   try{Bangle.setUI({mode:"custom",touch:onTouch,btn:function(){if(!busy)Bangle.showLauncher();},remove:cleanup});}catch(e){}
