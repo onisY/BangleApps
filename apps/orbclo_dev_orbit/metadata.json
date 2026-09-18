@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.37",
+  "version": "0.38",
   "author": "onisY",
-  "description": "Sunrise/sunset geometry stage: replace the single magenta tangent with two latitude- and season-dependent rise/set rays using solar declination, use shared configured lat/lon, and retain the axial-tilt seasonal Earth terminator. Polar day/night suppresses rise/set rays.",
+  "description": "Development-only seasonal test: every screen tap advances an in-RAM virtual clock by 10 days 12 hours. Solar declination, sunrise/sunset rays, Earth lighting, Moon position, and header date/time all use the same virtual time; relaunch resets to real time.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,7 +15,7 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app37.js"
+      "url": "app38.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
