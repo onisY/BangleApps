@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.43 - zenith width matches observer marker */
+/* Orbclo Dev Orbit 0.44 - lightweight Hemisphere Earth texture */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
@@ -19,6 +19,30 @@
   var TESTLAT=(cfg.lat===undefined?35.694:Math.max(-90,Math.min(90,+cfg.lat)));
   var TESTLON=(cfg.lon===undefined?139.754:Math.max(-180,Math.min(180,+cfg.lon)));
   var LIGHTSPAN=[],LIGHTBX=[],LIGHTBY=[],LIGHTLIMB=[],LIGHTSTEPS=6,LUX=0,LUY=0,LVX=0,LVY=0;
+
+  /* Lightweight Hemisphere map.  The full Orbit map used many more coastline
+     vertices.  At a 25-50 px Earth radius these coarser polygons preserve the
+     recognizable continents while keeping redraw cost measurable and modest. */
+  var HEMI_LAND=[
+    /* North America incl. Alaska */
+    [72,-168,65,-154,58,-143,55,-136,49,-127,39,-123,32,-117,29,-104,
+     27,-98,29,-90,27,-82,32,-80,39,-74,49,-64,59,-56,67,-72,74,-96,74,-130],
+    /* Greenland */
+    [59,-46,67,-57,78,-52,83,-30,75,-18,65,-31],
+    /* Eurasia */
+    [43,-1,54,2,63,31,71,60,72,100,67,140,59,175,47,145,40,130,32,123,
+     24,117,13,106,10,95,20,82,31,63,35,37,41,21,44,11],
+    /* North Africa */
+    [36,-6,37,10,34,25,27,34,20,25,25,5,31,-8],
+    /* Japan main islands, exaggerated slightly for the 176 px display */
+    [31,129,33,131,34,134,35,137,38,141,41,142,40,139,37,136,34,133],
+    /* Hokkaido */
+    [41.5,140,43.5,143,45.5,145,45,142],
+    /* Great Britain */
+    [50,-5,53,-4,57,-4.5,58,-1,54,-1,50.5,-1]
+  ];
+  var HEMI_XY=[],HEMI_ICE_R=0;
+
   var VIRTUAL_OFFSET=0,DEV_STEP_MS=907200000;
 
   function clear(t){if(t)clearTimeout(t);}
@@ -115,6 +139,35 @@
         Math.round(EARTHY-LUY*span+LVY*v)
       );
     }
+  }
+
+  function buildEarthMapCache(){
+    /* Precompute every latitude/longitude point into local polar XY once.
+       At redraw only one rotation (cos/sin of the current meridian angle)
+       is applied, avoiding trigonometry per coastline vertex. */
+    HEMI_XY=[];
+    for(var k=0;k<HEMI_LAND.length;k++){
+      var src=HEMI_LAND[k],dst=[];
+      for(var i=0;i<src.length;i+=2){
+        var rr=EARTHR*Math.cos(rad(src[i]));
+        var da=-rad(src[i+1]-TESTLON); /* north-side view: east is clockwise-negative */
+        dst.push(rr*Math.cos(da),rr*Math.sin(da));
+      }
+      HEMI_XY.push(dst);
+    }
+    HEMI_ICE_R=Math.max(2,Math.round(EARTHR*Math.cos(rad(78))));
+  }
+
+  function mapPoly(src,ca,sa){
+    var p=[];
+    for(var i=0;i<src.length;i+=2){
+      var lx=src[i],ly=src[i+1];
+      p.push(
+        (EARTHX+lx*ca-ly*sa+0.5)|0,
+        (EARTHY+lx*sa+ly*ca+0.5)|0
+      );
+    }
+    return p;
   }
 
   function buildMoonCache(){
@@ -253,10 +306,32 @@
 
   function drawEarth(sol){
     var lit=buildLighting(sol.dec);
+
+    /* Rotate the cached polar map so the configured longitude lies on the
+       observer meridian used by drawObserver(). */
+    var sunAng=Math.atan2(SUNY-EARTHY,SUNX-EARTHX);
+    var baseA=sunAng-sol.ha;
+    var ca=Math.cos(baseA),sa=Math.sin(baseA);
+    var polys=[],i;
+
+    /* Day sea, then green land texture. */
     g.setColor(CYAN).fillCircle(EARTHX,EARTHY,EARTHR);
+    g.setColor(GREEN);
+    for(i=0;i<HEMI_XY.length;i++){
+      polys[i]=mapPoly(HEMI_XY[i],ca,sa);
+      g.fillPoly(polys[i]);
+    }
+
+    /* Keep the current fast seasonal night polygon.  Night-side geography is
+       intentionally subdued, then coastlines are restored as thin white lines. */
     g.setColor(DARKBLUE).fillPoly(lit.night);
-    g.setColor(WHITE).drawPoly(lit.term,false);
-    g.setColor(WHITE).drawCircle(EARTHX,EARTHY,EARTHR);
+    g.setColor(WHITE);
+    for(i=0;i<polys.length;i++)g.drawPoly(polys[i],true);
+
+    /* Small Arctic cap and the seasonal terminator remain visible. */
+    g.fillCircle(EARTHX,EARTHY,HEMI_ICE_R);
+    g.drawPoly(lit.term,false);
+    g.drawCircle(EARTHX,EARTHY,EARTHR);
   }
 
 
@@ -377,8 +452,8 @@
 
     var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),m=ms(t5,t6),h=ms(t6,t7),tot=ms(t0,t7);
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(-1,-1);
-    g.drawString("M"+m+" H"+h+" T"+tot,2,26);
-    g.setFont("4x6",1).drawString("V043 E"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
+    g.drawString("E"+e+" M"+m+" H"+h+" T"+tot,2,26);
+    g.setFont("4x6",1).drawString("V044 R"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
     try{g.flip();}catch(err){}
     busy=false;
   }
@@ -422,6 +497,7 @@
 
   layoutBodies();
   buildLightingCache();
+  buildEarthMapCache();
   buildMoonCache();
   try{Bangle.setUI({mode:"custom",touch:onTouch,btn:function(){if(!busy)Bangle.showLauncher();},remove:cleanup});}catch(e){}
   Bangle.on("lock",onLock);
