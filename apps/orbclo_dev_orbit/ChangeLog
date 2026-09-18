@@ -1,3 +1,4 @@
+0.32: Finish the Moon with navy shadow and vivid-yellow sunward hemisphere, read Moon radius 3–15 px from shared settings, and restore the Earth-center to Sun-center reference line underneath the bodies.
 0.31: Replace phase-shape Moon filling with a cached illuminated semicircle aligned to the Earth-to-Sun direction, modeling parallel sunlight from a distant Sun at every lunar orbit position. This also removes the costly per-redraw phase polygon math.
 0.30: Precompute Moon cross-section sqrt values at startup and reduce phase-boundary samples from 17 to 9, preserving the 7 px Moon appearance while reducing the M redraw cost.
 0.29: Enlarge M/H/T diagnostics from 4x6 to 6x8 below the header; keep lunar age on a smaller second line. Moon phase drawing is unchanged.
