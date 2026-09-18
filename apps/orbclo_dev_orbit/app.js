@@ -1,11 +1,12 @@
-/* Orbclo Dev Orbit 0.34 - Moon clearance + full Sun corona */
+/* Orbclo Dev Orbit 0.35 - battery header refinement */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
   var cfg=Storage.readJSON(CFGFILE,1)||{};
-  var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800;
+  var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800,GREEN=0x07E0;
   var busy=false,killed=false,touchCount=0,transitionTimer,minuteTimer,secondTimer,unlockTimer;
-  var colonX=0,colonVisible=true;
+  var colonX=0,colonVisible=true,batteryCharging=false;
+  var BATLEFT=138;
   var SUNR=(cfg.sunSize===undefined?6:Math.max(4,Math.min(15,cfg.sunSize|0)));
   var EARTHR=(cfg.earthSize===undefined?30:Math.max(25,Math.min(50,cfg.earthSize|0)));
   var MOONR=(cfg.moonSize===undefined?7:Math.max(4,Math.min(15,cfg.moonSize|0)));
@@ -114,17 +115,34 @@
   }
 
   function drawBoldSpaced(str,x,y,advance,color){
+    var xx=x;
     g.setBgColor(WHITE).setColor(color).setFont("12x20").setFontAlign(-1,-1);
     for(var i=0;i<str.length;i++){
-      var xx=x+i*advance;
+      if(str[i]===" "){xx+=7;continue;}
       g.drawString(str[i],xx,y);
       g.drawString(str[i],xx+1,y);
+      xx+=advance;
     }
-    return x+(str.length?((str.length-1)*advance+13):0);
+    return xx;
+  }
+
+  function isCharging(){
+    try{return !!Bangle.isCharging();}catch(e){return false;}
+  }
+
+  function drawBattery(show){
+    var bat=E.getBattery(),txt=""+bat;
+    g.setColor(WHITE).fillRect(BATLEFT,0,W-1,23);
+    if(!show)return;
+    g.setBgColor(WHITE)
+      .setColor(bat<=20?RED:GREEN)
+      .setFont("12x20")
+      .setFontAlign(1,-1);
+    g.drawString(txt,W-1,2);
   }
 
   function drawHeader(){
-    var d=new Date(),bat=E.getBattery();
+    var d=new Date();
     var pre=pad(d.getMonth()+1)+"/"+pad(d.getDate())+" "+pad(d.getHours());
     var post=pad(d.getMinutes());
     var x=1,adv=13;
@@ -140,18 +158,10 @@
       g.drawString(":",colonX+1,2);
     }
     x=colonX+adv;
-    var timeEnd=drawBoldSpaced(post,x,2,adv,BLACK);
+    drawBoldSpaced(post,x,2,adv,BLACK);
 
-    /* Fit battery into the measured remaining width so 100% can never overlap time. */
-    var btxt=bat+"%",bsize=16,bcol=bat<=20?RED:BLACK;
-    g.setFont("Vector",bsize);
-    while(bsize>10 && g.stringWidth(btxt)>W-3-(timeEnd+2)){
-      bsize--;
-      g.setFont("Vector",bsize);
-    }
-    g.setBgColor(WHITE).setColor(bcol).setFontAlign(1,0);
-    g.drawString(btxt,W-2,11);
-    g.drawString(btxt,W-3,11);
+    batteryCharging=isCharging();
+    drawBattery(!batteryCharging||colonVisible);
   }
 
   function drawColon(show){
@@ -163,6 +173,11 @@
       g.drawString(":",colonX+1,2);
     }
     colonVisible=show;
+
+    var charging=isCharging();
+    if(charging)drawBattery(show);
+    else if(batteryCharging)drawBattery(true);
+    batteryCharging=charging;
   }
 
   function armSecond(){
@@ -298,7 +313,7 @@
     var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),m=ms(t5,t6),h=ms(t6,t7),tot=ms(t0,t7);
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(-1,-1);
     g.drawString("M"+m+" H"+h+" T"+tot,2,26);
-    g.setFont("4x6",1).drawString("0.34 E"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
+    g.setFont("4x6",1).drawString("0.35 E"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
     try{g.flip();}catch(err){}
     busy=false;
   }
