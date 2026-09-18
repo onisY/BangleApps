@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.51 - native transform, profiler removed */
+/* Orbclo Dev Orbit 0.52 - native Moon vertex transforms */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
@@ -16,6 +16,8 @@
   var SUNRAY=4,SUNX=0,SUNY=0,EARTHX=0,EARTHY=0;
   var SYNODIC=29.530588853,NEWMOON=947182440000;
   var MOONLIT=[],MOONFAR=[],MOONFAROUT=[];
+  var MOON_LIT_MAT=[1,0,0,1,0,0],MOON_FAR_MAT=[1,0,0,1,0,0],MOON_NEAR_MAT=[1,0,0,1,0,0];
+  var MOON_NATIVE=(typeof g.transformVertices==="function"),SUNANG=0;
   var TESTLAT=(cfg.lat===undefined?35.694:Math.max(-90,Math.min(90,+cfg.lat)));
   var TESTLON=(cfg.lon===undefined?139.754:Math.max(-180,Math.min(180,+cfg.lon)));
   var LIGHTSPAN=[],LIGHTBX=[],LIGHTBY=[],LIGHTLIMB=[],LIGHTSTEPS=6,LUX=0,LUY=0,LVX=0,LVY=0;
@@ -137,6 +139,7 @@
   function buildLightingCache(){
     LIGHTSPAN=[];LIGHTBX=[];LIGHTBY=[];LIGHTLIMB=[];
     var a=Math.atan2(SUNY-EARTHY,SUNX-EARTHX);
+    SUNANG=a;
     LUX=Math.cos(a);LUY=Math.sin(a);
     LVX=-LUY;LVY=LUX;
 
@@ -212,7 +215,7 @@
   function buildMoonCache(){
     /* Sunlight is parallel to the Earth-Sun line. */
     MOONLIT=[];MOONFAR=[];MOONFAROUT=[];
-    var a=Math.atan2(SUNY-EARTHY,SUNX-EARTHX);
+    var a=SUNANG;
     var ro=MOONR+1;
     for(var i=0;i<=8;i++){
       var q=a-Math.PI/2+i*Math.PI/8;
@@ -376,10 +379,9 @@
     age=age%SYNODIC;
     if(age<0)age+=SYNODIC;
     var phase=age/SYNODIC;
-    var sunAng=Math.atan2(SUNY-EARTHY,SUNX-EARTHX);
 
     /* North-side view: new Moon lies toward the Sun; phase increases CCW visually. */
-    var a=sunAng-phase*2*Math.PI;
+    var a=SUNANG-phase*2*Math.PI;
     var ca=Math.cos(a),sa=Math.sin(a);
     return {
       age:age,
@@ -394,31 +396,50 @@
     var m=moonData();
 
     g.setColor(0x8410).drawCircle(EARTHX,EARTHY,MOONORBIT);
-
-    /* Solar illumination: anti-sun hemisphere navy, sunward hemisphere yellow. */
     g.setColor(NAVY).fillCircle(m.x,m.y,MOONR);
 
-    var p=[],i;
-    for(i=0;i<MOONLIT.length;i+=2){
-      p.push(m.x+MOONLIT[i],m.y+MOONLIT[i+1]);
-    }
-    g.setColor(YELLOW).fillPoly(p);
-
-    /* Reuse the orbit direction already calculated in moonData().
-       V0.40 recomputed it with sqrt/division here; on Bangle.js that was costly. */
+    var lit,far,near,i,j,fx,fy,nx,ny;
     var ux=m.ux,uy=m.uy,vx=m.vx,vy=m.vy;
-    var far=[],near=[],j=0,fx,fy,nx,ny;
-    for(i=0;i<MOONFAR.length;i+=2,j+=2){
-      fx=MOONFAROUT[i];fy=MOONFAROUT[i+1];
-      nx=MOONFAR[i];ny=MOONFAR[i+1];
 
-      /* Screen coordinates are non-negative, so +0.5 then integer coercion
-         is equivalent to Math.round() but cheaper on the watch. */
-      far[j]=(m.x+ux*fx+vx*fy+0.5)|0;
-      far[j+1]=(m.y+uy*fx+vy*fy+0.5)|0;
-      near[j]=(m.x-ux*nx+vx*ny+0.5)|0;
-      near[j+1]=(m.y-uy*nx+vy*ny+0.5)|0;
+    /* Use the same native vertex helper that cut Earth geometry time sharply.
+       Three small affine transforms replace all per-point Moon JS arithmetic. */
+    if(MOON_NATIVE){
+      try{
+        MOON_LIT_MAT[4]=m.x; MOON_LIT_MAT[5]=m.y;
+
+        MOON_FAR_MAT[0]=ux; MOON_FAR_MAT[1]=uy;
+        MOON_FAR_MAT[2]=vx; MOON_FAR_MAT[3]=vy;
+        MOON_FAR_MAT[4]=m.x; MOON_FAR_MAT[5]=m.y;
+
+        MOON_NEAR_MAT[0]=-ux; MOON_NEAR_MAT[1]=-uy;
+        MOON_NEAR_MAT[2]=vx; MOON_NEAR_MAT[3]=vy;
+        MOON_NEAR_MAT[4]=m.x; MOON_NEAR_MAT[5]=m.y;
+
+        lit=g.transformVertices(MOONLIT,MOON_LIT_MAT);
+        far=g.transformVertices(MOONFAROUT,MOON_FAR_MAT);
+        near=g.transformVertices(MOONFAR,MOON_NEAR_MAT);
+      }catch(ex){
+        MOON_NATIVE=false;
+      }
     }
+
+    if(!MOON_NATIVE){
+      lit=[];
+      for(i=0;i<MOONLIT.length;i+=2)
+        lit.push(m.x+MOONLIT[i],m.y+MOONLIT[i+1]);
+
+      far=[];near=[];j=0;
+      for(i=0;i<MOONFAR.length;i+=2,j+=2){
+        fx=MOONFAROUT[i];fy=MOONFAROUT[i+1];
+        nx=MOONFAR[i];ny=MOONFAR[i+1];
+        far[j]=(m.x+ux*fx+vx*fy+0.5)|0;
+        far[j+1]=(m.y+uy*fx+vy*fy+0.5)|0;
+        near[j]=(m.x-ux*nx+vx*ny+0.5)|0;
+        near[j+1]=(m.y-uy*nx+vy*ny+0.5)|0;
+      }
+    }
+
+    g.setColor(YELLOW).fillPoly(lit);
     g.setColor(BLACK).fillPoly(far);
     g.setColor(WHITE).drawPoly(near,false);
     return m;
@@ -490,7 +511,7 @@
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(-1,-1);
     g.drawString("E"+e+" M"+m+" H"+h+" T"+tot,2,26);
     g.setFont("4x6",1);
-    g.drawString("V051 X"+(HEMI_NATIVE?1:0)+" R"+EARTHR+" M"+MOONR+" O"+MOONORBIT,2,36);
+    g.drawString("V052 X"+(HEMI_NATIVE?1:0)+" Q"+(MOON_NATIVE?1:0)+" R"+EARTHR+" M"+MOONR,2,36);
     try{g.flip();}catch(err){}
     busy=false;
   }
