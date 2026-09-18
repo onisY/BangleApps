@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.47",
+  "version": "0.48",
   "author": "onisY",
-  "description": "Restore the approved V0.45 Earth appearance after the V0.46 paletted-buffer colour/shape distortion. Earth is again drawn directly with native Bangle.js 2 colours, while retaining reusable coastline and seasonal-lighting arrays to avoid redraw-time geometry allocations.",
+  "description": "Earth performance test: keep the approved V0.47 native-colour Hemisphere fills, Mexico and Hudson Bay, but reduce the expensive post-night white coastline redraw to North America, Greenland, Eurasia, Japan and Hudson Bay only. E/M/H/T timing remains visible.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,7 +15,7 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app47.js"
+      "url": "app48.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
