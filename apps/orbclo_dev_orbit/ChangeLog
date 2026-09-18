@@ -1,3 +1,4 @@
+0.35: Remove battery %, right-align the numeric charge in 12x20, use green normally and red at 20% or below, and blink the battery synchronously with the time colon while charging. Narrow the date/hour separator only enough to reserve three-digit battery width.
 0.34: Set minimum Moon orbit radius to Earth radius + 2×Moon radius, giving one Moon-radius of surface clearance, extend orbit support to 80 px, and position the Sun using the corona outer radius so all rays remain visible.
 0.33: Add configurable Earth 25–50 px, Moon 4–15 px, Moon orbit 40–70 px and Sun 4–15 px. Automatically place Earth so the Moon envelope touches the left/bottom edges, place Sun against the right/header boundary, and enforce a non-overlap minimum Moon orbit.
 0.32: Finish the Moon with navy shadow and vivid-yellow sunward hemisphere, read Moon radius 3–15 px from shared settings, and restore the Earth-center to Sun-center reference line underneath the bodies.
