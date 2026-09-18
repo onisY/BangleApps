@@ -1,18 +1,31 @@
 {
-  "id":"orbclo_dev_settings",
-  "name":"Orbclo Dev Settings",
-  "shortName":"OrbSet",
-  "version":"0.01",
-  "author":"onisY",
-  "description":"Isolated Orbclo settings development test. No clock/calendar integration.",
-  "icon":"app.png",
-  "type":"app",
-  "tags":"settings,development,test",
-  "supports":["BANGLEJS2"],
-  "allow_emulator":true,
-  "storage":[
-    {"name":"orbclo_dev_settings.app.js","url":"app.js"},
-    {"name":"orbclo_dev_settings.img","url":"app-icon.js","evaluate":true}
+  "id": "orbclo_dev_settings",
+  "name": "Orbclo Dev Settings",
+  "shortName": "OrbSet",
+  "version": "0.02",
+  "author": "onisY",
+  "description": "Isolated Orbclo settings test sharing the Orbit development settings file. Moon size is adjustable from 3 to 15 px; GPS and full integration remain deferred.",
+  "icon": "app.png",
+  "type": "app",
+  "tags": "settings,development,test",
+  "supports": [
+    "BANGLEJS2"
   ],
-  "data":[{"name":"orbclo_settingsdev.json"}]
+  "allow_emulator": true,
+  "storage": [
+    {
+      "name": "orbclo_dev_settings.app.js",
+      "url": "app.js"
+    },
+    {
+      "name": "orbclo_dev_settings.img",
+      "url": "app-icon.js",
+      "evaluate": true
+    }
+  ],
+  "data": [
+    {
+      "name": "orbclo_orbitdev.json"
+    }
+  ]
 }
