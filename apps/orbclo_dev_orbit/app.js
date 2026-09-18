@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.42 - thicker extended zenith line */
+/* Orbclo Dev Orbit 0.43 - zenith width matches observer marker */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
@@ -339,17 +339,21 @@
         Math.round(py+Math.sin(as)*plen));
     }
 
-    /* Zenith line: slightly thicker and long enough to pass the Moon orbit
-       by about half a lunar radius, measured radially from Earth center. */
+    /* Zenith length is unchanged from V0.42. */
     var zenEndR=MOONORBIT+MOONR/2;
     var zen=Math.max(0,Math.round(zenEndR-rr));
     var zx=Math.round(px+ux*zen),zy=Math.round(py+uy*zen);
 
-    /* Add one parallel pixel line for better visibility without making it bulky. */
-    var zox=Math.round(-uy),zoy=Math.round(ux);
-    g.setColor(0x07E0);
-    g.drawLine(x,y,zx,zy);
-    g.drawLine(x+zox,y+zoy,zx+zox,zy+zoy);
+    /* Match the red observer marker's 5 px diameter (fillCircle radius 2).
+       A single filled quadrilateral is cheaper than five parallel drawLine calls. */
+    var hw=2;
+    var qx=-uy*hw,qy=ux*hw;
+    g.setColor(0x07E0).fillPoly([
+      Math.round(x+qx),Math.round(y+qy),
+      Math.round(zx+qx),Math.round(zy+qy),
+      Math.round(zx-qx),Math.round(zy-qy),
+      Math.round(x-qx),Math.round(y-qy)
+    ]);
 
     g.setColor(RED).fillCircle(x,y,2);
   }
@@ -374,7 +378,7 @@
     var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),m=ms(t5,t6),h=ms(t6,t7),tot=ms(t0,t7);
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(-1,-1);
     g.drawString("M"+m+" H"+h+" T"+tot,2,26);
-    g.setFont("4x6",1).drawString("V042 E"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
+    g.setFont("4x6",1).drawString("V043 E"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
     try{g.flip();}catch(err){}
     busy=false;
   }
