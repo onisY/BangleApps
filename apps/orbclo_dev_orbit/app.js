@@ -1,11 +1,13 @@
-/* Orbclo Dev Orbit 0.31 - parallel-light Moon hemisphere */
+/* Orbclo Dev Orbit 0.32 - Moon finish + shared size setting + Sun-Earth axis */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
+  var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
+  var cfg=Storage.readJSON(CFGFILE,1)||{};
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800;
   var busy=false,killed=false,touchCount=0,transitionTimer,minuteTimer,secondTimer,unlockTimer;
   var colonX=0,colonVisible=true;
   var SUNX=W-28,SUNY=52,EARTHX=54,EARTHY=116,EARTHR=30;
-  var MOONORBIT=44,MOONR=7,SYNODIC=29.530588853,NEWMOON=947182440000;
+  var MOONORBIT=44,MOONR=(cfg.moonSize===undefined?7:Math.max(3,Math.min(15,cfg.moonSize|0))),SYNODIC=29.530588853,NEWMOON=947182440000;
   var MOONLIT=[];
   var TESTLAT=35.694,TESTLON=139.754;
   var LIGHTSPAN=[],LIGHTBX=[],LIGHTBY=[],LIGHTLIMB=[],LIGHTSTEPS=6,LUX=0,LUY=0,LVX=0,LVY=0;
@@ -158,6 +160,8 @@
 
   function drawSun(){
     var r=6;
+    /* Reference axis is intentionally behind both bodies. */
+    g.setColor(0x8410).drawLine(EARTHX,EARTHY,SUNX,SUNY);
     g.setColor(ORANGE);
     for(var i=0;i<8;i++){
       var a=i*Math.PI/4;
@@ -218,8 +222,8 @@
 
     g.setColor(0x8410).drawCircle(EARTHX,EARTHY,MOONORBIT);
 
-    /* Whole lunar disk starts dark. */
-    g.setColor(0x4208).fillCircle(m.x,m.y,MOONR);
+    /* Requested colors: dark hemisphere = navy, sunward hemisphere = vivid yellow. */
+    g.setColor(NAVY).fillCircle(m.x,m.y,MOONR);
 
     /* Bright half is a cached semicircle whose orientation is fixed by the
        Earth->Sun direction, equivalent to parallel rays from Sun toward Earth. */
@@ -227,7 +231,7 @@
     for(i=0;i<MOONLIT.length;i+=2){
       p.push(m.x+MOONLIT[i],m.y+MOONLIT[i+1]);
     }
-    g.setColor(0xC618).fillPoly(p);
+    g.setColor(YELLOW).fillPoly(p);
     g.setColor(WHITE).drawCircle(m.x,m.y,MOONR);
     return m;
   }
@@ -274,7 +278,7 @@
     var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),m=ms(t5,t6),h=ms(t6,t7),tot=ms(t0,t7);
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(-1,-1);
     g.drawString("M"+m+" H"+h+" T"+tot,2,26);
-    g.setFont("4x6",1).drawString("0.31 Age "+moon.age.toFixed(1),2,36);
+    g.setFont("4x6",1).drawString("0.32 R"+MOONR+" Age "+moon.age.toFixed(1),2,36);
     try{g.flip();}catch(err){}
     busy=false;
   }
