@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.50 - native transformVertices Earth geometry */
+/* Orbclo Dev Orbit 0.51 - native transform, profiler removed */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
@@ -20,7 +20,6 @@
   var TESTLON=(cfg.lon===undefined?139.754:Math.max(-180,Math.min(180,+cfg.lon)));
   var LIGHTSPAN=[],LIGHTBX=[],LIGHTBY=[],LIGHTLIMB=[],LIGHTSTEPS=6,LUX=0,LUY=0,LVX=0,LVY=0;
   var LIGHTTERM=[],LIGHTNIGHT=[];
-  var EP_G=0,EP_F=0,EP_N=0,EP_C=0,EP_R=0;
 
   /* Lightweight Hemisphere map.  The full Orbit map used many more coastline
      vertices.  At a 25-50 px Earth radius these coarser polygons preserve the
@@ -323,19 +322,15 @@
   }
 
   function drawEarth(sol){
-    /* V0.50 keeps the same Earth appearance/profiler while replacing the
-       individual Earth stages so the next optimization can target real cost. */
-    var p0=getTime(),p1,p2,p3,p4,p5;
-
+    /* Keep V0.50's native vertex transform, but remove all internal profiling.
+       drawBase() still measures total Earth time E for real-use comparison. */
     buildLightingInto(sol.dec,EARTHX,EARTHY);
+
     var sunAng=Math.atan2(SUNY-EARTHY,SUNX-EARTHX);
     var baseA=sunAng-sol.ha;
     var ca=Math.cos(baseA),sa=Math.sin(baseA);
     var i;
 
-    /* Geometry stage: use Espruino's native Graphics.transformVertices()
-       for the affine rotation/translation.  Fall back to the proven JS loop
-       automatically if this firmware does not expose the native helper. */
     HEMI_MAT[0]=ca; HEMI_MAT[1]=sa;
     HEMI_MAT[2]=-sa; HEMI_MAT[3]=ca;
     HEMI_MAT[4]=EARTHX; HEMI_MAT[5]=EARTHY;
@@ -356,38 +351,24 @@
       for(i=0;i<HEMI_WATER_XY.length;i++)
         mapPolyInto(HEMI_WATER_XY[i],HEMI_WATER_SCREEN[i],ca,sa,EARTHX,EARTHY);
     }
-    p1=getTime();
 
-    /* F = base sea + land fills + Hudson Bay cutout. */
     g.setColor(CYAN).fillCircle(EARTHX,EARTHY,EARTHR);
     g.setColor(GREEN);
     for(i=0;i<HEMI_SCREEN.length;i++)g.fillPoly(HEMI_SCREEN[i]);
+
     g.setColor(CYAN);
     for(i=0;i<HEMI_WATER_SCREEN.length;i++)g.fillPoly(HEMI_WATER_SCREEN[i]);
-    p2=getTime();
 
-    /* N = seasonal night overlay. */
     g.setColor(DARKBLUE).fillPoly(LIGHTNIGHT);
-    p3=getTime();
 
-    /* C = selected post-night coastline redraw. */
     g.setColor(WHITE);
     for(i=0;i<HEMI_COAST.length;i++)
       g.drawPoly(HEMI_SCREEN[HEMI_COAST[i]],true);
     g.drawPoly(HEMI_WATER_SCREEN[0],true);
-    p4=getTime();
 
-    /* R = remaining Earth detail: ice, terminator and outer rim. */
     g.fillCircle(EARTHX,EARTHY,HEMI_ICE_R);
     g.drawPoly(LIGHTTERM,false);
     g.drawCircle(EARTHX,EARTHY,EARTHR);
-    p5=getTime();
-
-    EP_G=ms(p0,p1);
-    EP_F=ms(p1,p2);
-    EP_N=ms(p2,p3);
-    EP_C=ms(p3,p4);
-    EP_R=ms(p4,p5);
   }
 
   function moonData(){
@@ -509,8 +490,7 @@
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(-1,-1);
     g.drawString("E"+e+" M"+m+" H"+h+" T"+tot,2,26);
     g.setFont("4x6",1);
-    g.drawString("G"+EP_G+" F"+EP_F+" N"+EP_N+" C"+EP_C+" R"+EP_R,2,36);
-    g.drawString("V050 X"+(HEMI_NATIVE?1:0)+" R"+EARTHR+" M"+MOONR+" O"+MOONORBIT,2,44);
+    g.drawString("V051 X"+(HEMI_NATIVE?1:0)+" R"+EARTHR+" M"+MOONR+" O"+MOONORBIT,2,36);
     try{g.flip();}catch(err){}
     busy=false;
   }
