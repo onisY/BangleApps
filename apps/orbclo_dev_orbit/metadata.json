@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.39",
+  "version": "0.40",
   "author": "onisY",
-  "description": "Lunar geometry refinement: keep the vivid-yellow sunward and navy anti-sun illumination, then overlay the Moon hemisphere facing away from Earth in black. The black far hemisphere rotates with lunar orbital position. Development +10.5-day tap stepping remains enabled.",
+  "description": "Lunar visibility refinement: the Moon hemisphere facing away from Earth is erased through the outer rim, and only the Earth-facing semicircular limb is outlined. Solar yellow/navy illumination and the +10.5-day development tap stepping remain enabled.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,7 +15,7 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app39.js"
+      "url": "app40.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
