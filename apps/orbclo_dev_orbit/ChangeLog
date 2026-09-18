@@ -1,3 +1,4 @@
+0.19: Raise the header font ceiling from 21 px to 23 px and reduce reserved horizontal gap from 10 px to 6 px, while retaining automatic no-overlap fitting and differential colon blinking.
 0.18: Maximize header text within the existing 23 px area and blink only the time colon once per second using differential redraw; astronomy/observer rendering unchanged.
 0.17: Restore observer line lengths to the earlier Orbit visual scale: horizon extends Earth radius + 8 px on each side and zenith extends about 39 px outward.
 0.16: Add an explicit OBS 0.16 on-screen marker to verify that the new observer-stage app.js is actually delivered to the watch.
