@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.25 - cached seasonal terminator geometry */
+/* Orbclo Dev Orbit 0.26 - reduced seasonal terminator geometry */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800;
@@ -6,7 +6,7 @@
   var colonX=0,colonVisible=true;
   var SUNX=W-28,SUNY=52,EARTHX=54,EARTHY=116,EARTHR=30;
   var TESTLAT=35.694,TESTLON=139.754;
-  var LIGHTV=[],LIGHTSPAN=[],LIGHTSTEPS=12;
+  var LIGHTSPAN=[],LIGHTBX=[],LIGHTBY=[],LIGHTLIMB=[],LIGHTSTEPS=6,LUX=0,LUY=0,LVX=0,LVY=0;
 
   function clear(t){if(t)clearTimeout(t);}
   function pad(n){return n<10?"0"+n:""+n;}
@@ -53,11 +53,25 @@
   }
 
   function buildLightingCache(){
-    LIGHTV=[];LIGHTSPAN=[];
+    LIGHTSPAN=[];LIGHTBX=[];LIGHTBY=[];LIGHTLIMB=[];
+    var a=Math.atan2(SUNY-EARTHY,SUNX-EARTHX);
+    LUX=Math.cos(a);LUY=Math.sin(a);
+    LVX=-LUY;LVY=LUX;
+
     for(var i=0;i<=LIGHTSTEPS;i++){
       var v=-EARTHR+2*EARTHR*i/LIGHTSTEPS;
-      LIGHTV.push(v);
-      LIGHTSPAN.push(Math.sqrt(Math.max(0,EARTHR*EARTHR-v*v)));
+      var span=Math.sqrt(Math.max(0,EARTHR*EARTHR-v*v));
+      LIGHTSPAN.push(span);
+
+      /* Base point on the v axis; only the declination-dependent u offset changes later. */
+      LIGHTBX.push(EARTHX+LVX*v);
+      LIGHTBY.push(EARTHY+LVY*v);
+
+      /* Static anti-solar limb point used to close the night polygon. */
+      LIGHTLIMB.push(
+        Math.round(EARTHX-LUX*span+LVX*v),
+        Math.round(EARTHY-LUY*span+LVY*v)
+      );
     }
   }
 
@@ -136,32 +150,22 @@
   }
 
   function buildLighting(dec){
-    var a=Math.atan2(SUNY-EARTHY,SUNX-EARTHX);
-    var ux=Math.cos(a),uy=Math.sin(a);
-    var vx=-uy,vy=ux;
     var sd=Math.sin(dec);
     var term=[],night=[];
-    var i,v,span,u,x,y;
+    var i,u,x,y;
 
-    /* The expensive sqrt(R^2-v^2) values are cached once at startup. */
+    /* Only seven terminator points are needed at a 30 px Earth radius.
+       Direction, base coordinates and night-side limb are all cached. */
     for(i=0;i<=LIGHTSTEPS;i++){
-      v=LIGHTV[i];
-      span=LIGHTSPAN[i];
-      u=-sd*span;
-      x=Math.round(EARTHX+ux*u+vx*v);
-      y=Math.round(EARTHY+uy*u+vy*v);
+      u=-sd*LIGHTSPAN[i];
+      x=Math.round(LIGHTBX[i]+LUX*u);
+      y=Math.round(LIGHTBY[i]+LUY*u);
       term.push(x,y);
       night.push(x,y);
     }
 
     for(i=LIGHTSTEPS;i>=0;i--){
-      v=LIGHTV[i];
-      span=LIGHTSPAN[i];
-      u=-span;
-      night.push(
-        Math.round(EARTHX+ux*u+vx*v),
-        Math.round(EARTHY+uy*u+vy*v)
-      );
+      night.push(LIGHTLIMB[i*2],LIGHTLIMB[i*2+1]);
     }
     return {night:night,term:term};
   }
@@ -214,7 +218,7 @@
 
     var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),h=ms(t5,t6),tot=ms(t0,t6);
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(0,0);
-    g.drawString("OBS 0.25 D"+Math.round(deg(sol.dec))+" Az"+Math.round(sol.az)+" El"+Math.round(sol.el),W>>1,H-22);
+    g.drawString("OBS 0.26 D"+Math.round(deg(sol.dec))+" Az"+Math.round(sol.az)+" El"+Math.round(sol.el),W>>1,H-22);
     g.drawString("C"+c+" S"+s+" A"+a+" E"+e+" O"+o+" H"+h+" T"+tot,W>>1,H-10);
     try{g.flip();}catch(err){}
     busy=false;
