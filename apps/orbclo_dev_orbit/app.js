@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.45 - Hudson Bay, Mexico, lower-allocation Earth map */
+/* Orbclo Dev Orbit 0.46 - buffered Hemisphere Earth rendering */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
@@ -19,6 +19,8 @@
   var TESTLAT=(cfg.lat===undefined?35.694:Math.max(-90,Math.min(90,+cfg.lat)));
   var TESTLON=(cfg.lon===undefined?139.754:Math.max(-180,Math.min(180,+cfg.lon)));
   var LIGHTSPAN=[],LIGHTBX=[],LIGHTBY=[],LIGHTLIMB=[],LIGHTSTEPS=6,LUX=0,LUY=0,LVX=0,LVY=0;
+  var LIGHTTERM=[],LIGHTNIGHT=[];
+  var EARTHBUF,EARTHIMG,EARTHD=0,EARTHC=0;
 
   /* Lightweight Hemisphere map.  The full Orbit map used many more coastline
      vertices.  At a 25-50 px Earth radius these coarser polygons preserve the
@@ -148,6 +150,9 @@
         Math.round(EARTHY-LUY*span+LVY*v)
       );
     }
+
+    LIGHTTERM=new Array((LIGHTSTEPS+1)*2);
+    LIGHTNIGHT=new Array((LIGHTSTEPS+1)*4);
   }
 
   function buildEarthMapCache(){
@@ -174,11 +179,47 @@
     HEMI_ICE_R=Math.max(2,Math.round(EARTHR*Math.cos(rad(78))));
   }
 
-  function mapPolyInto(src,p,ca,sa){
+  function mapPolyInto(src,p,ca,sa,cx,cy){
     for(var i=0;i<src.length;i+=2){
       var lx=src[i],ly=src[i+1];
-      p[i]=(EARTHX+lx*ca-ly*sa+0.5)|0;
-      p[i+1]=(EARTHY+lx*sa+ly*ca+0.5)|0;
+      p[i]=(cx+lx*ca-ly*sa+0.5)|0;
+      p[i+1]=(cy+lx*sa+ly*ca+0.5)|0;
+    }
+  }
+
+  function buildLightingInto(dec,cx,cy){
+    /* Reuse fixed arrays instead of allocating term/night polygons each redraw. */
+    var sd=Math.sin(dec),i,u,x,y,j=0;
+    for(i=0;i<=LIGHTSTEPS;i++){
+      u=-sd*LIGHTSPAN[i];
+      x=Math.round(cx+(LIGHTBX[i]-EARTHX)+LUX*u);
+      y=Math.round(cy+(LIGHTBY[i]-EARTHY)+LUY*u);
+      LIGHTTERM[i*2]=x;LIGHTTERM[i*2+1]=y;
+      LIGHTNIGHT[i*2]=x;LIGHTNIGHT[i*2+1]=y;
+    }
+    j=(LIGHTSTEPS+1)*2;
+    for(i=LIGHTSTEPS;i>=0;i--){
+      LIGHTNIGHT[j++]=cx+(LIGHTLIMB[i*2]-EARTHX);
+      LIGHTNIGHT[j++]=cy+(LIGHTLIMB[i*2+1]-EARTHY);
+    }
+  }
+
+  function initEarthBuffer(){
+    /* Rendering all land/night/coast operations in RAM and transferring one
+       small paletted bitmap avoids many slow direct LCD polygon operations. */
+    try{
+      EARTHD=EARTHR*2+3;
+      EARTHC=EARTHR+1;
+      EARTHBUF=Graphics.createArrayBuffer(EARTHD,EARTHD,4,{msb:true});
+      EARTHBUF.transparent=0;
+      EARTHBUF.palette=new Uint16Array([
+        0x0000,WHITE,CYAN,DARKBLUE,GREEN,
+        0,0,0,0,0,0,0,0,0,0,0
+      ]);
+      EARTHBUF.setBgColor(0).clear();
+      EARTHIMG=EARTHBUF.asImage();
+    }catch(e){
+      EARTHBUF=undefined;EARTHIMG=undefined;
     }
   }
 
@@ -294,30 +335,8 @@
     g.setColor(YELLOW).fillCircle(SUNX,SUNY,r);
   }
 
-  function buildLighting(dec){
-    /* North-polar projection with axial tilt included through solar declination. */
-    var sd=Math.sin(dec);
-    var term=[],night=[];
-    var i,u,x,y;
-
-    /* Only seven terminator points are needed at a 30 px Earth radius.
-       Direction, base coordinates and night-side limb are all cached. */
-    for(i=0;i<=LIGHTSTEPS;i++){
-      u=-sd*LIGHTSPAN[i];
-      x=Math.round(LIGHTBX[i]+LUX*u);
-      y=Math.round(LIGHTBY[i]+LUY*u);
-      term.push(x,y);
-      night.push(x,y);
-    }
-
-    for(i=LIGHTSTEPS;i>=0;i--){
-      night.push(LIGHTLIMB[i*2],LIGHTLIMB[i*2+1]);
-    }
-    return {night:night,term:term};
-  }
-
-  function drawEarth(sol){
-    var lit=buildLighting(sol.dec);
+  function renderEarthTo(q,cx,cy,sol,buffered){
+    buildLightingInto(sol.dec,cx,cy);
 
     /* Rotate the cached polar map so the configured longitude lies on the
        observer meridian used by drawObserver(). */
@@ -325,33 +344,48 @@
     var baseA=sunAng-sol.ha;
     var ca=Math.cos(baseA),sa=Math.sin(baseA);
     var i;
+    var sea=buffered?2:CYAN;
+    var land=buffered?4:GREEN;
+    var night=buffered?3:DARKBLUE;
+    var white=buffered?1:WHITE;
 
-    /* Day sea, then green land texture. */
-    g.setColor(CYAN).fillCircle(EARTHX,EARTHY,EARTHR);
-    g.setColor(GREEN);
+    q.setColor(sea).fillCircle(cx,cy,EARTHR);
+    q.setColor(land);
     for(i=0;i<HEMI_XY.length;i++){
-      mapPolyInto(HEMI_XY[i],HEMI_SCREEN[i],ca,sa);
-      g.fillPoly(HEMI_SCREEN[i]);
+      mapPolyInto(HEMI_XY[i],HEMI_SCREEN[i],ca,sa,cx,cy);
+      q.fillPoly(HEMI_SCREEN[i]);
     }
 
-    /* Cut Hudson Bay back out of the North American land mass. */
-    g.setColor(CYAN);
+    q.setColor(sea);
     for(i=0;i<HEMI_WATER_XY.length;i++){
-      mapPolyInto(HEMI_WATER_XY[i],HEMI_WATER_SCREEN[i],ca,sa);
-      g.fillPoly(HEMI_WATER_SCREEN[i]);
+      mapPolyInto(HEMI_WATER_XY[i],HEMI_WATER_SCREEN[i],ca,sa,cx,cy);
+      q.fillPoly(HEMI_WATER_SCREEN[i]);
     }
 
-    /* Keep the current fast seasonal night polygon.  Night-side geography is
-       intentionally subdued, then coastlines are restored as thin white lines. */
-    g.setColor(DARKBLUE).fillPoly(lit.night);
-    g.setColor(WHITE);
-    for(i=0;i<HEMI_SCREEN.length;i++)g.drawPoly(HEMI_SCREEN[i],true);
-    for(i=0;i<HEMI_WATER_SCREEN.length;i++)g.drawPoly(HEMI_WATER_SCREEN[i],true);
+    q.setColor(night).fillPoly(LIGHTNIGHT);
+    q.setColor(white);
+    for(i=0;i<HEMI_SCREEN.length;i++)q.drawPoly(HEMI_SCREEN[i],true);
+    for(i=0;i<HEMI_WATER_SCREEN.length;i++)q.drawPoly(HEMI_WATER_SCREEN[i],true);
 
-    /* Small Arctic cap and the seasonal terminator remain visible. */
-    g.fillCircle(EARTHX,EARTHY,HEMI_ICE_R);
-    g.drawPoly(lit.term,false);
-    g.drawCircle(EARTHX,EARTHY,EARTHR);
+    q.fillCircle(cx,cy,HEMI_ICE_R);
+    q.drawPoly(LIGHTTERM,false);
+    q.drawCircle(cx,cy,EARTHR);
+  }
+
+  function drawEarth(sol){
+    if(EARTHBUF&&EARTHIMG){
+      try{
+        EARTHBUF.setBgColor(0).clear();
+        renderEarthTo(EARTHBUF,EARTHC,EARTHC,sol,true);
+        g.drawImage(EARTHIMG,EARTHX-EARTHC,EARTHY-EARTHC);
+        return;
+      }catch(e){
+        /* Fail open on older firmware: disable buffering and keep the proven
+           V0.45 direct renderer for this and subsequent redraws. */
+        EARTHBUF=undefined;EARTHIMG=undefined;
+      }
+    }
+    renderEarthTo(g,EARTHX,EARTHY,sol,false);
   }
 
 
@@ -473,7 +507,7 @@
     var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),m=ms(t5,t6),h=ms(t6,t7),tot=ms(t0,t7);
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(-1,-1);
     g.drawString("E"+e+" M"+m+" H"+h+" T"+tot,2,26);
-    g.setFont("4x6",1).drawString("V045 R"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
+    g.setFont("4x6",1).drawString("V046 R"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
     try{g.flip();}catch(err){}
     busy=false;
   }
@@ -518,6 +552,7 @@
   layoutBodies();
   buildLightingCache();
   buildEarthMapCache();
+  initEarthBuffer();
   buildMoonCache();
   try{Bangle.setUI({mode:"custom",touch:onTouch,btn:function(){if(!busy)Bangle.showLauncher();},remove:cleanup});}catch(e){}
   Bangle.on("lock",onLock);
