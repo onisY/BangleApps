@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.49",
+  "version": "0.50",
   "author": "onisY",
-  "description": "Earth stage profiler with no intended visual change: split Earth time into G geometry transforms, F sea/land/Hudson fills, N night overlay, C coastline redraw, and R ice/terminator/rim. Keep overall E/M/H/T for comparison.",
+  "description": "Earth geometry optimization test: preserve the V0.49 appearance and G/F/N/C/R profiler, but replace the per-vertex JavaScript rotation loop with Espruino Graphics.transformVertices using one reusable affine matrix. Automatic fallback to the proven JS transform remains; V050 shows X1 when native transform is active.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,7 +15,7 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app49.js"
+      "url": "app50.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
