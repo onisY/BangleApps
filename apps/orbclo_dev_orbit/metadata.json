@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.38",
+  "version": "0.39",
   "author": "onisY",
-  "description": "Development-only seasonal test: every screen tap advances an in-RAM virtual clock by 10 days 12 hours. Solar declination, sunrise/sunset rays, Earth lighting, Moon position, and header date/time all use the same virtual time; relaunch resets to real time.",
+  "description": "Lunar geometry refinement: keep the vivid-yellow sunward and navy anti-sun illumination, then overlay the Moon hemisphere facing away from Earth in black. The black far hemisphere rotates with lunar orbital position. Development +10.5-day tap stepping remains enabled.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,7 +15,7 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app38.js"
+      "url": "app39.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
