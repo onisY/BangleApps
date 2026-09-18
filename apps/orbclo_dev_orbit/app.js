@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.44 - lightweight Hemisphere Earth texture */
+/* Orbclo Dev Orbit 0.45 - Hudson Bay, Mexico, lower-allocation Earth map */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
@@ -24,9 +24,12 @@
      vertices.  At a 25-50 px Earth radius these coarser polygons preserve the
      recognizable continents while keeping redraw cost measurable and modest. */
   var HEMI_LAND=[
-    /* North America incl. Alaska */
-    [72,-168,65,-154,58,-143,55,-136,49,-127,39,-123,32,-117,29,-104,
-     27,-98,29,-90,27,-82,32,-80,39,-74,49,-64,59,-56,67,-72,74,-96,74,-130],
+    /* North America incl. Alaska and Mexico.  Mexico is intentionally
+       exaggerated slightly so the peninsula/waist remains visible at ~30 px radius. */
+    [72,-168,65,-154,58,-143,55,-136,49,-127,39,-123,32,-117,
+     29,-115,25,-112,22,-108,19,-105,16,-96,18,-90,21,-87,
+     22,-91,20,-97,24,-101,27,-98,29,-90,27,-82,32,-80,
+     39,-74,49,-64,59,-56,67,-72,74,-96,74,-130],
     /* Greenland */
     [59,-46,67,-57,78,-52,83,-30,75,-18,65,-31],
     /* Eurasia */
@@ -41,7 +44,13 @@
     /* Great Britain */
     [50,-5,53,-4,57,-4.5,58,-1,54,-1,50.5,-1]
   ];
-  var HEMI_XY=[],HEMI_ICE_R=0;
+
+  /* Hudson Bay is a sea cutout inside the North America polygon. */
+  var HEMI_WATER=[
+    [64,-95,62,-88,58,-80,53,-79,51,-85,54,-94,59,-97]
+  ];
+
+  var HEMI_XY=[],HEMI_WATER_XY=[],HEMI_SCREEN=[],HEMI_WATER_SCREEN=[],HEMI_ICE_R=0;
 
   var VIRTUAL_OFFSET=0,DEV_STEP_MS=907200000;
 
@@ -142,32 +151,35 @@
   }
 
   function buildEarthMapCache(){
-    /* Precompute every latitude/longitude point into local polar XY once.
-       At redraw only one rotation (cos/sin of the current meridian angle)
-       is applied, avoiding trigonometry per coastline vertex. */
-    HEMI_XY=[];
-    for(var k=0;k<HEMI_LAND.length;k++){
-      var src=HEMI_LAND[k],dst=[];
-      for(var i=0;i<src.length;i+=2){
-        var rr=EARTHR*Math.cos(rad(src[i]));
-        var da=-rad(src[i+1]-TESTLON); /* north-side view: east is clockwise-negative */
-        dst.push(rr*Math.cos(da),rr*Math.sin(da));
+    /* Precompute latitude/longitude into local polar XY once.  Also allocate
+       fixed screen-coordinate arrays here so redraws do not create polygon
+       arrays and burden Espruino's allocator/GC. */
+    HEMI_XY=[];HEMI_WATER_XY=[];HEMI_SCREEN=[];HEMI_WATER_SCREEN=[];
+
+    function cacheSet(srcSet,dstSet,screenSet){
+      for(var k=0;k<srcSet.length;k++){
+        var src=srcSet[k],dst=[],scr=new Array(src.length);
+        for(var i=0;i<src.length;i+=2){
+          var rr=EARTHR*Math.cos(rad(src[i]));
+          var da=-rad(src[i+1]-TESTLON); /* north-side view: east is clockwise-negative */
+          dst.push(rr*Math.cos(da),rr*Math.sin(da));
+        }
+        dstSet.push(dst);
+        screenSet.push(scr);
       }
-      HEMI_XY.push(dst);
     }
+
+    cacheSet(HEMI_LAND,HEMI_XY,HEMI_SCREEN);
+    cacheSet(HEMI_WATER,HEMI_WATER_XY,HEMI_WATER_SCREEN);
     HEMI_ICE_R=Math.max(2,Math.round(EARTHR*Math.cos(rad(78))));
   }
 
-  function mapPoly(src,ca,sa){
-    var p=[];
+  function mapPolyInto(src,p,ca,sa){
     for(var i=0;i<src.length;i+=2){
       var lx=src[i],ly=src[i+1];
-      p.push(
-        (EARTHX+lx*ca-ly*sa+0.5)|0,
-        (EARTHY+lx*sa+ly*ca+0.5)|0
-      );
+      p[i]=(EARTHX+lx*ca-ly*sa+0.5)|0;
+      p[i+1]=(EARTHY+lx*sa+ly*ca+0.5)|0;
     }
-    return p;
   }
 
   function buildMoonCache(){
@@ -312,21 +324,29 @@
     var sunAng=Math.atan2(SUNY-EARTHY,SUNX-EARTHX);
     var baseA=sunAng-sol.ha;
     var ca=Math.cos(baseA),sa=Math.sin(baseA);
-    var polys=[],i;
+    var i;
 
     /* Day sea, then green land texture. */
     g.setColor(CYAN).fillCircle(EARTHX,EARTHY,EARTHR);
     g.setColor(GREEN);
     for(i=0;i<HEMI_XY.length;i++){
-      polys[i]=mapPoly(HEMI_XY[i],ca,sa);
-      g.fillPoly(polys[i]);
+      mapPolyInto(HEMI_XY[i],HEMI_SCREEN[i],ca,sa);
+      g.fillPoly(HEMI_SCREEN[i]);
+    }
+
+    /* Cut Hudson Bay back out of the North American land mass. */
+    g.setColor(CYAN);
+    for(i=0;i<HEMI_WATER_XY.length;i++){
+      mapPolyInto(HEMI_WATER_XY[i],HEMI_WATER_SCREEN[i],ca,sa);
+      g.fillPoly(HEMI_WATER_SCREEN[i]);
     }
 
     /* Keep the current fast seasonal night polygon.  Night-side geography is
        intentionally subdued, then coastlines are restored as thin white lines. */
     g.setColor(DARKBLUE).fillPoly(lit.night);
     g.setColor(WHITE);
-    for(i=0;i<polys.length;i++)g.drawPoly(polys[i],true);
+    for(i=0;i<HEMI_SCREEN.length;i++)g.drawPoly(HEMI_SCREEN[i],true);
+    for(i=0;i<HEMI_WATER_SCREEN.length;i++)g.drawPoly(HEMI_WATER_SCREEN[i],true);
 
     /* Small Arctic cap and the seasonal terminator remain visible. */
     g.fillCircle(EARTHX,EARTHY,HEMI_ICE_R);
@@ -453,7 +473,7 @@
     var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),m=ms(t5,t6),h=ms(t6,t7),tot=ms(t0,t7);
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(-1,-1);
     g.drawString("E"+e+" M"+m+" H"+h+" T"+tot,2,26);
-    g.setFont("4x6",1).drawString("V044 R"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
+    g.setFont("4x6",1).drawString("V045 R"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
     try{g.flip();}catch(err){}
     busy=false;
   }
