@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.51",
+  "version": "0.52",
   "author": "onisY",
-  "description": "Real-use timing pass: retain the successful V0.50 Graphics.transformVertices Earth geometry path and current Hemisphere appearance, but remove the detailed G/F/N/C/R profiler and its internal getTime overhead. Keep only overall E/M/H/T plus X1/X0 native-transform status.",
+  "description": "Moon performance optimization: keep the V0.51 appearance and fast Earth path, but replace per-point Moon illumination/far-side/near-limb JavaScript transforms with Graphics.transformVertices using three reusable matrices. Cache the fixed Earth-to-Sun screen angle. Q1/Q0 reports whether the native Moon path is active.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,7 +15,7 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app51.js"
+      "url": "app52.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
