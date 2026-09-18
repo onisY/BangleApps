@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.36 - forced-delivery battery header */
+/* Orbclo Dev Orbit 0.37 - sunrise/sunset rays + seasonal Earth lighting */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
@@ -16,7 +16,8 @@
   var SUNRAY=4,SUNX=0,SUNY=0,EARTHX=0,EARTHY=0;
   var SYNODIC=29.530588853,NEWMOON=947182440000;
   var MOONLIT=[];
-  var TESTLAT=35.694,TESTLON=139.754;
+  var TESTLAT=(cfg.lat===undefined?35.694:Math.max(-90,Math.min(90,+cfg.lat)));
+  var TESTLON=(cfg.lon===undefined?139.754:Math.max(-180,Math.min(180,+cfg.lon)));
   var LIGHTSPAN=[],LIGHTBX=[],LIGHTBY=[],LIGHTLIMB=[],LIGHTSTEPS=6,LUX=0,LUY=0,LVX=0,LVY=0;
 
   function clear(t){if(t)clearTimeout(t);}
@@ -74,6 +75,20 @@
   function safeSolar(){
     try{return solarPosition(new Date(),TESTLAT,TESTLON);}
     catch(e){return {az:0,el:-99,ha:0,dec:0};}
+  }
+
+  function riseSetHourAngle(lat,dec){
+    /* Geometric sunrise/sunset: solar-center altitude h=0. */
+    var la=rad(lat);
+    var den=Math.cos(la)*Math.cos(dec);
+    if(Math.abs(den)<1e-6){
+      var above=Math.sin(la)*Math.sin(dec)>0;
+      return {polar:true,day:above,h0:above?Math.PI:0};
+    }
+    var c=-(Math.sin(la)*Math.sin(dec))/den;
+    if(c<=-1)return {polar:true,day:true,h0:Math.PI};
+    if(c>=1)return {polar:true,day:false,h0:0};
+    return {polar:false,day:false,h0:Math.acos(c)};
   }
 
   function buildLightingCache(){
@@ -206,6 +221,7 @@
   }
 
   function buildLighting(dec){
+    /* North-polar projection with axial tilt included through solar declination. */
     var sd=Math.sin(dec);
     var term=[],night=[];
     var i,u,x,y;
@@ -279,13 +295,24 @@
     var rx=px-EARTHX,ry=py-EARTHY;
     var len=Math.sqrt(rx*rx+ry*ry)||1;
     var ux=rx/len,uy=ry/len;
-    var hx=-uy,hy=ux;
     var x=Math.round(px),y=Math.round(py);
+    var rs=riseSetHourAngle(TESTLAT,sol.dec);
 
-    g.setColor(0xF81F).drawLine(
-      Math.round(px-hx*(EARTHR+8)),Math.round(py-hy*(EARTHR+8)),
-      Math.round(px+hx*(EARTHR+8)),Math.round(py+hy*(EARTHR+8))
-    );
+    /* Sunrise and sunset rays: +/-H0 from the local outward radial direction.
+       At equinox H0 is about 90 degrees, so they appear as the old straight
+       magenta tangent. In polar day/night there is no rise/set crossing. */
+    if(!rs.polar){
+      var plen=EARTHR+8;
+      var ar=a-rs.h0,as=a+rs.h0;
+      g.setColor(0xF81F);
+      g.drawLine(x,y,
+        Math.round(px+Math.cos(ar)*plen),
+        Math.round(py+Math.sin(ar)*plen));
+      g.drawLine(x,y,
+        Math.round(px+Math.cos(as)*plen),
+        Math.round(py+Math.sin(as)*plen));
+    }
+
     var zen=Math.round(EARTHR*1.3);
     g.setColor(0x07E0).drawLine(
       x,y,
@@ -314,7 +341,7 @@
     var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),m=ms(t5,t6),h=ms(t6,t7),tot=ms(t0,t7);
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(-1,-1);
     g.drawString("M"+m+" H"+h+" T"+tot,2,26);
-    g.setFont("4x6",1).drawString("V036 E"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
+    g.setFont("4x6",1).drawString("V037 E"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
     try{g.flip();}catch(err){}
     busy=false;
   }
