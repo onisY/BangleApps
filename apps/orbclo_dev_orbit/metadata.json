@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.43",
+  "version": "0.44",
   "author": "onisY",
-  "description": "Zenith-line width refinement: retain the V0.42 length, but render the green zenith as a filled strip with half-width 2 px so its visual thickness matches the red observer marker (radius 2, about 5 px across). V0.41 lunar performance changes remain.",
+  "description": "Lightweight Hemisphere Earth texture test: add simplified cached northern-hemisphere land polygons and Arctic cap while retaining the fast seasonal day/night polygon. Diagnostics now show Earth draw time E alongside M/H/T for hardware comparison.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,7 +15,7 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app43.js"
+      "url": "app44.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
