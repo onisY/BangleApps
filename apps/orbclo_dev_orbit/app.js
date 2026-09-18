@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.48 - reduced coastline redraw */
+/* Orbclo Dev Orbit 0.49 - Earth stage profiler */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
@@ -20,6 +20,7 @@
   var TESTLON=(cfg.lon===undefined?139.754:Math.max(-180,Math.min(180,+cfg.lon)));
   var LIGHTSPAN=[],LIGHTBX=[],LIGHTBY=[],LIGHTLIMB=[],LIGHTSTEPS=6,LUX=0,LUY=0,LVX=0,LVY=0;
   var LIGHTTERM=[],LIGHTNIGHT=[];
+  var EP_G=0,EP_F=0,EP_N=0,EP_C=0,EP_R=0;
 
   /* Lightweight Hemisphere map.  The full Orbit map used many more coastline
      vertices.  At a 25-50 px Earth radius these coarser polygons preserve the
@@ -320,44 +321,53 @@
   }
 
   function drawEarth(sol){
-    /* V0.46's paletted RAM image changed the Bangle.js 2 native 3-bit colour
-       appearance.  Draw directly to the LCD again, but retain the V0.46
-       reusable map/lighting arrays so geometry does not allocate each redraw. */
-    buildLightingInto(sol.dec,EARTHX,EARTHY);
+    /* V0.49 changes no intended Earth appearance; it only profiles the
+       individual Earth stages so the next optimization can target real cost. */
+    var p0=getTime(),p1,p2,p3,p4,p5;
 
+    buildLightingInto(sol.dec,EARTHX,EARTHY);
     var sunAng=Math.atan2(SUNY-EARTHY,SUNX-EARTHX);
     var baseA=sunAng-sol.ha;
     var ca=Math.cos(baseA),sa=Math.sin(baseA);
     var i;
 
-    g.setColor(CYAN).fillCircle(EARTHX,EARTHY,EARTHR);
-
-    g.setColor(GREEN);
-    for(i=0;i<HEMI_XY.length;i++){
+    /* Geometry stage: rotate every cached land/water point first. */
+    for(i=0;i<HEMI_XY.length;i++)
       mapPolyInto(HEMI_XY[i],HEMI_SCREEN[i],ca,sa,EARTHX,EARTHY);
-      g.fillPoly(HEMI_SCREEN[i]);
-    }
-
-    /* Hudson Bay remains a cyan sea cutout. */
-    g.setColor(CYAN);
-    for(i=0;i<HEMI_WATER_XY.length;i++){
+    for(i=0;i<HEMI_WATER_XY.length;i++)
       mapPolyInto(HEMI_WATER_XY[i],HEMI_WATER_SCREEN[i],ca,sa,EARTHX,EARTHY);
-      g.fillPoly(HEMI_WATER_SCREEN[i]);
-    }
+    p1=getTime();
 
-    /* Night overlay stays unchanged.  Redraw only the major white coastlines
-       instead of every small land polygon.  Green fills for North Africa,
-       Hokkaido and Great Britain remain, so the overall texture is retained. */
+    /* F = base sea + land fills + Hudson Bay cutout. */
+    g.setColor(CYAN).fillCircle(EARTHX,EARTHY,EARTHR);
+    g.setColor(GREEN);
+    for(i=0;i<HEMI_SCREEN.length;i++)g.fillPoly(HEMI_SCREEN[i]);
+    g.setColor(CYAN);
+    for(i=0;i<HEMI_WATER_SCREEN.length;i++)g.fillPoly(HEMI_WATER_SCREEN[i]);
+    p2=getTime();
+
+    /* N = seasonal night overlay. */
     g.setColor(DARKBLUE).fillPoly(LIGHTNIGHT);
+    p3=getTime();
+
+    /* C = selected post-night coastline redraw. */
     g.setColor(WHITE);
     for(i=0;i<HEMI_COAST.length;i++)
       g.drawPoly(HEMI_SCREEN[HEMI_COAST[i]],true);
-    /* Keep Hudson Bay outlined because it was specifically added for recognition. */
     g.drawPoly(HEMI_WATER_SCREEN[0],true);
+    p4=getTime();
 
+    /* R = remaining Earth detail: ice, terminator and outer rim. */
     g.fillCircle(EARTHX,EARTHY,HEMI_ICE_R);
     g.drawPoly(LIGHTTERM,false);
     g.drawCircle(EARTHX,EARTHY,EARTHR);
+    p5=getTime();
+
+    EP_G=ms(p0,p1);
+    EP_F=ms(p1,p2);
+    EP_N=ms(p2,p3);
+    EP_C=ms(p3,p4);
+    EP_R=ms(p4,p5);
   }
 
   function moonData(){
@@ -478,7 +488,9 @@
     var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),m=ms(t5,t6),h=ms(t6,t7),tot=ms(t0,t7);
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(-1,-1);
     g.drawString("E"+e+" M"+m+" H"+h+" T"+tot,2,26);
-    g.setFont("4x6",1).drawString("V048 R"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
+    g.setFont("4x6",1);
+    g.drawString("G"+EP_G+" F"+EP_F+" N"+EP_N+" C"+EP_C+" R"+EP_R,2,36);
+    g.drawString("V049 R"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,44);
     try{g.flip();}catch(err){}
     busy=false;
   }
