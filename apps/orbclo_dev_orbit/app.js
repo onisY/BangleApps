@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.39 - black lunar far hemisphere */
+/* Orbclo Dev Orbit 0.40 - hide lunar far-side rim */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
@@ -292,20 +292,31 @@
     g.setColor(YELLOW).fillPoly(p);
 
     /* Earth-facing geometry is independent of solar illumination.
-       Paint the hemisphere opposite Earth black. */
+       Erase the hemisphere opposite Earth slightly beyond the lunar radius,
+       so both its fill and any residual rim/orbit pixels disappear. */
     var dx=m.x-EARTHX,dy=m.y-EARTHY;
     var dl=Math.sqrt(dx*dx+dy*dy)||1;
     var ux=dx/dl,uy=dy/dl,vx=-uy,vy=ux;
+    var farScale=(MOONR+1)/MOONR;
     p=[];
     for(i=0;i<MOONFAR.length;i+=2){
       p.push(
-        Math.round(m.x+ux*MOONFAR[i]+vx*MOONFAR[i+1]),
-        Math.round(m.y+uy*MOONFAR[i]+vy*MOONFAR[i+1])
+        Math.round(m.x+farScale*(ux*MOONFAR[i]+vx*MOONFAR[i+1])),
+        Math.round(m.y+farScale*(uy*MOONFAR[i]+vy*MOONFAR[i+1]))
       );
     }
     g.setColor(BLACK).fillPoly(p);
 
-    g.setColor(WHITE).drawCircle(m.x,m.y,MOONR);
+    /* Draw only the Earth-facing outer semicircle. Do not redraw the full
+       lunar circle, otherwise the hidden far-side outline reappears. */
+    p=[];
+    for(i=0;i<MOONFAR.length;i+=2){
+      p.push(
+        Math.round(m.x-ux*MOONFAR[i]+vx*MOONFAR[i+1]),
+        Math.round(m.y-uy*MOONFAR[i]+vy*MOONFAR[i+1])
+      );
+    }
+    g.setColor(WHITE).drawPoly(p,false);
     return m;
   }
 
@@ -363,7 +374,7 @@
     var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),m=ms(t5,t6),h=ms(t6,t7),tot=ms(t0,t7);
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(-1,-1);
     g.drawString("M"+m+" H"+h+" T"+tot,2,26);
-    g.setFont("4x6",1).drawString("V039 E"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
+    g.setFont("4x6",1).drawString("V040 E"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
     try{g.flip();}catch(err){}
     busy=false;
   }
