@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.49 - Earth stage profiler */
+/* Orbclo Dev Orbit 0.50 - native transformVertices Earth geometry */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
@@ -57,6 +57,8 @@
      Keep only the large/diagnostic shapes that materially aid recognition:
      North America, Greenland, Eurasia and Japan. */
   var HEMI_COAST=[0,1,2,4];
+  var HEMI_MAT=[1,0,0,1,0,0];
+  var HEMI_NATIVE=(typeof g.transformVertices==="function");
 
   var VIRTUAL_OFFSET=0,DEV_STEP_MS=907200000;
 
@@ -321,7 +323,7 @@
   }
 
   function drawEarth(sol){
-    /* V0.49 changes no intended Earth appearance; it only profiles the
+    /* V0.50 keeps the same Earth appearance/profiler while replacing the
        individual Earth stages so the next optimization can target real cost. */
     var p0=getTime(),p1,p2,p3,p4,p5;
 
@@ -331,11 +333,29 @@
     var ca=Math.cos(baseA),sa=Math.sin(baseA);
     var i;
 
-    /* Geometry stage: rotate every cached land/water point first. */
-    for(i=0;i<HEMI_XY.length;i++)
-      mapPolyInto(HEMI_XY[i],HEMI_SCREEN[i],ca,sa,EARTHX,EARTHY);
-    for(i=0;i<HEMI_WATER_XY.length;i++)
-      mapPolyInto(HEMI_WATER_XY[i],HEMI_WATER_SCREEN[i],ca,sa,EARTHX,EARTHY);
+    /* Geometry stage: use Espruino's native Graphics.transformVertices()
+       for the affine rotation/translation.  Fall back to the proven JS loop
+       automatically if this firmware does not expose the native helper. */
+    HEMI_MAT[0]=ca; HEMI_MAT[1]=sa;
+    HEMI_MAT[2]=-sa; HEMI_MAT[3]=ca;
+    HEMI_MAT[4]=EARTHX; HEMI_MAT[5]=EARTHY;
+
+    if(HEMI_NATIVE){
+      try{
+        for(i=0;i<HEMI_XY.length;i++)
+          HEMI_SCREEN[i]=g.transformVertices(HEMI_XY[i],HEMI_MAT);
+        for(i=0;i<HEMI_WATER_XY.length;i++)
+          HEMI_WATER_SCREEN[i]=g.transformVertices(HEMI_WATER_XY[i],HEMI_MAT);
+      }catch(ex){
+        HEMI_NATIVE=false;
+      }
+    }
+    if(!HEMI_NATIVE){
+      for(i=0;i<HEMI_XY.length;i++)
+        mapPolyInto(HEMI_XY[i],HEMI_SCREEN[i],ca,sa,EARTHX,EARTHY);
+      for(i=0;i<HEMI_WATER_XY.length;i++)
+        mapPolyInto(HEMI_WATER_XY[i],HEMI_WATER_SCREEN[i],ca,sa,EARTHX,EARTHY);
+    }
     p1=getTime();
 
     /* F = base sea + land fills + Hudson Bay cutout. */
@@ -490,7 +510,7 @@
     g.drawString("E"+e+" M"+m+" H"+h+" T"+tot,2,26);
     g.setFont("4x6",1);
     g.drawString("G"+EP_G+" F"+EP_F+" N"+EP_N+" C"+EP_C+" R"+EP_R,2,36);
-    g.drawString("V049 R"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,44);
+    g.drawString("V050 X"+(HEMI_NATIVE?1:0)+" R"+EARTHR+" M"+MOONR+" O"+MOONORBIT,2,44);
     try{g.flip();}catch(err){}
     busy=false;
   }
