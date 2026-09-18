@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.29 - larger readable diagnostics */
+/* Orbclo Dev Orbit 0.30 - cached lightweight Moon phase */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800;
@@ -6,6 +6,7 @@
   var colonX=0,colonVisible=true;
   var SUNX=W-28,SUNY=52,EARTHX=54,EARTHY=116,EARTHR=30;
   var MOONORBIT=44,MOONR=7,SYNODIC=29.530588853,NEWMOON=947182440000;
+  var MOONSTEPS=4,MOONY=[],MOONHALF=[];
   var TESTLAT=35.694,TESTLON=139.754;
   var LIGHTSPAN=[],LIGHTBX=[],LIGHTBY=[],LIGHTLIMB=[],LIGHTSTEPS=6,LUX=0,LUY=0,LVX=0,LVY=0;
 
@@ -73,6 +74,15 @@
         Math.round(EARTHX-LUX*span+LVX*v),
         Math.round(EARTHY-LUY*span+LVY*v)
       );
+    }
+  }
+
+  function buildMoonCache(){
+    MOONY=[];MOONHALF=[];
+    for(var i=-MOONSTEPS;i<=MOONSTEPS;i++){
+      var yy=MOONR*i/MOONSTEPS;
+      MOONY.push(yy);
+      MOONHALF.push(Math.sqrt(Math.max(0,MOONR*MOONR-yy*yy)));
     }
   }
 
@@ -200,23 +210,21 @@
   function drawMoon(){
     var m=moonData();
     var k=(1-Math.cos(m.phase*2*Math.PI))/2;
-    var bright=Math.round((2*k-1)*MOONR);
 
     g.setColor(0x8410).drawCircle(EARTHX,EARTHY,MOONORBIT);
-
-    /* Dark disk first, then a clipped bright portion using a lightweight ellipse-like polygon. */
     g.setColor(0x4208).fillCircle(m.x,m.y,MOONR);
 
-    var p=[],steps=8,i,yy,half,xedge;
-    for(i=-steps;i<=steps;i++){
-      yy=MOONR*i/steps;
-      half=Math.sqrt(Math.max(0,MOONR*MOONR-yy*yy));
+    /* Reuse the cached circular cross-sections: no sqrt in normal redraws. */
+    var p=[],i,yy,half,xedge,n=MOONY.length;
+    for(i=0;i<n;i++){
+      yy=MOONY[i];
+      half=MOONHALF[i];
       xedge=(m.phase<0.5)?(-half+2*k*half):(half-2*(1-k)*half);
       p.push(Math.round(m.x+xedge),Math.round(m.y+yy));
     }
-    for(i=steps;i>=-steps;i--){
-      yy=MOONR*i/steps;
-      half=Math.sqrt(Math.max(0,MOONR*MOONR-yy*yy));
+    for(i=n-1;i>=0;i--){
+      yy=MOONY[i];
+      half=MOONHALF[i];
       p.push(Math.round(m.x+half),Math.round(m.y+yy));
     }
     g.setColor(0xC618).fillPoly(p);
@@ -266,7 +274,7 @@
     var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),m=ms(t5,t6),h=ms(t6,t7),tot=ms(t0,t7);
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(-1,-1);
     g.drawString("M"+m+" H"+h+" T"+tot,2,26);
-    g.setFont("4x6",1).drawString("0.29 Age "+moon.age.toFixed(1),2,36);
+    g.setFont("4x6",1).drawString("0.30 Age "+moon.age.toFixed(1),2,36);
     try{g.flip();}catch(err){}
     busy=false;
   }
@@ -308,6 +316,7 @@
   }
 
   buildLightingCache();
+  buildMoonCache();
   try{Bangle.setUI({mode:"custom",touch:onTouch,btn:function(){if(!busy)Bangle.showLauncher();},remove:cleanup});}catch(e){}
   Bangle.on("lock",onLock);
   try{Bangle.setLocked(false);}catch(e){}
