@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.22 - native 12x20 header */
+/* Orbclo Dev Orbit 0.23 - bold spaced native header */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800;
@@ -70,34 +70,54 @@
     ];
   }
 
+  function drawBoldSpaced(str,x,y,advance,color){
+    g.setBgColor(WHITE).setColor(color).setFont("12x20").setFontAlign(-1,-1);
+    for(var i=0;i<str.length;i++){
+      var xx=x+i*advance;
+      g.drawString(str[i],xx,y);
+      g.drawString(str[i],xx+1,y);
+    }
+    return x+(str.length?((str.length-1)*advance+13):0);
+  }
+
   function drawHeader(){
     var d=new Date(),bat=E.getBattery();
     var pre=pad(d.getMonth()+1)+"/"+pad(d.getDate())+" "+pad(d.getHours());
     var post=pad(d.getMinutes());
-    var x=1;
+    var x=1,adv=13;
 
     g.setColor(WHITE).fillRect(0,0,W-1,23);
-    g.setBgColor(WHITE).setColor(BLACK).setFont("12x20").setFontAlign(-1,-1);
 
-    g.drawString(pre,x,2);
-    colonX=x+g.stringWidth(pre);
+    x=drawBoldSpaced(pre,x,2,adv,BLACK);
+    colonX=x;
     colonVisible=(d.getSeconds()%2)===0;
-    if(colonVisible)g.drawString(":",colonX,2);
-    g.drawString(post,colonX+g.stringWidth(":"),2);
+    if(colonVisible){
+      g.setBgColor(WHITE).setColor(BLACK).setFont("12x20").setFontAlign(-1,-1);
+      g.drawString(":",colonX,2);
+      g.drawString(":",colonX+1,2);
+    }
+    x=colonX+adv;
+    drawBoldSpaced(post,x,2,adv,BLACK);
 
-    /* Battery digits stay full-height; a small percent sign leaves room for 100%. */
-    var pctX=W-7;
-    g.setFont("12x20").setFontAlign(1,-1).setColor(bat<=20?RED:BLACK);
-    g.drawString(""+bat,pctX-1,2);
-    g.setFont("6x8").setFontAlign(-1,-1).drawString("%",pctX,11);
+    /* Keep battery separate so the extra 1 px character spacing cannot overlap it. */
+    if(bat<100){
+      var digits=""+bat;
+      var bw=digits.length===1?13:26;
+      var bx=W-8-bw;
+      drawBoldSpaced(digits,bx,2,13,bat<=20?RED:BLACK);
+      g.setFont("6x8").setFontAlign(-1,-1).setColor(bat<=20?RED:BLACK).drawString("%",W-7,11);
+    } else {
+      g.setFont("Vector",14).setFontAlign(1,0).setColor(BLACK).drawString("100%",W-2,11);
+    }
   }
 
   function drawColon(show){
     if(killed||busy)return;
-    g.setColor(WHITE).fillRect(colonX,2,colonX+11,21);
+    g.setColor(WHITE).fillRect(colonX,2,colonX+12,21);
     if(show){
       g.setBgColor(WHITE).setColor(BLACK).setFont("12x20").setFontAlign(-1,-1);
       g.drawString(":",colonX,2);
+      g.drawString(":",colonX+1,2);
     }
     colonVisible=show;
   }
@@ -171,7 +191,7 @@
 
     var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),h=ms(t5,t6),tot=ms(t0,t6);
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(0,0);
-    g.drawString("OBS 0.22  Az"+Math.round(sol.az)+" El"+Math.round(sol.el),W>>1,H-22);
+    g.drawString("OBS 0.23  Az"+Math.round(sol.az)+" El"+Math.round(sol.el),W>>1,H-22);
     g.drawString("C"+c+" S"+s+" A"+a+" E"+e+" O"+o+" H"+h+" T"+tot,W>>1,H-10);
     try{g.flip();}catch(err){}
     busy=false;
