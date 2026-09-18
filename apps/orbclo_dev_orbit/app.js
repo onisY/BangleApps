@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.40 - hide lunar far-side rim */
+/* Orbclo Dev Orbit 0.41 - faster lunar clipping */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
@@ -15,7 +15,7 @@
   if(MOONORBIT<minOrbit)MOONORBIT=minOrbit;
   var SUNRAY=4,SUNX=0,SUNY=0,EARTHX=0,EARTHY=0;
   var SYNODIC=29.530588853,NEWMOON=947182440000;
-  var MOONLIT=[],MOONFAR=[];
+  var MOONLIT=[],MOONFAR=[],MOONFAROUT=[];
   var TESTLAT=(cfg.lat===undefined?35.694:Math.max(-90,Math.min(90,+cfg.lat)));
   var TESTLON=(cfg.lon===undefined?139.754:Math.max(-180,Math.min(180,+cfg.lon)));
   var LIGHTSPAN=[],LIGHTBX=[],LIGHTBY=[],LIGHTLIMB=[],LIGHTSTEPS=6,LUX=0,LUY=0,LVX=0,LVY=0;
@@ -119,8 +119,9 @@
 
   function buildMoonCache(){
     /* Sunlight is parallel to the Earth-Sun line. */
-    MOONLIT=[];MOONFAR=[];
+    MOONLIT=[];MOONFAR=[];MOONFAROUT=[];
     var a=Math.atan2(SUNY-EARTHY,SUNX-EARTHX);
+    var ro=MOONR+1;
     for(var i=0;i<=8;i++){
       var q=a-Math.PI/2+i*Math.PI/8;
       MOONLIT.push(
@@ -128,13 +129,12 @@
         Math.round(Math.sin(q)*MOONR)
       );
 
-      /* Local semicircle for the hemisphere facing away from Earth.
-         U is outward along Earth->Moon, V is perpendicular. */
+      /* Cache both the visible-radius arc and the +1 px erase arc.
+         This removes the per-redraw farScale multiplication. */
       var t=-Math.PI/2+i*Math.PI/8;
-      MOONFAR.push(
-        Math.cos(t)*MOONR,
-        Math.sin(t)*MOONR
-      );
+      var ct=Math.cos(t),st=Math.sin(t);
+      MOONFAR.push(ct*MOONR,st*MOONR);
+      MOONFAROUT.push(ct*ro,st*ro);
     }
   }
 
@@ -269,11 +269,13 @@
 
     /* North-side view: new Moon lies toward the Sun; phase increases CCW visually. */
     var a=sunAng-phase*2*Math.PI;
+    var ca=Math.cos(a),sa=Math.sin(a);
     return {
       age:age,
       phase:phase,
-      x:Math.round(EARTHX+MOONORBIT*Math.cos(a)),
-      y:Math.round(EARTHY+MOONORBIT*Math.sin(a))
+      x:Math.round(EARTHX+MOONORBIT*ca),
+      y:Math.round(EARTHY+MOONORBIT*sa),
+      ux:ca,uy:sa,vx:-sa,vy:ca
     };
   }
 
@@ -291,32 +293,23 @@
     }
     g.setColor(YELLOW).fillPoly(p);
 
-    /* Earth-facing geometry is independent of solar illumination.
-       Erase the hemisphere opposite Earth slightly beyond the lunar radius,
-       so both its fill and any residual rim/orbit pixels disappear. */
-    var dx=m.x-EARTHX,dy=m.y-EARTHY;
-    var dl=Math.sqrt(dx*dx+dy*dy)||1;
-    var ux=dx/dl,uy=dy/dl,vx=-uy,vy=ux;
-    var farScale=(MOONR+1)/MOONR;
-    p=[];
-    for(i=0;i<MOONFAR.length;i+=2){
-      p.push(
-        Math.round(m.x+farScale*(ux*MOONFAR[i]+vx*MOONFAR[i+1])),
-        Math.round(m.y+farScale*(uy*MOONFAR[i]+vy*MOONFAR[i+1]))
-      );
-    }
-    g.setColor(BLACK).fillPoly(p);
+    /* Reuse the orbit direction already calculated in moonData().
+       V0.40 recomputed it with sqrt/division here; on Bangle.js that was costly. */
+    var ux=m.ux,uy=m.uy,vx=m.vx,vy=m.vy;
+    var far=[],near=[],j=0,fx,fy,nx,ny;
+    for(i=0;i<MOONFAR.length;i+=2,j+=2){
+      fx=MOONFAROUT[i];fy=MOONFAROUT[i+1];
+      nx=MOONFAR[i];ny=MOONFAR[i+1];
 
-    /* Draw only the Earth-facing outer semicircle. Do not redraw the full
-       lunar circle, otherwise the hidden far-side outline reappears. */
-    p=[];
-    for(i=0;i<MOONFAR.length;i+=2){
-      p.push(
-        Math.round(m.x-ux*MOONFAR[i]+vx*MOONFAR[i+1]),
-        Math.round(m.y-uy*MOONFAR[i]+vy*MOONFAR[i+1])
-      );
+      /* Screen coordinates are non-negative, so +0.5 then integer coercion
+         is equivalent to Math.round() but cheaper on the watch. */
+      far[j]=(m.x+ux*fx+vx*fy+0.5)|0;
+      far[j+1]=(m.y+uy*fx+vy*fy+0.5)|0;
+      near[j]=(m.x-ux*nx+vx*ny+0.5)|0;
+      near[j+1]=(m.y-uy*nx+vy*ny+0.5)|0;
     }
-    g.setColor(WHITE).drawPoly(p,false);
+    g.setColor(BLACK).fillPoly(far);
+    g.setColor(WHITE).drawPoly(near,false);
     return m;
   }
 
@@ -374,7 +367,7 @@
     var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),m=ms(t5,t6),h=ms(t6,t7),tot=ms(t0,t7);
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(-1,-1);
     g.drawString("M"+m+" H"+h+" T"+tot,2,26);
-    g.setFont("4x6",1).drawString("V040 E"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
+    g.setFont("4x6",1).drawString("V041 E"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
     try{g.flip();}catch(err){}
     busy=false;
   }
