@@ -97,18 +97,18 @@
       g.drawString(":",colonX+1,2);
     }
     x=colonX+adv;
-    drawBoldSpaced(post,x,2,adv,BLACK);
+    var timeEnd=drawBoldSpaced(post,x,2,adv,BLACK);
 
-    /* Keep battery separate so the extra 1 px character spacing cannot overlap it. */
-    if(bat<100){
-      var digits=""+bat;
-      var bw=digits.length===1?13:26;
-      var bx=W-8-bw;
-      drawBoldSpaced(digits,bx,2,13,bat<=20?RED:BLACK);
-      g.setFont("6x8").setFontAlign(-1,-1).setColor(bat<=20?RED:BLACK).drawString("%",W-7,11);
-    } else {
-      g.setFont("Vector",14).setFontAlign(1,0).setColor(BLACK).drawString("100%",W-2,11);
+    /* Fit battery into the measured remaining width so 100% can never overlap time. */
+    var btxt=bat+"%",bsize=16,bcol=bat<=20?RED:BLACK;
+    g.setFont("Vector",bsize);
+    while(bsize>10 && g.stringWidth(btxt)>W-3-(timeEnd+2)){
+      bsize--;
+      g.setFont("Vector",bsize);
     }
+    g.setBgColor(WHITE).setColor(bcol).setFontAlign(1,0);
+    g.drawString(btxt,W-2,11);
+    g.drawString(btxt,W-3,11);
   }
 
   function drawColon(show){
