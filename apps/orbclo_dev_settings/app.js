@@ -1,8 +1,8 @@
-/* Orbclo Dev Settings 0.01 - isolated settings test */
+/* Orbclo Dev Settings 0.02 - shared Orbit settings */
 (function(){
-  var Storage=require("Storage"),FILE="orbclo_settingsdev.json";
+  var Storage=require("Storage"),FILE="orbclo_orbitdev.json";
   var s=Storage.readJSON(FILE,1)||{};
-  var d={locationMode:0,countryName:"Japan",pref:12,place:0,locPref:"Tokyo",locName:"Chiyoda-ku",lat:35.694,lon:139.754,manualLat:35.694,manualLon:139.754,sunSize:6,earthSize:30,moonSize:9,markerSize:2,earthStyle:0,earthDayColor:6,earthNightColor:4,earthEdgeColor:7,viewSide:0};
+  var d={locationMode:0,countryName:"Japan",pref:12,place:0,locPref:"Tokyo",locName:"Chiyoda-ku",lat:35.694,lon:139.754,manualLat:35.694,manualLon:139.754,sunSize:6,earthSize:30,moonSize:7,markerSize:2,earthStyle:0,earthDayColor:6,earthNightColor:4,earthEdgeColor:7,viewSide:0};
   var LOCATION_MODES=["Place","Manual","GPS"],EARTH_STYLES=["Current","Custom colors","N/S Hemi map"],VIEW_SIDES=["North","South"],COLORS=["Black","Red","Green","Yellow","Blue","Magenta","Cyan","White"];
   Object.keys(d).forEach(function(k){if(s[k]===undefined)s[k]=d[k];});
   function write(){Storage.writeJSON(FILE,s);}
@@ -31,7 +31,7 @@
     }
     m["Sun size"]={value:s.sunSize,min:3,max:15,step:1,onchange:function(v){s.sunSize=v;write();}};
     m["Earth size"]={value:s.earthSize,min:8,max:48,step:1,onchange:function(v){s.earthSize=v;write();}};
-    m["Moon size"]={value:s.moonSize,min:3,max:18,step:1,onchange:function(v){s.moonSize=v;write();}};
+    m["Moon size"]={value:s.moonSize,min:3,max:15,step:1,onchange:function(v){s.moonSize=v;write();}};
     m["Marker size"]={value:s.markerSize,min:1,max:4,step:1,onchange:function(v){s.markerSize=v;write();}};
     E.showMenu(m);
   }
