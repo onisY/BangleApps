@@ -1,3 +1,4 @@
+0.15: Add the Chiyoda observer marker, outward green zenith line and magenta local horizon line, with observer draw timing.
 0.14: Add current-time solar azimuth/elevation calculation for the default Chiyoda coordinates and profile the astronomy calculation separately.
 0.13: Replace Earth night-side scanline rendering with one precomputed semicircle polygon fill and keep per-component timing.
 0.12: Add per-component render timing for screen clear, Sun, Earth, header and total redraw.
