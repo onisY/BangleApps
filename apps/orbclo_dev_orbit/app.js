@@ -1,10 +1,11 @@
-/* Orbclo Dev Orbit 0.26 - reduced seasonal terminator geometry */
+/* Orbclo Dev Orbit 0.27 - Moon orbit and position */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800;
   var busy=false,killed=false,touchCount=0,transitionTimer,minuteTimer,secondTimer,unlockTimer;
   var colonX=0,colonVisible=true;
   var SUNX=W-28,SUNY=52,EARTHX=54,EARTHY=116,EARTHR=30;
+  var MOONORBIT=44,MOONR=7,SYNODIC=29.530588853,NEWMOON=947182440000;
   var TESTLAT=35.694,TESTLON=139.754;
   var LIGHTSPAN=[],LIGHTBX=[],LIGHTBY=[],LIGHTLIMB=[],LIGHTSTEPS=6,LUX=0,LUY=0,LVX=0,LVY=0;
 
@@ -179,6 +180,31 @@
   }
 
 
+  function moonData(){
+    var age=(Date.now()-NEWMOON)/86400000;
+    age=age%SYNODIC;
+    if(age<0)age+=SYNODIC;
+    var phase=age/SYNODIC;
+    var sunAng=Math.atan2(SUNY-EARTHY,SUNX-EARTHX);
+
+    /* North-side view: new Moon lies toward the Sun; phase increases CCW visually. */
+    var a=sunAng-phase*2*Math.PI;
+    return {
+      age:age,
+      phase:phase,
+      x:Math.round(EARTHX+MOONORBIT*Math.cos(a)),
+      y:Math.round(EARTHY+MOONORBIT*Math.sin(a))
+    };
+  }
+
+  function drawMoon(){
+    var m=moonData();
+    g.setColor(0x8410).drawCircle(EARTHX,EARTHY,MOONORBIT);
+    g.setColor(0xC618).fillCircle(m.x,m.y,MOONR);
+    g.setColor(WHITE).drawCircle(m.x,m.y,MOONR);
+    return m;
+  }
+
   function drawObserver(sol){
     var sunAng=Math.atan2(SUNY-EARTHY,SUNX-EARTHX);
     var rr=EARTHR*Math.cos(rad(TESTLAT));
@@ -213,13 +239,15 @@
     var t4=getTime();
     drawObserver(sol);
     var t5=getTime();
-    drawHeader();
+    var moon=drawMoon();
     var t6=getTime();
+    drawHeader();
+    var t7=getTime();
 
-    var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),h=ms(t5,t6),tot=ms(t0,t6);
+    var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),m=ms(t5,t6),h=ms(t6,t7),tot=ms(t0,t7);
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(0,0);
-    g.drawString("OBS 0.26 D"+Math.round(deg(sol.dec))+" Az"+Math.round(sol.az)+" El"+Math.round(sol.el),W>>1,H-22);
-    g.drawString("C"+c+" S"+s+" A"+a+" E"+e+" O"+o+" H"+h+" T"+tot,W>>1,H-10);
+    g.drawString("0.27 Age"+moon.age.toFixed(1)+" D"+Math.round(deg(sol.dec))+" Az"+Math.round(sol.az),W>>1,H-22);
+    g.drawString("C"+c+" S"+s+" A"+a+" E"+e+" O"+o+" M"+m+" H"+h+" T"+tot,W>>1,H-10);
     try{g.flip();}catch(err){}
     busy=false;
   }
