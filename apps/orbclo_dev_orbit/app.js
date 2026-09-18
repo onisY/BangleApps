@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.27 - Moon orbit and position */
+/* Orbclo Dev Orbit 0.28 - Moon phase + unobstructed diagnostics */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800;
@@ -199,8 +199,27 @@
 
   function drawMoon(){
     var m=moonData();
+    var k=(1-Math.cos(m.phase*2*Math.PI))/2;
+    var bright=Math.round((2*k-1)*MOONR);
+
     g.setColor(0x8410).drawCircle(EARTHX,EARTHY,MOONORBIT);
-    g.setColor(0xC618).fillCircle(m.x,m.y,MOONR);
+
+    /* Dark disk first, then a clipped bright portion using a lightweight ellipse-like polygon. */
+    g.setColor(0x4208).fillCircle(m.x,m.y,MOONR);
+
+    var p=[],steps=8,i,yy,half,xedge;
+    for(i=-steps;i<=steps;i++){
+      yy=MOONR*i/steps;
+      half=Math.sqrt(Math.max(0,MOONR*MOONR-yy*yy));
+      xedge=(m.phase<0.5)?(-half+2*k*half):(half-2*(1-k)*half);
+      p.push(Math.round(m.x+xedge),Math.round(m.y+yy));
+    }
+    for(i=steps;i>=-steps;i--){
+      yy=MOONR*i/steps;
+      half=Math.sqrt(Math.max(0,MOONR*MOONR-yy*yy));
+      p.push(Math.round(m.x+half),Math.round(m.y+yy));
+    }
+    g.setColor(0xC618).fillPoly(p);
     g.setColor(WHITE).drawCircle(m.x,m.y,MOONR);
     return m;
   }
@@ -245,9 +264,8 @@
     var t7=getTime();
 
     var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),m=ms(t5,t6),h=ms(t6,t7),tot=ms(t0,t7);
-    g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(0,0);
-    g.drawString("0.27 Age"+moon.age.toFixed(1)+" D"+Math.round(deg(sol.dec))+" Az"+Math.round(sol.az),W>>1,H-22);
-    g.drawString("C"+c+" S"+s+" A"+a+" E"+e+" O"+o+" M"+m+" H"+h+" T"+tot,W>>1,H-10);
+    g.setColor(WHITE).setBgColor(BLACK).setFont("4x6",1).setFontAlign(-1,-1);
+    g.drawString("0.28  M"+m+" H"+h+" T"+tot+"  Age"+moon.age.toFixed(1),2,26);
     try{g.flip();}catch(err){}
     busy=false;
   }
