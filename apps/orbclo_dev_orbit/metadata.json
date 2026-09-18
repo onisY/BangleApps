@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.45",
+  "version": "0.46",
   "author": "onisY",
-  "description": "Hemisphere Earth refinement: make Mexico visible in the North America outline, cut Hudson Bay back out as sea, and reduce per-redraw allocations by reusing fixed screen-coordinate polygon arrays. E/M/H/T timing remains on screen.",
+  "description": "Earth rendering performance test: preserve the V0.45 Hemisphere appearance (Mexico and Hudson Bay included) but render the Earth into a small reusable 4-bpp RAM buffer and transfer it to the LCD with one image draw. Lighting polygons are also reused. Direct rendering remains as a fallback.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,7 +15,7 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app45.js"
+      "url": "app46.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
