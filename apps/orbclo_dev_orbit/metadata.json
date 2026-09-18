@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.36",
+  "version": "0.37",
   "author": "onisY",
-  "description": "Forced-delivery battery header test: battery number only, right-aligned in bold native 12x20, green normally and red at 20% or below, blinking in phase with the clock colon while charging. Uses a cache-busting app36.js payload.",
+  "description": "Sunrise/sunset geometry stage: replace the single magenta tangent with two latitude- and season-dependent rise/set rays using solar declination, use shared configured lat/lon, and retain the axial-tilt seasonal Earth terminator. Polar day/night suppresses rise/set rays.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,7 +15,7 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app36.js"
+      "url": "app37.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
