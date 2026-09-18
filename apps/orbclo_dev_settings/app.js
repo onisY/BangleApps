@@ -1,4 +1,4 @@
-/* Orbclo Dev Settings 0.03 - configurable body sizes and Moon orbit */
+/* Orbclo Dev Settings 0.04 - Moon orbit up to 80 px */
 (function(){
   var Storage=require("Storage"),FILE="orbclo_orbitdev.json";
   var s=Storage.readJSON(FILE,1)||{};
@@ -32,7 +32,7 @@
     m["Sun size"]={value:s.sunSize,min:4,max:15,step:1,onchange:function(v){s.sunSize=v;write();}};
     m["Earth size"]={value:s.earthSize,min:25,max:50,step:1,onchange:function(v){s.earthSize=v;write();}};
     m["Moon size"]={value:s.moonSize,min:4,max:15,step:1,onchange:function(v){s.moonSize=v;write();}};
-    m["Moon orbit"]={value:s.moonOrbit,min:40,max:70,step:1,onchange:function(v){s.moonOrbit=v;write();}};
+    m["Moon orbit"]={value:s.moonOrbit,min:40,max:80,step:1,onchange:function(v){s.moonOrbit=v;write();}};
     m["Marker size"]={value:s.markerSize,min:1,max:4,step:1,onchange:function(v){s.markerSize=v;write();}};
     E.showMenu(m);
   }
