@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.23 - bold spaced native header */
+/* Orbclo Dev Orbit 0.24 - seasonal curved terminator */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800;
@@ -6,7 +6,6 @@
   var colonX=0,colonVisible=true;
   var SUNX=W-28,SUNY=52,EARTHX=54,EARTHY=116,EARTHR=30;
   var TESTLAT=35.694,TESTLON=139.754;
-  var NIGHTPOLY=[],TERM=[];
 
   function clear(t){if(t)clearTimeout(t);}
   function pad(n){return n<10?"0"+n:""+n;}
@@ -44,30 +43,12 @@
     var az=deg(Math.atan2(Math.sin(ha),Math.cos(ha)*Math.sin(la)-Math.tan(dec)*Math.cos(la)))+180;
     if(az<0)az+=360;
     if(az>=360)az-=360;
-    return {az:az,el:el,ha:ha};
+    return {az:az,el:el,ha:ha,dec:dec};
   }
 
   function safeSolar(){
     try{return solarPosition(new Date(),TESTLAT,TESTLON);}
-    catch(e){return {az:0,el:-99,ha:0};}
-  }
-
-  function buildEarthGeometry(){
-    var dx=SUNX-EARTHX,dy=SUNY-EARTHY;
-    var len=Math.sqrt(dx*dx+dy*dy);
-    var nightA=Math.atan2(-dy,-dx);
-    for(var i=0;i<=12;i++){
-      var a=nightA-Math.PI/2+i*Math.PI/12;
-      NIGHTPOLY.push(
-        Math.round(EARTHX+Math.cos(a)*EARTHR),
-        Math.round(EARTHY+Math.sin(a)*EARTHR)
-      );
-    }
-    var tx=-dy/len,ty=dx/len;
-    TERM=[
-      Math.round(EARTHX-tx*(EARTHR-1)),Math.round(EARTHY-ty*(EARTHR-1)),
-      Math.round(EARTHX+tx*(EARTHR-1)),Math.round(EARTHY+ty*(EARTHR-1))
-    ];
+    catch(e){return {az:0,el:-99,ha:0,dec:0};}
   }
 
   function drawBoldSpaced(str,x,y,advance,color){
@@ -144,10 +125,44 @@
     g.setColor(YELLOW).fillCircle(SUNX,SUNY,r);
   }
 
-  function drawEarth(){
+  function buildLighting(dec){
+    var a=Math.atan2(SUNY-EARTHY,SUNX-EARTHX);
+    var ux=Math.cos(a),uy=Math.sin(a);
+    var vx=-uy,vy=ux;
+    var sd=Math.sin(dec);
+    var term=[],night=[];
+    var steps=12,i,v,span,u,x,y;
+
+    /* Orthographic north-pole view of the spherical solar terminator.
+       u is along the projected Earth->Sun direction, v is perpendicular. */
+    for(i=0;i<=steps;i++){
+      v=-EARTHR+2*EARTHR*i/steps;
+      span=Math.sqrt(Math.max(0,EARTHR*EARTHR-v*v));
+      u=-sd*span;
+      x=Math.round(EARTHX+ux*u+vx*v);
+      y=Math.round(EARTHY+uy*u+vy*v);
+      term.push(x,y);
+      night.push(x,y);
+    }
+
+    /* Return along the anti-solar limb. This closes only the night region. */
+    for(i=steps;i>=0;i--){
+      v=-EARTHR+2*EARTHR*i/steps;
+      span=Math.sqrt(Math.max(0,EARTHR*EARTHR-v*v));
+      u=-span;
+      night.push(
+        Math.round(EARTHX+ux*u+vx*v),
+        Math.round(EARTHY+uy*u+vy*v)
+      );
+    }
+    return {night:night,term:term};
+  }
+
+  function drawEarth(sol){
+    var lit=buildLighting(sol.dec);
     g.setColor(CYAN).fillCircle(EARTHX,EARTHY,EARTHR);
-    g.setColor(DARKBLUE).fillPoly(NIGHTPOLY);
-    g.setColor(WHITE).drawLine(TERM[0],TERM[1],TERM[2],TERM[3]);
+    g.setColor(DARKBLUE).fillPoly(lit.night);
+    g.setColor(WHITE).drawPoly(lit.term,false);
     g.setColor(WHITE).drawCircle(EARTHX,EARTHY,EARTHR);
   }
 
@@ -182,7 +197,7 @@
     var t2=getTime();
     var sol=safeSolar();
     var t3=getTime();
-    drawEarth();
+    drawEarth(sol);
     var t4=getTime();
     drawObserver(sol);
     var t5=getTime();
@@ -191,7 +206,7 @@
 
     var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),h=ms(t5,t6),tot=ms(t0,t6);
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(0,0);
-    g.drawString("OBS 0.23  Az"+Math.round(sol.az)+" El"+Math.round(sol.el),W>>1,H-22);
+    g.drawString("OBS 0.24 D"+Math.round(deg(sol.dec))+" Az"+Math.round(sol.az)+" El"+Math.round(sol.el),W>>1,H-22);
     g.drawString("C"+c+" S"+s+" A"+a+" E"+e+" O"+o+" H"+h+" T"+tot,W>>1,H-10);
     try{g.flip();}catch(err){}
     busy=false;
@@ -233,7 +248,6 @@
     try{Bangle.removeListener("lock",onLock);}catch(e){}
   }
 
-  buildEarthGeometry();
   try{Bangle.setUI({mode:"custom",touch:onTouch,btn:function(){if(!busy)Bangle.showLauncher();},remove:cleanup});}catch(e){}
   Bangle.on("lock",onLock);
   try{Bangle.setLocked(false);}catch(e){}
