@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.38 - tap advances virtual time by 10.5 days */
+/* Orbclo Dev Orbit 0.39 - black lunar far hemisphere */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
@@ -15,7 +15,7 @@
   if(MOONORBIT<minOrbit)MOONORBIT=minOrbit;
   var SUNRAY=4,SUNX=0,SUNY=0,EARTHX=0,EARTHY=0;
   var SYNODIC=29.530588853,NEWMOON=947182440000;
-  var MOONLIT=[];
+  var MOONLIT=[],MOONFAR=[];
   var TESTLAT=(cfg.lat===undefined?35.694:Math.max(-90,Math.min(90,+cfg.lat)));
   var TESTLON=(cfg.lon===undefined?139.754:Math.max(-180,Math.min(180,+cfg.lon)));
   var LIGHTSPAN=[],LIGHTBX=[],LIGHTBY=[],LIGHTLIMB=[],LIGHTSTEPS=6,LUX=0,LUY=0,LVX=0,LVY=0;
@@ -118,16 +118,22 @@
   }
 
   function buildMoonCache(){
-    /* Sun is treated as effectively infinitely distant.
-       The illuminated lunar hemisphere therefore has one fixed direction:
-       toward the Sun, parallel to the Earth-Sun line, everywhere on the orbit. */
-    MOONLIT=[];
+    /* Sunlight is parallel to the Earth-Sun line. */
+    MOONLIT=[];MOONFAR=[];
     var a=Math.atan2(SUNY-EARTHY,SUNX-EARTHX);
     for(var i=0;i<=8;i++){
       var q=a-Math.PI/2+i*Math.PI/8;
       MOONLIT.push(
         Math.round(Math.cos(q)*MOONR),
         Math.round(Math.sin(q)*MOONR)
+      );
+
+      /* Local semicircle for the hemisphere facing away from Earth.
+         U is outward along Earth->Moon, V is perpendicular. */
+      var t=-Math.PI/2+i*Math.PI/8;
+      MOONFAR.push(
+        Math.cos(t)*MOONR,
+        Math.sin(t)*MOONR
       );
     }
   }
@@ -276,16 +282,29 @@
 
     g.setColor(0x8410).drawCircle(EARTHX,EARTHY,MOONORBIT);
 
-    /* Requested colors: dark hemisphere = navy, sunward hemisphere = vivid yellow. */
+    /* Solar illumination: anti-sun hemisphere navy, sunward hemisphere yellow. */
     g.setColor(NAVY).fillCircle(m.x,m.y,MOONR);
 
-    /* Bright half is a cached semicircle whose orientation is fixed by the
-       Earth->Sun direction, equivalent to parallel rays from Sun toward Earth. */
     var p=[],i;
     for(i=0;i<MOONLIT.length;i+=2){
       p.push(m.x+MOONLIT[i],m.y+MOONLIT[i+1]);
     }
     g.setColor(YELLOW).fillPoly(p);
+
+    /* Earth-facing geometry is independent of solar illumination.
+       Paint the hemisphere opposite Earth black. */
+    var dx=m.x-EARTHX,dy=m.y-EARTHY;
+    var dl=Math.sqrt(dx*dx+dy*dy)||1;
+    var ux=dx/dl,uy=dy/dl,vx=-uy,vy=ux;
+    p=[];
+    for(i=0;i<MOONFAR.length;i+=2){
+      p.push(
+        Math.round(m.x+ux*MOONFAR[i]+vx*MOONFAR[i+1]),
+        Math.round(m.y+uy*MOONFAR[i]+vy*MOONFAR[i+1])
+      );
+    }
+    g.setColor(BLACK).fillPoly(p);
+
     g.setColor(WHITE).drawCircle(m.x,m.y,MOONR);
     return m;
   }
@@ -344,7 +363,7 @@
     var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),m=ms(t5,t6),h=ms(t6,t7),tot=ms(t0,t7);
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(-1,-1);
     g.drawString("M"+m+" H"+h+" T"+tot,2,26);
-    g.setFont("4x6",1).drawString("V038 E"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
+    g.setFont("4x6",1).drawString("V039 E"+EARTHR+" M"+MOONR+" O"+MOONORBIT+" S"+SUNR,2,36);
     try{g.flip();}catch(err){}
     busy=false;
   }
