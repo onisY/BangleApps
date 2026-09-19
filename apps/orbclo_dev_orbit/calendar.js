@@ -180,12 +180,15 @@
     function selectedIndex(){if(!selected)return -1;var n=dayNumber(selected)-dayNumber(pageStart);return n>=0&&n<35?n:-1;}
     function logCalError(stage,e){try{Storage.write("orbclo_dev_orbit.err","calendar "+stage+": "+e);}catch(x){}}
     function redrawSelected(){var i=selectedIndex();if(i>=0)drawCell(i);}
-    function drawSelectedFrame(on){
+    function drawSelectedCell(on){
       var i=selectedIndex();if(i<0)return;
-      var q=cellGeometry(i);
-      g.setColor(on?WHITE:BLACK);
-      g.drawRect(q.x1+1,q.y1+1,q.x2-1,q.y2-1);
-      g.drawRect(q.x1+2,q.y1+2,q.x2-2,q.y2-2);
+      if(!on){drawCell(i);try{g.flip();}catch(e){};return;}
+
+      var q=cellGeometry(i),d=addDays(pageStart,i);
+      g.setColor(WHITE).fillRect(q.x1+1,q.y1+1,q.x2-1,q.y2-1);
+      g.setColor(BLACK).setBgColor(WHITE).setFont("Vector",20).setFontAlign(0,0)
+        .drawString(""+d.getDate(),(q.x1+q.x2)>>1,(q.y1+q.y2)>>1);
+      g.setColor(WHITE).drawRect(q.x1,q.y1,q.x2,q.y2);
       try{g.flip();}catch(e){}
     }
     function drawCalendar(){g.setBgColor(BLACK).setColor(BLACK).clear();for(var c=0;c<7;c++)drawWeekday(c);for(var i=0;i<35;i++)drawCell(i);drawTop();}
@@ -197,7 +200,7 @@
       if(!active||!selected)return;
       try{
         blinkWhite=!blinkWhite;
-        drawSelectedFrame(blinkWhite);
+        drawSelectedCell(blinkWhite);
       }catch(e){
         logCalError("blink",e);
         return;
@@ -207,7 +210,7 @@
     function startBlink(){
       stopBlink();blinkWhite=true;
       if(active&&selected){
-        try{drawSelectedFrame(true);}catch(e){logCalError("frame",e);return;}
+        try{drawSelectedCell(true);}catch(e){logCalError("frame",e);return;}
         blinkTimer=setTimeout(blinkTick,500);
       }
     }
@@ -262,7 +265,7 @@
         if(old>=0&&old!==idx)drawCell(old);
         drawCell(idx);
         startBlink();
-        try{Bangle.buzz(200);}catch(e){}
+        try{Bangle.buzz(80);}catch(e){}
         return true;
       }catch(e){
         logCalError("select",e);
@@ -289,11 +292,10 @@
         /* Snapshot x/y now instead of retaining the firmware event object. */
         lastXY=p;
         tapCount=1;
-        try{Bangle.buzz(60);}catch(be1){}
         tapTimer=setTimeout(function(){
           tapTimer=undefined;tapCount=0;lastXY=undefined;
           if(active)returnToOrbit();
-        },700);
+        },400);
       }catch(e){
         logCalError("touch",e);
         clearTaps();
