@@ -1,10 +1,10 @@
-/* Orbclo Dev Orbit 0.55 - visible solar active region, wider Moon clearance */
+/* Orbclo Dev Orbit 0.56 - clean real-use display */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
   var cfg=Storage.readJSON(CFGFILE,1)||{};
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800,GREEN=0x07E0;
-  var busy=false,killed=false,touchCount=0,transitionTimer,minuteTimer,secondTimer,unlockTimer;
+  var busy=false,killed=false,minuteTimer,secondTimer,unlockTimer;
   var colonX=0,colonVisible=true,batteryCharging=false;
   var BATLEFT=138;
   var SUNR=(cfg.sunSize===undefined?6:Math.max(4,Math.min(15,cfg.sunSize|0)));
@@ -22,7 +22,7 @@
   var MOON_LIT_MAT=[1,0,0,1,0,0],MOON_FAR_MAT=[1,0,0,1,0,0],MOON_NEAR_MAT=[1,0,0,1,0,0];
   var MOON_NATIVE=(typeof g.transformVertices==="function"),SUNANG=0;
   var MOON_CACHE_MS=1800000,MOON_CACHE_BUCKET=-1,MOON_CACHE_DATA;
-  var MOON_CACHE_LIT,MOON_CACHE_FAR,MOON_CACHE_NEAR,MOON_CACHE_HIT=false;
+  var MOON_CACHE_LIT,MOON_CACHE_FAR,MOON_CACHE_NEAR;
   var TESTLAT=(cfg.lat===undefined?35.694:Math.max(-90,Math.min(90,+cfg.lat)));
   var TESTLON=(cfg.lon===undefined?139.754:Math.max(-180,Math.min(180,+cfg.lon)));
   var LIGHTSPAN=[],LIGHTBX=[],LIGHTBY=[],LIGHTLIMB=[],LIGHTSTEPS=6,LUX=0,LUY=0,LVX=0,LVY=0;
@@ -70,7 +70,6 @@
 
   function clear(t){if(t)clearTimeout(t);}
   function pad(n){return n<10?"0"+n:""+n;}
-  function ms(a,b){return Math.round((b-a)*1000);}
   function rad(d){return d*Math.PI/180;}
   function deg(r){return r*180/Math.PI;}
   function virtualNowMs(){return Date.now()+VIRTUAL_OFFSET;}
@@ -494,8 +493,7 @@
     /* The Moon moves only ~0.2 px along a 44 px orbit in 30 minutes.
        Reuse the already-rasterized polygon geometry inside that interval.
        A +10.5-day development tap necessarily changes the bucket immediately. */
-    MOON_CACHE_HIT=(bucket===MOON_CACHE_BUCKET && MOON_CACHE_DATA!==undefined);
-    if(!MOON_CACHE_HIT){
+    if(bucket!==MOON_CACHE_BUCKET || MOON_CACHE_DATA===undefined){
       rebuildMoonGeometry(nowMs);
       MOON_CACHE_BUCKET=bucket;
     }
@@ -555,46 +553,27 @@
   }
 
   function drawBase(){
-    var t0=getTime();
+    /* Clean real-use redraw: no per-stage timers or on-screen diagnostics. */
     g.reset().setBgColor(BLACK).setColor(BLACK).clear();
-    var t1=getTime();
     drawSun();
-    var t2=getTime();
     var sol=safeSolar();
-    var t3=getTime();
     drawEarth(sol);
-    var t4=getTime();
     drawObserver(sol);
-    var t5=getTime();
-    var moon=drawMoon();
-    var t6=getTime();
+    drawMoon();
     drawHeader();
-    var t7=getTime();
-
-    var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),m=ms(t5,t6),h=ms(t6,t7),tot=ms(t0,t7);
-    g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(-1,-1);
-    g.drawString("S"+s+" E"+e+" M"+m+" H"+h+" T"+tot,2,26);
-    g.setFont("4x6",1);
-    g.drawString("V055 X"+(HEMI_NATIVE?1:0)+" Q"+(MOON_NATIVE?1:0)+" K"+(MOON_CACHE_HIT?1:0)+" O"+MOONORBIT,2,36);
     try{g.flip();}catch(err){}
     busy=false;
   }
 
-  function showTouch(){
-    touchCount++;
-    busy=true;
-    g.reset().setBgColor(NAVY).setColor(NAVY).clear();
-    g.setColor(WHITE).setBgColor(NAVY).setFont("Vector",24).setFontAlign(0,0).drawString("TOUCH "+touchCount,W>>1,H>>1);
-    try{g.flip();}catch(e){}
-    clear(transitionTimer);
-    transitionTimer=setTimeout(function(){transitionTimer=undefined;if(!killed)drawBase();},80);
-  }
-
   function onTouch(){
     if(killed||busy)return;
+    /* Keep the development +10.5-day step, but remove the navy TOUCH
+       diagnostic interstitial and redraw the actual clock immediately. */
+    busy=true;
     VIRTUAL_OFFSET+=DEV_STEP_MS;
-    showTouch();
+    drawBase();
   }
+
 
   function onLock(isLocked){
     if(!isLocked||killed)return;
@@ -613,7 +592,7 @@
   function cleanup(){
     if(killed)return;
     killed=true;
-    clear(transitionTimer);clear(minuteTimer);clear(secondTimer);clear(unlockTimer);
+    clear(minuteTimer);clear(secondTimer);clear(unlockTimer);
     try{Bangle.removeListener("lock",onLock);}catch(e){}
   }
 
