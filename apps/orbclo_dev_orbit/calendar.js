@@ -175,45 +175,16 @@
     function drawCell(index){
       if(index<0||index>=35)return;var q=cellGeometry(index),d=addDays(pageStart,index),bg=BLACK,fg=WHITE;
       if(q.c===5)bg=BLUE;if(q.c===6||(cfg.lang==="en"?isEnglishHoliday(d):isJapanHoliday(d)))bg=RED;if(sameDay(d,today)){bg=GREEN;fg=BLACK;}
+      if(selected&&sameDay(d,selected)){bg=WHITE;fg=BLACK;}
       g.setColor(bg).fillRect(q.x1,q.y1,q.x2,q.y2);g.setColor(fg).setBgColor(bg).setFont("Vector",20).setFontAlign(0,0).drawString(""+d.getDate(),(q.x1+q.x2)>>1,(q.y1+q.y2)>>1);g.setColor(GRAY).drawRect(q.x1,q.y1,q.x2,q.y2);
     }
     function selectedIndex(){if(!selected)return -1;var n=dayNumber(selected)-dayNumber(pageStart);return n>=0&&n<35?n:-1;}
     function logCalError(stage,e){try{Storage.write("orbclo_dev_orbit.err","calendar "+stage+": "+e);}catch(x){}}
     function redrawSelected(){var i=selectedIndex();if(i>=0)drawCell(i);}
-    function drawSelectedCell(on){
-      var i=selectedIndex();if(i<0)return;
-      if(!on){drawCell(i);try{g.flip();}catch(e){};return;}
-
-      var q=cellGeometry(i),d=addDays(pageStart,i);
-      g.setColor(WHITE).fillRect(q.x1+1,q.y1+1,q.x2-1,q.y2-1);
-      g.setColor(BLACK).setBgColor(WHITE).setFont("Vector",20).setFontAlign(0,0)
-        .drawString(""+d.getDate(),(q.x1+q.x2)>>1,(q.y1+q.y2)>>1);
-      g.setColor(WHITE).drawRect(q.x1,q.y1,q.x2,q.y2);
-      try{g.flip();}catch(e){}
-    }
-    function drawCalendar(){g.setBgColor(BLACK).setColor(BLACK).clear();for(var c=0;c<7;c++)drawWeekday(c);for(var i=0;i<35;i++)drawCell(i);drawTop();}
     function clearTimer(t){if(t)clearTimeout(t);}
     function clearTaps(){clearTimer(tapTimer);tapTimer=undefined;tapCount=0;lastXY=undefined;}
-    function stopBlink(){clearTimer(blinkTimer);blinkTimer=undefined;}
-    function blinkTick(){
-      blinkTimer=undefined;
-      if(!active||!selected)return;
-      try{
-        blinkWhite=!blinkWhite;
-        drawSelectedCell(blinkWhite);
-      }catch(e){
-        logCalError("blink",e);
-        return;
-      }
-      if(active&&selected)blinkTimer=setTimeout(blinkTick,500);
-    }
-    function startBlink(){
-      stopBlink();blinkWhite=true;
-      if(active&&selected){
-        try{drawSelectedCell(true);}catch(e){logCalError("frame",e);return;}
-        blinkTimer=setTimeout(blinkTick,500);
-      }
-    }
+    function stopBlink(){if(blinkTimer)clearTimeout(blinkTimer);blinkTimer=undefined;}
+    function startBlink(){blinkTimer=undefined;}
     function stopAuto(){clearTimer(autoTimer);autoTimer=undefined;}
     function armAuto(){stopAuto();if(!active||!cfg||!(cfg.timeout>=15))return;autoTimer=setTimeout(function(){autoTimer=undefined;returnToOrbit();},cfg.timeout*1000);}
     function stop(){stopBlink();stopAuto();clearTaps();active=false;onReturn=undefined;}
@@ -244,7 +215,6 @@
       try{Bangle.buzz(500);}catch(e){}
     }
     function selectAt(xy){
-      stopBlink();
       var idx=dateIndexAt(xy);
       if(idx<0){
         try{Storage.write("orbclo_dev_orbit.err","calendar NO_XY");}catch(e){}
@@ -253,23 +223,23 @@
       }
 
       try{
-        var old=selectedIndex();
         selected=addDays(pageStart,idx);
-        blinkWhite=true;
         try{
           Storage.write("orbclo_dev_orbit.sel",
             selected.getFullYear()+"-"+(selected.getMonth()+1)+"-"+selected.getDate()+
             " x"+xy.x+" y"+xy.y);
         }catch(loge){}
 
-        if(old>=0&&old!==idx)drawCell(old);
-        drawCell(idx);
-        startBlink();
+        drawCalendar();
         try{Bangle.buzz(80);}catch(e){}
         return true;
       }catch(e){
         logCalError("select",e);
-        stopBlink();
+        try{
+          g.setColor(RED).fillRect(38,4,137,20);
+          g.setColor(WHITE).setBgColor(RED).setFont("6x8",2).setFontAlign(0,0);
+          g.drawString("SEL ERR",87,12);
+        }catch(de){}
         try{Bangle.buzz(500);}catch(be){}
         return false;
       }
@@ -306,7 +276,7 @@
       opts=opts||{};stop();cfg=readConfig();active=true;onReturn=opts.onReturn;today=midnight(new Date());
       var focus=opts.focusDate?midnight(opts.focusDate):(opts.selectedDate?midnight(opts.selectedDate):today);pageStart=mondayOf(focus);selected=opts.selectedDate?midnight(opts.selectedDate):undefined;blinkWhite=true;
       try{if(typeof WIDGETS==="undefined")Bangle.loadWidgets();}catch(e){}
-      drawCalendar();if(selected)startBlink();armAuto();
+      drawCalendar();armAuto();
     }
     function isActive(){return active;}
     return {start:start,stop:stop,resetTransient:resetTransient,touch:touch,swipe:swipe,isActive:isActive};
