@@ -225,7 +225,7 @@
         try{Storage.write("orbclo_dev_orbit.sel",selected?selected.toISOString():"none");}catch(loge){}
         if(old>=0)drawCell(old);
         var ni=selectedIndex();if(ni>=0)drawCell(ni);
-        if(selected){startBlink();try{Bangle.buzz(100);}catch(e){}}
+        if(selected){startBlink();}
       }catch(e){
         logCalError("select",e);
         stopBlink();
@@ -236,16 +236,22 @@
       try{
         armAuto();
         if(tapTimer){
+          /* Diagnostic: a longer buzz proves that the second Bangle touch
+             event actually arrived before the double-tap window expired. */
+          try{Bangle.buzz(150);}catch(be2){}
           var selectXY=lastXY||xy;
           clearTimer(tapTimer);tapTimer=undefined;tapCount=0;lastXY=undefined;
           selectAt(selectXY);
           return;
         }
+
+        /* Diagnostic: a short buzz proves receipt of the first touch event. */
+        try{Bangle.buzz(60);}catch(be1){}
         tapCount=1;lastXY=xy;
         tapTimer=setTimeout(function(){
           tapTimer=undefined;tapCount=0;lastXY=undefined;
           if(active)returnToOrbit();
-        },400);
+        },700);
       }catch(e){
         logCalError("touch",e);
         clearTaps();
