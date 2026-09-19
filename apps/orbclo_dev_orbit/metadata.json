@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.57",
+  "version": "0.58",
   "author": "onisY",
-  "description": "Real-time integrated-control build: remove the +10.5-day test clock, keep the optimized V0.56 Sun/Earth/Moon renderer, and integrate the 5-week calendar as a module. Orbit single tap opens the calendar after a 400 ms double-tap window; double tap opens shared settings. In the calendar, single tap returns to Orbit and double tap selects a date; vertical swipes page five weeks. BTN1 exits to the launcher.",
+  "description": "Touch reliability fix for V0.57: Orbit taps no longer require a prior face-up interaction state. Keep the watch unlocked for app input, immediately undo unexpected lock events, and accept screen taps whenever the LCD is on. Preserve the 400 ms single/double-tap split, integrated 5wCal module, optimized renderer, and BTN1 launcher exit.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,7 +15,7 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app57.js"
+      "url": "app58.js"
     },
     {
       "name": "orbclo_dev_orbit.cal.js",
