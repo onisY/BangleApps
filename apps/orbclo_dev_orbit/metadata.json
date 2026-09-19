@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.62",
+  "version": "0.63",
   "author": "onisY",
-  "description": "5wCal coordinate-selection diagnostic/fix. V0.61 proved that the second touch event reaches the app, so V0.62 stops treating timing as the primary fault. Snapshot the first touch x/y as primitive values, validate the calendar cell index explicitly, select by cell index, buzz 200 ms on successful selection, and show NO XY plus a 500 ms buzz if usable touch coordinates are missing. Keep the 700 ms calendar window temporarily for isolation; Orbit remains unchanged.",
+  "description": "Calendar selection display fix after V0.62 confirmed that double-tap recognition, coordinates and internal date selection all succeed. Replace the subtle two-line border blink with an unmistakable 0.5 s selected-cell inversion (white cell with black date, then normal cell), restore the requested 400 ms calendar double-tap window, and remove first-touch diagnostic buzzing. Successful selection now gives one short 80 ms buzz.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,7 +15,7 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app62.js"
+      "url": "app63.js"
     },
     {
       "name": "orbclo_dev_orbit.cal.js",
