@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.62 - robust calendar coordinate selection */
+/* Orbclo Dev Orbit 0.63 - visible calendar selection */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
