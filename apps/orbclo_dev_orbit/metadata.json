@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.59",
+  "version": "0.60",
   "author": "onisY",
-  "description": "Calendar double-tap robustness fix: replace the selected-date full-cell 0.5 s redraw loop with a lightweight blinking selection frame, wrap selection/touch handling so an unexpected drawing error cannot disable later taps, and give a short buzz when a date is selected. Keep V0.58 always-ready Orbit touch behavior and 400 ms tap timing.",
+  "description": "Fail-safe 5wCal selection/return build. Use the first tap coordinates as the double-tap date target, strengthen selected-date feedback with a two-pixel blinking frame and 100 ms buzz, stop reinitializing Bangle.setUI on calendar return, and wrap selected-date return-to-Orbit so any exception is logged and automatically falls back to the real-time Orbit display instead of leaving a navy screen.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,7 +15,7 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app59.js"
+      "url": "app60.js"
     },
     {
       "name": "orbclo_dev_orbit.cal.js",
