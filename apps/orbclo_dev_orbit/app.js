@@ -1,7 +1,9 @@
-/* Orbclo Dev Orbit 0.66 - immediate calendar entry and direct date handoff */
+/* Orbclo Dev Orbit 0.67 - setUI input and persisted date handoff */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
+  var SELFILE="orbclo_orbitdev.sel.json";
+  try{Storage.erase(SELFILE);}catch(e){}
   var cfg=Storage.readJSON(CFGFILE,1)||{};
   var calModule,calendar;
   try{
@@ -9,9 +11,12 @@
     if(calSource){calModule=eval(calSource);calendar=calModule.create();}
     calSource=undefined;
   }catch(calErr){calModule=undefined;calendar=undefined;}
+  /* Preload widgets during app startup so opening 5wCal does not pay the
+     widget loading cost on the user's first calendar tap. */
+  try{if(typeof WIDGETS==="undefined")Bangle.loadWidgets();}catch(e){}
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800,GREEN=0x07E0;
   var busy=false,killed=false,minuteTimer,secondTimer,idleTimer,tapTimer,unlockTimer;
-  var mode="orbit",interactive=true,tapCount=0,resetOnWake=false,buttonWatch;
+  var mode="orbit",interactive=true,tapCount=0,resetOnWake=false;
   var selectedDayOffset=0,hasSelectedDate=false;
   var colonX=0,colonVisible=true,batteryCharging=false;
   var BATLEFT=138;
@@ -620,6 +625,7 @@
     if(calendar&&calendar.isActive())calendar.stop();
     mode="orbit";
     busy=false;
+    applyStoredSelection();
     drawBase();
     armMinute();
     armSecond();
@@ -631,6 +637,21 @@
     }else{
       try{Bangle.setLocked(false);}catch(e){}
     }
+  }
+
+  function applyStoredSelection(){
+    var s=Storage.readJSON(SELFILE,1);
+    if(s&&typeof s.offset==="number"&&isFinite(s.offset)){
+      selectedDayOffset=s.offset|0;
+      hasSelectedDate=true;
+      MOON_CACHE_BUCKET=-1;
+      return true;
+    }
+    return false;
+  }
+
+  function clearStoredSelection(){
+    try{Storage.erase(SELFILE);}catch(e){}
   }
 
   function setDateFromCalendar(d){
@@ -658,12 +679,21 @@
         calendar.start({
           focusDate:focus,
           selectedDate:hasSelectedDate?focus:undefined,
-          onSelect:function(d){
+          onSelect:function(d,offset){
             if(killed||!d)return;
             try{
-              setDateFromCalendar(d);
+              if(typeof offset==="number"&&isFinite(offset)){
+                selectedDayOffset=offset|0;
+                hasSelectedDate=true;
+                MOON_CACHE_BUCKET=-1;
+                Storage.writeJSON(SELFILE,{
+                  offset:selectedDayOffset,
+                  y:d.getFullYear(),m:d.getMonth()+1,d:d.getDate()
+                });
+              }else setDateFromCalendar(d);
               Storage.write("orbclo_dev_orbit.handoff",
-                d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate());
+                d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate()+
+                " off="+selectedDayOffset);
             }catch(e){
               try{Storage.write("orbclo_dev_orbit.err","select handoff: "+e);}catch(x){}
             }
@@ -671,7 +701,7 @@
           onReturn:function(d){
             if(killed)return;
             try{
-              if(d)setDateFromCalendar(d);
+              if(!applyStoredSelection()&&d)setDateFromCalendar(d);
               startOrbit(true);
             }catch(e){
               try{Storage.write("orbclo_dev_orbit.err","return: "+e);}catch(x){}
@@ -810,6 +840,7 @@
       if(mode!=="orbit"||selectedDayOffset!==0){
         selectedDayOffset=0;
         hasSelectedDate=false;
+        clearStoredSelection();
         MOON_CACHE_BUCKET=-1;
         resetOnWake=true;
       }
@@ -837,11 +868,6 @@
     Bangle.showLauncher();
   }
 
-  function installButtonWatch(){
-    if(buttonWatch)clearWatch(buttonWatch);
-    buttonWatch=setWatch(onButton,BTN1,{repeat:true,edge:"rising",debounce:30});
-  }
-
   function armMinute(){
     clear(minuteTimer);
     minuteTimer=setTimeout(function(){
@@ -856,9 +882,7 @@
     stopOrbitTimers();
     clear(unlockTimer);unlockTimer=undefined;
     if(calendar)calendar.stop();
-    if(buttonWatch){clearWatch(buttonWatch);buttonWatch=undefined;}
-    try{Bangle.removeListener("touch",onTouch);}catch(e){}
-    try{Bangle.removeListener("swipe",onSwipe);}catch(e){}
+    try{Bangle.setUI();}catch(e){}
     try{Bangle.removeListener("faceUp",onFaceUp);}catch(e){}
     try{Bangle.removeListener("lcdPower",onLCD);}catch(e){}
     try{Bangle.removeListener("lock",onLock);}catch(e){}
@@ -870,14 +894,11 @@
   buildLightingCache();
   buildEarthMapCache();
   buildMoonCache();
-  try{Bangle.setUI({mode:"custom"});}catch(e){}
-  Bangle.on("touch",onTouch);
-  Bangle.on("swipe",onSwipe);
+  try{Bangle.setUI({mode:"custom",touch:onTouch,swipe:onSwipe,btn:onButton});}catch(e){}
   Bangle.on("faceUp",onFaceUp);
   Bangle.on("lcdPower",onLCD);
   Bangle.on("lock",onLock);
   E.on("kill",cleanup);
-  installButtonWatch();
   try{Bangle.setBacklight(false);}catch(e){}
   try{Bangle.setLocked(false);}catch(e){}
   drawBase();
