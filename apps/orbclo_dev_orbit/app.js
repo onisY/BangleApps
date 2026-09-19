@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.60 - fail-safe calendar return */
+/* Orbclo Dev Orbit 0.61 - double-tap event diagnostic */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
