@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.64 - static calendar selection isolation */
+/* Orbclo Dev Orbit 0.65 - restore calendar draw, isolate selection state */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
@@ -646,7 +646,6 @@
 
   function openCalendar(){
     if(killed||mode!=="orbit")return;
-    showTransition();
     stopOrbitTimers();
     mode="calendar";
     interactive=false;
@@ -655,41 +654,48 @@
 
     if(calendar){
       var focus=hasSelectedDate?virtualDate():new Date();
-      calendar.start({
-        focusDate:focus,
-        selectedDate:hasSelectedDate?focus:undefined,
-        onReturn:function(d){
-          if(killed)return;
-          try{
-            setDateFromCalendar(d);
-            startOrbit(true);
-          }catch(e){
-            try{Storage.write("orbclo_dev_orbit.err","return: "+e);}catch(x){}
-            selectedDayOffset=0;
-            hasSelectedDate=false;
-            MOON_CACHE_BUCKET=-1;
-            mode="orbit";
-            busy=false;
+      try{
+        calendar.start({
+          focusDate:focus,
+          selectedDate:hasSelectedDate?focus:undefined,
+          onReturn:function(d){
+            if(killed)return;
             try{
-              drawBase();
-              armMinute();
-              armSecond();
-              interactive=true;
-              Bangle.setLocked(false);
-              Bangle.setBacklight(true);
-              armIdle();
-            }catch(e2){
-              try{Storage.write("orbclo_dev_orbit.err","fallback: "+e2);}catch(x2){}
+              setDateFromCalendar(d);
+              startOrbit(true);
+            }catch(e){
+              try{Storage.write("orbclo_dev_orbit.err","return: "+e);}catch(x){}
+              selectedDayOffset=0;
+              hasSelectedDate=false;
+              MOON_CACHE_BUCKET=-1;
+              mode="orbit";
+              busy=false;
               try{
-                g.reset().setBgColor(BLACK).setColor(RED).clear();
-                g.setFont("6x8",2).setFontAlign(0,0);
-                g.drawString("Orbit return error",W/2,H/2);
-              }catch(x3){}
+                drawBase();
+                armMinute();
+                armSecond();
+                interactive=true;
+                Bangle.setLocked(false);
+                Bangle.setBacklight(true);
+                armIdle();
+              }catch(e2){}
             }
           }
-        }
-      });
-      return;
+        });
+        return;
+      }catch(calStartErr){
+        try{Storage.write("orbclo_dev_orbit.err","calendar start: "+calStartErr);}catch(x){}
+        mode="orbit";
+        busy=false;
+        try{
+          g.reset().setBgColor(BLACK).setColor(RED).clear();
+          g.setFont("6x8",2).setFontAlign(0,0);
+          g.drawString("CAL ERR",W/2,H/2);
+          armMinute();
+          armSecond();
+        }catch(drawErr){}
+        return;
+      }
     }
 
     var info=Storage.readJSON("fivewcal.info",1);
