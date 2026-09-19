@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.65",
+  "version": "0.66",
   "author": "onisY",
-  "description": "Restore the last calendar renderer that reliably opened on hardware, and isolate date selection from all selection graphics. A 5wCal double tap now only stores the selected date and gives one 100 ms buzz; no blink, partial redraw, or full redraw occurs. The next single tap returns to Orbit using that selected date. Calendar entry no longer paints a navy transition first, and calendar startup errors show CAL ERR instead of leaving a blank purple screen.",
+  "description": "Responsiveness and date-handoff fix. Orbit now opens 5wCal immediately on a single tap, removing the former 400 ms Orbit-side wait. 5wCal uses a 550 ms double-tap window for reliable hardware recognition. A successful date double tap immediately calls back into Orbit state before any later return tap, so the selected day offset is already stored when the user goes back to Orbit. Selection success buzz is 120 ms. Orbit double-tap-to-settings is temporarily disabled in this isolation build.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,11 +15,11 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app65.js"
+      "url": "app66.js"
     },
     {
       "name": "orbclo_dev_orbit.cal.js",
-      "url": "calendar65.js"
+      "url": "calendar66.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
