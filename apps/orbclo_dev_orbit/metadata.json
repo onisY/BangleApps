@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.63",
+  "version": "0.64",
   "author": "onisY",
-  "description": "Calendar selection display fix after V0.62 confirmed that double-tap recognition, coordinates and internal date selection all succeed. Replace the subtle two-line border blink with an unmistakable 0.5 s selected-cell inversion (white cell with black date, then normal cell), restore the requested 400 ms calendar double-tap window, and remove first-touch diagnostic buzzing. Successful selection now gives one short 80 ms buzz.",
+  "description": "Static-selection isolation build for 5wCal. V0.63's first short buzz followed by later long error buzz indicates the double tap reaches selection, but the blink/partial-draw path is unstable on hardware. Remove selection blinking entirely for this test, render the selected date as a permanent white cell with black digits during normal full-calendar drawing, and redraw the calendar once after selection. Keep the 400 ms tap window and 80 ms success buzz.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,7 +15,7 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app63.js"
+      "url": "app64.js"
     },
     {
       "name": "orbclo_dev_orbit.cal.js",
