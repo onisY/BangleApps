@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.53",
+  "version": "0.54",
   "author": "onisY",
-  "description": "Moon geometry cache: retain V0.52 native Moon transforms, but reuse the transformed yellow/far-side/near-limb polygons for 30-minute intervals because Moon motion is subpixel over that period. Development +10.5-day taps invalidate immediately. K1/K0 reports cache hit/miss.",
+  "description": "Sun texture stage: add a lightweight yellow photosphere with orange limb/granulation and a tiny darker sunspot group, while caching the eight corona ray endpoints to remove redraw-time trigonometry. Keep the optimized Earth and Moon paths. Show Sun draw time S alongside E/M/H/T.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,7 +15,7 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app53.js"
+      "url": "app54.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
