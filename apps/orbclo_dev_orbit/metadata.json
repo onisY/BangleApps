@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.56",
+  "version": "0.57",
   "author": "onisY",
-  "description": "Clean real-use display pass: remove on-screen S/E/M/H/T, version/native/cache diagnostics and the navy TOUCH interstitial, while retaining the optimized Earth/Moon/Sun rendering and the development +10.5-day tap step. Per-stage getTime profiling is also removed.",
+  "description": "Real-time integrated-control build: remove the +10.5-day test clock, keep the optimized V0.56 Sun/Earth/Moon renderer, and integrate the 5-week calendar as a module. Orbit single tap opens the calendar after a 400 ms double-tap window; double tap opens shared settings. In the calendar, single tap returns to Orbit and double tap selects a date; vertical swipes page five weeks. BTN1 exits to the launcher.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,7 +15,11 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app56.js"
+      "url": "app57.js"
+    },
+    {
+      "name": "orbclo_dev_orbit.cal.js",
+      "url": "calendar.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
@@ -26,6 +30,9 @@
   "data": [
     {
       "name": "orbclo_orbitdev.json"
+    },
+    {
+      "name": "orbclo_orbitdev.cal.json"
     }
   ]
 }
