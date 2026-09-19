@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.55",
+  "version": "0.56",
   "author": "onisY",
-  "description": "Solar active-region and Moon-clearance refinement: make the Sun's activity region visibly red with a black core pixel, and enforce at least one lunar diameter of surface-to-surface clearance between Earth and Moon (minimum orbit radius EarthR + 3*MoonR). Keep V0.54 timing and optimized Earth/Moon paths.",
+  "description": "Clean real-use display pass: remove on-screen S/E/M/H/T, version/native/cache diagnostics and the navy TOUCH interstitial, while retaining the optimized Earth/Moon/Sun rendering and the development +10.5-day tap step. Per-stage getTime profiling is also removed.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,7 +15,7 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app55.js"
+      "url": "app56.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
