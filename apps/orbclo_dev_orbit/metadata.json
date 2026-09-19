@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.58",
+  "version": "0.59",
   "author": "onisY",
-  "description": "Touch reliability fix for V0.57: Orbit taps no longer require a prior face-up interaction state. Keep the watch unlocked for app input, immediately undo unexpected lock events, and accept screen taps whenever the LCD is on. Preserve the 400 ms single/double-tap split, integrated 5wCal module, optimized renderer, and BTN1 launcher exit.",
+  "description": "Calendar double-tap robustness fix: replace the selected-date full-cell 0.5 s redraw loop with a lightweight blinking selection frame, wrap selection/touch handling so an unexpected drawing error cannot disable later taps, and give a short buzz when a date is selected. Keep V0.58 always-ready Orbit touch behavior and 400 ms tap timing.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,7 +15,7 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app58.js"
+      "url": "app59.js"
     },
     {
       "name": "orbclo_dev_orbit.cal.js",
