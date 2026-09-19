@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.57 - real-time integrated controls */
+/* Orbclo Dev Orbit 0.58 - reliable always-ready touch input */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
@@ -10,8 +10,8 @@
     calSource=undefined;
   }catch(calErr){calModule=undefined;calendar=undefined;}
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800,GREEN=0x07E0;
-  var busy=false,killed=false,minuteTimer,secondTimer,idleTimer,tapTimer;
-  var mode="orbit",interactive=false,tapCount=0,resetOnWake=false,buttonWatch;
+  var busy=false,killed=false,minuteTimer,secondTimer,idleTimer,tapTimer,unlockTimer;
+  var mode="orbit",interactive=true,tapCount=0,resetOnWake=false,buttonWatch;
   var selectedDayOffset=0,hasSelectedDate=false;
   var colonX=0,colonVisible=true,batteryCharging=false;
   var BATLEFT=138;
@@ -612,7 +612,7 @@
     clearTaps();
     interactive=false;
     try{Bangle.setBacklight(false);}catch(e){}
-    try{Bangle.setLocked(true);}catch(e){}
+    try{Bangle.setLocked(false);}catch(e){}
   }
 
   function startOrbit(keepInteractive){
@@ -630,7 +630,7 @@
       try{Bangle.setBacklight(true);}catch(e){}
       armIdle();
     }else{
-      try{Bangle.setLocked(true);}catch(e){}
+      try{Bangle.setLocked(false);}catch(e){}
     }
   }
 
@@ -742,8 +742,8 @@
       if(calendar)calendar.touch(xy);
       return;
     }
-    if(mode!=="orbit"||busy||!interactive)return;
-    try{if(Bangle.isLocked())return;}catch(e){}
+    if(mode!=="orbit"||busy)return;
+    try{if(!Bangle.isLCDOn())return;}catch(e){}
 
     if(tapTimer){
       clear(tapTimer);tapTimer=undefined;tapCount=0;
@@ -772,7 +772,7 @@
       clearTaps();
       clear(idleTimer);idleTimer=undefined;
       interactive=false;
-      try{Bangle.setLocked(true);}catch(e){}
+      try{Bangle.setLocked(false);}catch(e){}
 
       if(mode==="calendar"&&calendar)calendar.stop();
       if(mode!=="orbit"||selectedDayOffset!==0){
@@ -788,6 +788,15 @@
       resetOnWake=false;
       startOrbit(false);
     }
+  }
+
+  function onLock(isLocked){
+    if(!isLocked||killed)return;
+    clear(unlockTimer);
+    unlockTimer=setTimeout(function(){
+      unlockTimer=undefined;
+      if(!killed)try{Bangle.setLocked(false);}catch(e){}
+    },0);
   }
 
   function onButton(){
@@ -813,12 +822,14 @@
     if(killed)return;
     killed=true;
     stopOrbitTimers();
+    clear(unlockTimer);unlockTimer=undefined;
     if(calendar)calendar.stop();
     if(buttonWatch){clearWatch(buttonWatch);buttonWatch=undefined;}
     try{Bangle.removeListener("touch",onTouch);}catch(e){}
     try{Bangle.removeListener("swipe",onSwipe);}catch(e){}
     try{Bangle.removeListener("faceUp",onFaceUp);}catch(e){}
     try{Bangle.removeListener("lcdPower",onLCD);}catch(e){}
+    try{Bangle.removeListener("lock",onLock);}catch(e){}
     try{E.removeListener("kill",cleanup);}catch(e){}
   }
 
@@ -832,10 +843,11 @@
   Bangle.on("swipe",onSwipe);
   Bangle.on("faceUp",onFaceUp);
   Bangle.on("lcdPower",onLCD);
+  Bangle.on("lock",onLock);
   E.on("kill",cleanup);
   installButtonWatch();
   try{Bangle.setBacklight(false);}catch(e){}
-  try{Bangle.setLocked(true);}catch(e){}
+  try{Bangle.setLocked(false);}catch(e){}
   drawBase();
   armMinute();
   armSecond();
