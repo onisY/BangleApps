@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.61 - double-tap event diagnostic */
+/* Orbclo Dev Orbit 0.62 - robust calendar coordinate selection */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
