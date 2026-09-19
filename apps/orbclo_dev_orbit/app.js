@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.59 - robust calendar selection */
+/* Orbclo Dev Orbit 0.60 - fail-safe calendar return */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
@@ -617,10 +617,9 @@
 
   function startOrbit(keepInteractive){
     if(killed)return;
-    if(calendar)calendar.stop();
+    if(calendar&&calendar.isActive())calendar.stop();
     mode="orbit";
     busy=false;
-    try{Bangle.setUI({mode:"custom"});}catch(e){}
     drawBase();
     armMinute();
     armSecond();
@@ -661,9 +660,33 @@
         selectedDate:hasSelectedDate?focus:undefined,
         onReturn:function(d){
           if(killed)return;
-          showTransition();
-          setDateFromCalendar(d);
-          startOrbit(true);
+          try{
+            setDateFromCalendar(d);
+            startOrbit(true);
+          }catch(e){
+            try{Storage.write("orbclo_dev_orbit.err","return: "+e);}catch(x){}
+            selectedDayOffset=0;
+            hasSelectedDate=false;
+            MOON_CACHE_BUCKET=-1;
+            mode="orbit";
+            busy=false;
+            try{
+              drawBase();
+              armMinute();
+              armSecond();
+              interactive=true;
+              Bangle.setLocked(false);
+              Bangle.setBacklight(true);
+              armIdle();
+            }catch(e2){
+              try{Storage.write("orbclo_dev_orbit.err","fallback: "+e2);}catch(x2){}
+              try{
+                g.reset().setBgColor(BLACK).setColor(RED).clear();
+                g.setFont("6x8",2).setFontAlign(0,0);
+                g.drawString("Orbit return error",W/2,H/2);
+              }catch(x3){}
+            }
+          }
         }
       });
       return;
