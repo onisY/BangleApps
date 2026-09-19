@@ -174,33 +174,78 @@
     function cellGeometry(index){var c=index%7,r=(index/7)|0,top=48,gh=H-48;return {x1:Math.floor(c*W/7),x2:Math.floor((c+1)*W/7)-1,y1:top+Math.floor(r*gh/5),y2:top+Math.floor((r+1)*gh/5)-1,c:c};}
     function drawCell(index){
       if(index<0||index>=35)return;var q=cellGeometry(index),d=addDays(pageStart,index),bg=BLACK,fg=WHITE;
-      if(q.c===5)bg=BLUE;if(q.c===6||(cfg.lang==="en"?isEnglishHoliday(d):isJapanHoliday(d)))bg=RED;if(sameDay(d,today)){bg=GREEN;fg=BLACK;}if(selected&&sameDay(d,selected))fg=blinkWhite?WHITE:BLACK;
+      if(q.c===5)bg=BLUE;if(q.c===6||(cfg.lang==="en"?isEnglishHoliday(d):isJapanHoliday(d)))bg=RED;if(sameDay(d,today)){bg=GREEN;fg=BLACK;}
       g.setColor(bg).fillRect(q.x1,q.y1,q.x2,q.y2);g.setColor(fg).setBgColor(bg).setFont("Vector",20).setFontAlign(0,0).drawString(""+d.getDate(),(q.x1+q.x2)>>1,(q.y1+q.y2)>>1);g.setColor(GRAY).drawRect(q.x1,q.y1,q.x2,q.y2);
     }
     function selectedIndex(){if(!selected)return -1;var n=dayNumber(selected)-dayNumber(pageStart);return n>=0&&n<35?n:-1;}
+    function logCalError(stage,e){try{Storage.write("orbclo_dev_orbit.err","calendar "+stage+": "+e);}catch(x){}}
     function redrawSelected(){var i=selectedIndex();if(i>=0)drawCell(i);}
+    function drawSelectedFrame(on){
+      var i=selectedIndex();if(i<0)return;
+      var q=cellGeometry(i);
+      g.setColor(on?WHITE:BLACK).drawRect(q.x1+1,q.y1+1,q.x2-1,q.y2-1);
+      try{g.flip();}catch(e){}
+    }
     function drawCalendar(){g.setBgColor(BLACK).setColor(BLACK).clear();for(var c=0;c<7;c++)drawWeekday(c);for(var i=0;i<35;i++)drawCell(i);drawTop();}
     function clearTimer(t){if(t)clearTimeout(t);}
     function clearTaps(){clearTimer(tapTimer);tapTimer=undefined;tapCount=0;lastXY=undefined;}
     function stopBlink(){clearTimer(blinkTimer);blinkTimer=undefined;}
-    function blinkTick(){blinkTimer=undefined;if(!active||!selected||!Bangle.isLCDOn())return;blinkWhite=!blinkWhite;redrawSelected();blinkTimer=setTimeout(blinkTick,500);}
-    function startBlink(){stopBlink();blinkWhite=true;if(active&&selected)blinkTimer=setTimeout(blinkTick,500);}
+    function blinkTick(){
+      blinkTimer=undefined;
+      if(!active||!selected)return;
+      try{
+        blinkWhite=!blinkWhite;
+        drawSelectedFrame(blinkWhite);
+      }catch(e){
+        logCalError("blink",e);
+        return;
+      }
+      if(active&&selected)blinkTimer=setTimeout(blinkTick,500);
+    }
+    function startBlink(){
+      stopBlink();blinkWhite=true;
+      if(active&&selected){
+        try{drawSelectedFrame(true);}catch(e){logCalError("frame",e);return;}
+        blinkTimer=setTimeout(blinkTick,500);
+      }
+    }
     function stopAuto(){clearTimer(autoTimer);autoTimer=undefined;}
     function armAuto(){stopAuto();if(!active||!cfg||!(cfg.timeout>=15))return;autoTimer=setTimeout(function(){autoTimer=undefined;returnToOrbit();},cfg.timeout*1000);}
     function stop(){stopBlink();stopAuto();clearTaps();active=false;onReturn=undefined;}
     function resetTransient(){selected=undefined;clearTaps();stopBlink();stopAuto();today=midnight(new Date());pageStart=mondayOf(today);}
     function returnToOrbit(){if(!active)return;var cb=onReturn,sel=selected?copyDate(selected):undefined;stop();if(cb)cb(sel);}
     function dateAt(xy){if(!xy||xy.x<0||xy.x>=W||xy.y<48||xy.y>=H)return undefined;var c=Math.floor(xy.x*7/W),r=Math.floor((xy.y-48)*5/(H-48));if(c<0||c>6||r<0||r>4)return undefined;return addDays(pageStart,r*7+c);}
-    function selectAt(xy){var old=selectedIndex(),d=dateAt(xy);selected=d?copyDate(d):undefined;blinkWhite=true;if(old>=0)drawCell(old);var ni=selectedIndex();if(ni>=0)drawCell(ni);if(selected)startBlink();else stopBlink();}
-    function touch(xy){
-      if(!active)return;armAuto();
-      if(tapTimer){
-        clearTimer(tapTimer);tapTimer=undefined;tapCount=0;lastXY=undefined;
-        selectAt(xy);
-        return;
+    function selectAt(xy){
+      stopBlink();
+      var old=selectedIndex(),d=dateAt(xy);
+      try{
+        selected=d?copyDate(d):undefined;blinkWhite=true;
+        if(old>=0)drawCell(old);
+        var ni=selectedIndex();if(ni>=0)drawCell(ni);
+        if(selected){startBlink();try{Bangle.buzz(40);}catch(e){}}
+      }catch(e){
+        logCalError("select",e);
+        stopBlink();
       }
-      tapCount=1;lastXY=xy;
-      tapTimer=setTimeout(function(){tapTimer=undefined;tapCount=0;lastXY=undefined;if(active)returnToOrbit();},400);
+    }
+    function touch(xy){
+      if(!active)return;
+      try{
+        armAuto();
+        if(tapTimer){
+          clearTimer(tapTimer);tapTimer=undefined;tapCount=0;lastXY=undefined;
+          selectAt(xy);
+          return;
+        }
+        tapCount=1;lastXY=xy;
+        tapTimer=setTimeout(function(){
+          tapTimer=undefined;tapCount=0;lastXY=undefined;
+          if(active)returnToOrbit();
+        },400);
+      }catch(e){
+        logCalError("touch",e);
+        clearTaps();
+      }
     }
     function swipe(lr,ud){if(!active||!ud)return;clearTaps();armAuto();pageStart=addDays(pageStart,ud<0?35:-35);drawCalendar();}
     function start(opts){
