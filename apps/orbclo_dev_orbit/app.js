@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.65 - restore calendar draw, isolate selection state */
+/* Orbclo Dev Orbit 0.66 - immediate calendar entry and direct date handoff */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
@@ -658,10 +658,20 @@
         calendar.start({
           focusDate:focus,
           selectedDate:hasSelectedDate?focus:undefined,
+          onSelect:function(d){
+            if(killed||!d)return;
+            try{
+              setDateFromCalendar(d);
+              Storage.write("orbclo_dev_orbit.handoff",
+                d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate());
+            }catch(e){
+              try{Storage.write("orbclo_dev_orbit.err","select handoff: "+e);}catch(x){}
+            }
+          },
           onReturn:function(d){
             if(killed)return;
             try{
-              setDateFromCalendar(d);
+              if(d)setDateFromCalendar(d);
               startOrbit(true);
             }catch(e){
               try{Storage.write("orbclo_dev_orbit.err","return: "+e);}catch(x){}
@@ -774,17 +784,10 @@
     if(mode!=="orbit"||busy)return;
     try{if(!Bangle.isLCDOn())return;}catch(e){}
 
-    if(tapTimer){
-      clear(tapTimer);tapTimer=undefined;tapCount=0;
-      openSettings();
-      return;
-    }
-
-    tapCount=1;
-    tapTimer=setTimeout(function(){
-      tapTimer=undefined;tapCount=0;
-      if(!killed&&mode==="orbit")openCalendar();
-    },400);
+    /* V0.66: enter 5wCal immediately on the first Orbit tap.  The earlier
+       400 ms Orbit-side wait made a correct single tap feel sluggish. */
+    clearTaps();
+    openCalendar();
   }
 
   function onSwipe(lr,ud){
