@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.60",
+  "version": "0.61",
   "author": "onisY",
-  "description": "Fail-safe 5wCal selection/return build. Use the first tap coordinates as the double-tap date target, strengthen selected-date feedback with a two-pixel blinking frame and 100 ms buzz, stop reinitializing Bangle.setUI on calendar return, and wrap selected-date return-to-Orbit so any exception is logged and automatically falls back to the real-time Orbit display instead of leaving a navy screen.",
+  "description": "5wCal double-tap event diagnostic: temporarily extend the calendar double-tap window from 400 ms to 700 ms and add distinct haptic acknowledgements. The first calendar touch gives a short 60 ms buzz; a second touch received within 700 ms gives a longer 150 ms buzz before selecting the first-tap date. This distinguishes a timing-window problem from failure to receive the second touch event.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,7 +15,7 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app60.js"
+      "url": "app61.js"
     },
     {
       "name": "orbclo_dev_orbit.cal.js",
