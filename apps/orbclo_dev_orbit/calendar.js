@@ -183,7 +183,9 @@
     function drawSelectedFrame(on){
       var i=selectedIndex();if(i<0)return;
       var q=cellGeometry(i);
-      g.setColor(on?WHITE:BLACK).drawRect(q.x1+1,q.y1+1,q.x2-1,q.y2-1);
+      g.setColor(on?WHITE:BLACK);
+      g.drawRect(q.x1+1,q.y1+1,q.x2-1,q.y2-1);
+      g.drawRect(q.x1+2,q.y1+2,q.x2-2,q.y2-2);
       try{g.flip();}catch(e){}
     }
     function drawCalendar(){g.setBgColor(BLACK).setColor(BLACK).clear();for(var c=0;c<7;c++)drawWeekday(c);for(var i=0;i<35;i++)drawCell(i);drawTop();}
@@ -220,9 +222,10 @@
       var old=selectedIndex(),d=dateAt(xy);
       try{
         selected=d?copyDate(d):undefined;blinkWhite=true;
+        try{Storage.write("orbclo_dev_orbit.sel",selected?selected.toISOString():"none");}catch(loge){}
         if(old>=0)drawCell(old);
         var ni=selectedIndex();if(ni>=0)drawCell(ni);
-        if(selected){startBlink();try{Bangle.buzz(40);}catch(e){}}
+        if(selected){startBlink();try{Bangle.buzz(100);}catch(e){}}
       }catch(e){
         logCalError("select",e);
         stopBlink();
@@ -233,8 +236,9 @@
       try{
         armAuto();
         if(tapTimer){
+          var selectXY=lastXY||xy;
           clearTimer(tapTimer);tapTimer=undefined;tapCount=0;lastXY=undefined;
-          selectAt(xy);
+          selectAt(selectXY);
           return;
         }
         tapCount=1;lastXY=xy;
