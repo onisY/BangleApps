@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.63 - visible calendar selection */
+/* Orbclo Dev Orbit 0.64 - static calendar selection isolation */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
