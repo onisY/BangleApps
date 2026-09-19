@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.66",
+  "version": "0.67",
   "author": "onisY",
-  "description": "Responsiveness and date-handoff fix. Orbit now opens 5wCal immediately on a single tap, removing the former 400 ms Orbit-side wait. 5wCal uses a 550 ms double-tap window for reliable hardware recognition. A successful date double tap immediately calls back into Orbit state before any later return tap, so the selected day offset is already stored when the user goes back to Orbit. Selection success buzz is 120 ms. Orbit double-tap-to-settings is temporarily disabled in this isolation build.",
+  "description": "Input/state architecture reset. Use Bangle.setUI custom touch/swipe/button handlers instead of raw listeners, preload widgets at Orbit startup, and speed 5wCal drawing with native bitmap fonts and one-time widget drawing. Calendar selection writes a shared numeric day-offset record immediately; Orbit re-reads that record before every return redraw, so selected dates do not depend on a callback surviving. Successful selection shows SEL MM/DD and buzzes 120 ms. Calendar double-tap window is temporarily 650 ms.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,11 +15,11 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app66.js"
+      "url": "app67.js"
     },
     {
       "name": "orbclo_dev_orbit.cal.js",
-      "url": "calendar66.js"
+      "url": "calendar67.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
@@ -33,6 +33,9 @@
     },
     {
       "name": "orbclo_orbitdev.cal.json"
+    },
+    {
+      "name": "orbclo_orbitdev.sel.json"
     }
   ]
 }
