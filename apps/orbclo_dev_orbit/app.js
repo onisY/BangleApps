@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.58 - reliable always-ready touch input */
+/* Orbclo Dev Orbit 0.59 - robust calendar selection */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
