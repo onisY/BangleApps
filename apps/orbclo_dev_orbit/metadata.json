@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.64",
+  "version": "0.65",
   "author": "onisY",
-  "description": "Static-selection isolation build for 5wCal. V0.63's first short buzz followed by later long error buzz indicates the double tap reaches selection, but the blink/partial-draw path is unstable on hardware. Remove selection blinking entirely for this test, render the selected date as a permanent white cell with black digits during normal full-calendar drawing, and redraw the calendar once after selection. Keep the 400 ms tap window and 80 ms success buzz.",
+  "description": "Restore the last calendar renderer that reliably opened on hardware, and isolate date selection from all selection graphics. A 5wCal double tap now only stores the selected date and gives one 100 ms buzz; no blink, partial redraw, or full redraw occurs. The next single tap returns to Orbit using that selected date. Calendar entry no longer paints a navy transition first, and calendar startup errors show CAL ERR instead of leaving a blank purple screen.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,11 +15,11 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app64.js"
+      "url": "app65.js"
     },
     {
       "name": "orbclo_dev_orbit.cal.js",
-      "url": "calendar.js"
+      "url": "calendar65.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
