@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.54 - lightweight Sun texture */
+/* Orbclo Dev Orbit 0.55 - visible solar active region, wider Moon clearance */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
@@ -11,10 +11,12 @@
   var EARTHR=(cfg.earthSize===undefined?30:Math.max(25,Math.min(50,cfg.earthSize|0)));
   var MOONR=(cfg.moonSize===undefined?7:Math.max(4,Math.min(15,cfg.moonSize|0)));
   var MOONORBIT=(cfg.moonOrbit===undefined?44:Math.max(40,Math.min(80,cfg.moonOrbit|0)));
-  var minOrbit=EARTHR+2*MOONR;
+  /* Keep at least one full lunar diameter between the Earth and Moon surfaces.
+     Center-to-center minimum = Earth radius + Moon diameter + Moon radius. */
+  var minOrbit=EARTHR+3*MOONR;
   if(MOONORBIT<minOrbit)MOONORBIT=minOrbit;
   var SUNRAY=4,SUNX=0,SUNY=0,EARTHX=0,EARTHY=0;
-  var SUN_RAYS=[],SUN_TEX_ORANGE=[],SUN_TEX_DARK=[];
+  var SUN_RAYS=[],SUN_TEX_ORANGE=[],SUN_SPOT_X=0,SUN_SPOT_Y=0;
   var SYNODIC=29.530588853,NEWMOON=947182440000;
   var MOONLIT=[],MOONFAR=[],MOONFAROUT=[];
   var MOON_LIT_MAT=[1,0,0,1,0,0],MOON_FAR_MAT=[1,0,0,1,0,0],MOON_NEAR_MAT=[1,0,0,1,0,0];
@@ -143,7 +145,7 @@
     /* Sun geometry is static on this clock face, so cache ray endpoints and
        a tiny deterministic photosphere pattern once instead of recalculating
        trig or texture positions on every redraw. */
-    SUN_RAYS=[];SUN_TEX_ORANGE=[];SUN_TEX_DARK=[];
+    SUN_RAYS=[];SUN_TEX_ORANGE=[];
     var i,a,ri=SUNR+1,ro=SUNR+SUNRAY;
     for(i=0;i<8;i++){
       a=i*Math.PI/4;
@@ -164,11 +166,11 @@
     for(i=0;i<p.length;i+=2)
       SUN_TEX_ORANGE.push(Math.round(p[i]*SUNR),Math.round(p[i+1]*SUNR));
 
-    /* Two adjacent darker pixels suggest a small sunspot group. */
-    SUN_TEX_DARK.push(
-      Math.round(-0.33*SUNR),Math.round(0.17*SUNR),
-      Math.round(-0.17*SUNR),Math.round(0.17*SUNR)
-    );
+    /* Cache one compact active-region center.  At the default 6 px radius
+       a radius-1 red patch is large enough to be visibly red on Bangle.js 2,
+       with a single black core pixel to retain the sunspot cue. */
+    SUN_SPOT_X=Math.round(-0.25*SUNR);
+    SUN_SPOT_Y=Math.round(0.17*SUNR);
   }
 
   function buildLightingCache(){
@@ -363,9 +365,10 @@
     for(i=0;i<SUN_TEX_ORANGE.length;i+=2)
       g.setPixel(SUNX+SUN_TEX_ORANGE[i],SUNY+SUN_TEX_ORANGE[i+1]);
 
-    g.setColor(RED);
-    for(i=0;i<SUN_TEX_DARK.length;i+=2)
-      g.setPixel(SUNX+SUN_TEX_DARK[i],SUNY+SUN_TEX_DARK[i+1]);
+    /* Solar active region: visible red surround with a black spot core. */
+    var sx=SUNX+SUN_SPOT_X,sy=SUNY+SUN_SPOT_Y;
+    g.setColor(RED).fillCircle(sx,sy,1);
+    g.setColor(BLACK).setPixel(sx,sy);
   }
 
   function drawEarth(sol){
@@ -572,7 +575,7 @@
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(-1,-1);
     g.drawString("S"+s+" E"+e+" M"+m+" H"+h+" T"+tot,2,26);
     g.setFont("4x6",1);
-    g.drawString("V054 X"+(HEMI_NATIVE?1:0)+" Q"+(MOON_NATIVE?1:0)+" K"+(MOON_CACHE_HIT?1:0)+" R"+EARTHR,2,36);
+    g.drawString("V055 X"+(HEMI_NATIVE?1:0)+" Q"+(MOON_NATIVE?1:0)+" K"+(MOON_CACHE_HIT?1:0)+" O"+MOONORBIT,2,36);
     try{g.flip();}catch(err){}
     busy=false;
   }
