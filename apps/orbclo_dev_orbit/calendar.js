@@ -216,38 +216,80 @@
     function stop(){stopBlink();stopAuto();clearTaps();active=false;onReturn=undefined;}
     function resetTransient(){selected=undefined;clearTaps();stopBlink();stopAuto();today=midnight(new Date());pageStart=mondayOf(today);}
     function returnToOrbit(){if(!active)return;var cb=onReturn,sel=selected?copyDate(selected):undefined;stop();if(cb)cb(sel);}
-    function dateAt(xy){if(!xy||xy.x<0||xy.x>=W||xy.y<48||xy.y>=H)return undefined;var c=Math.floor(xy.x*7/W),r=Math.floor((xy.y-48)*5/(H-48));if(c<0||c>6||r<0||r>4)return undefined;return addDays(pageStart,r*7+c);}
+    function copyXY(xy){
+      if(!xy||typeof xy.x!=="number"||typeof xy.y!=="number")return undefined;
+      return {x:Math.round(xy.x),y:Math.round(xy.y)};
+    }
+    function dateIndexAt(xy){
+      if(!xy||typeof xy.x!=="number"||typeof xy.y!=="number")return -1;
+      if(xy.x<0||xy.x>=W||xy.y<48||xy.y>=H)return -1;
+      var c=Math.floor(xy.x*7/W),r=Math.floor((xy.y-48)*5/(H-48));
+      if(c<0||c>6||r<0||r>4)return -1;
+      return r*7+c;
+    }
+    function dateAt(xy){
+      var i=dateIndexAt(xy);
+      return i<0?undefined:addDays(pageStart,i);
+    }
+    function showCoordError(){
+      try{
+        g.setColor(RED).fillRect(48,4,127,20);
+        g.setColor(WHITE).setBgColor(RED).setFont("6x8",2).setFontAlign(0,0);
+        g.drawString("NO XY",87,12);
+        try{g.flip();}catch(e){}
+      }catch(e){}
+      try{Bangle.buzz(500);}catch(e){}
+    }
     function selectAt(xy){
       stopBlink();
-      var old=selectedIndex(),d=dateAt(xy);
+      var idx=dateIndexAt(xy);
+      if(idx<0){
+        try{Storage.write("orbclo_dev_orbit.err","calendar NO_XY");}catch(e){}
+        showCoordError();
+        return false;
+      }
+
       try{
-        selected=d?copyDate(d):undefined;blinkWhite=true;
-        try{Storage.write("orbclo_dev_orbit.sel",selected?selected.toISOString():"none");}catch(loge){}
-        if(old>=0)drawCell(old);
-        var ni=selectedIndex();if(ni>=0)drawCell(ni);
-        if(selected){startBlink();}
+        var old=selectedIndex();
+        selected=addDays(pageStart,idx);
+        blinkWhite=true;
+        try{
+          Storage.write("orbclo_dev_orbit.sel",
+            selected.getFullYear()+"-"+(selected.getMonth()+1)+"-"+selected.getDate()+
+            " x"+xy.x+" y"+xy.y);
+        }catch(loge){}
+
+        if(old>=0&&old!==idx)drawCell(old);
+        drawCell(idx);
+        startBlink();
+        try{Bangle.buzz(200);}catch(e){}
+        return true;
       }catch(e){
         logCalError("select",e);
         stopBlink();
+        try{Bangle.buzz(500);}catch(be){}
+        return false;
       }
     }
     function touch(xy){
       if(!active)return;
       try{
         armAuto();
+        var p=copyXY(xy);
+
         if(tapTimer){
-          /* Diagnostic: a longer buzz proves that the second Bangle touch
-             event actually arrived before the double-tap window expired. */
-          try{Bangle.buzz(150);}catch(be2){}
-          var selectXY=lastXY||xy;
+          /* Second event is known to arrive on hardware. Use a copied first
+             coordinate so later event-object reuse cannot alter the target. */
+          var selectXY=lastXY||p;
           clearTimer(tapTimer);tapTimer=undefined;tapCount=0;lastXY=undefined;
           selectAt(selectXY);
           return;
         }
 
-        /* Diagnostic: a short buzz proves receipt of the first touch event. */
+        /* Snapshot x/y now instead of retaining the firmware event object. */
+        lastXY=p;
+        tapCount=1;
         try{Bangle.buzz(60);}catch(be1){}
-        tapCount=1;lastXY=xy;
         tapTimer=setTimeout(function(){
           tapTimer=undefined;tapCount=0;lastXY=undefined;
           if(active)returnToOrbit();
