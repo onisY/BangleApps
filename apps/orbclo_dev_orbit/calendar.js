@@ -153,11 +153,15 @@
       var gaps=[],p=0;merged.forEach(function(s){if(s[0]>p)gaps.push([p,s[0]-1]);p=Math.max(p,s[1]+1);});if(p<W)gaps.push([p,W-1]);if(!gaps.length)return [0,W-1];
       gaps.sort(function(a,b){var aw=a[1]-a[0]+1,bw=b[1]-b[0]+1;if(aw!==bw)return bw-aw;return Math.abs(((a[0]+a[1])>>1)-(W>>1))-Math.abs(((b[0]+b[1])>>1)-(W>>1));});return gaps[0];
     }
-    function drawTop(){
-      try{Bangle.drawWidgets();}catch(e){}
-      var s=pageStart.getFullYear()+"/"+pad2(pageStart.getMonth()+1),gap=topFreeGap(),x1=gap[0]+2,x2=gap[1]-2;if(x2<x1){x1=gap[0];x2=gap[1];}
-      var avail=Math.max(1,x2-x1+1),fs=14;g.setFont("Vector",fs);while(fs>8&&g.stringWidth(s)+4>avail){fs-=2;g.setFont("Vector",fs);}
-      g.setBgColor(BLACK).setColor(BLACK).fillRect(x1,1,x2,22);g.setColor(WHITE).setFont("Vector",fs).setFontAlign(0,0).drawString(s,(x1+x2)>>1,12);
+    function drawTop(text){
+      var s=text||(pageStart.getFullYear()+"/"+pad2(pageStart.getMonth()+1));
+      var gap=topFreeGap(),x1=gap[0]+2,x2=gap[1]-2;if(x2<x1){x1=gap[0];x2=gap[1];}
+      g.setBgColor(BLACK).setColor(BLACK).fillRect(x1,1,x2,22);
+      g.setColor(WHITE).setFont("6x8",2).setFontAlign(0,0).drawString(s,(x1+x2)>>1,12);
+    }
+    function drawSelectionAck(d){
+      drawTop("SEL "+pad2(d.getMonth()+1)+"/"+pad2(d.getDate()));
+      try{g.flip();}catch(e){}
     }
     function line2(x1,y1,x2,y2){g.drawLine(x1,y1,x2,y2);g.drawLine(x1+1,y1,x2+1,y2);}
     function weekdayGlyph(c,x,y){
@@ -170,12 +174,12 @@
       else if(c===5){line2(x,y-8,x,y+7);line2(x-5,y-4,x+5,y-4);line2(x-7,y+7,x+7,y+7);}
       else{line2(x-6,y-8,x+5,y-8);line2(x-6,y+8,x+5,y+8);line2(x-6,y-8,x-6,y+8);line2(x+5,y-8,x+5,y+8);line2(x-6,y,x+5,y);}
     }
-    function drawWeekday(c){var x1=Math.floor(c*W/7),x2=Math.floor((c+1)*W/7)-1,bg=BLACK;if(c===5)bg=BLUE;else if(c===6)bg=RED;g.setColor(bg).fillRect(x1,24,x2,47);if(cfg.lang==="en")g.setColor(WHITE).setFont("Vector",20).setFontAlign(0,0).drawString(["M","T","W","T","F","S","S"][c],(x1+x2)>>1,35);else weekdayGlyph(c,(x1+x2)>>1,35);}
+    function drawWeekday(c){var x1=Math.floor(c*W/7),x2=Math.floor((c+1)*W/7)-1,bg=BLACK;if(c===5)bg=BLUE;else if(c===6)bg=RED;g.setColor(bg).fillRect(x1,24,x2,47);if(cfg.lang==="en")g.setColor(WHITE).setFont("6x8",2).setFontAlign(0,0).drawString(["M","T","W","T","F","S","S"][c],(x1+x2)>>1,35);else weekdayGlyph(c,(x1+x2)>>1,35);}
     function cellGeometry(index){var c=index%7,r=(index/7)|0,top=48,gh=H-48;return {x1:Math.floor(c*W/7),x2:Math.floor((c+1)*W/7)-1,y1:top+Math.floor(r*gh/5),y2:top+Math.floor((r+1)*gh/5)-1,c:c};}
     function drawCell(index){
       if(index<0||index>=35)return;var q=cellGeometry(index),d=addDays(pageStart,index),bg=BLACK,fg=WHITE;
       if(q.c===5)bg=BLUE;if(q.c===6||(cfg.lang==="en"?isEnglishHoliday(d):isJapanHoliday(d)))bg=RED;if(sameDay(d,today)){bg=GREEN;fg=BLACK;}
-      g.setColor(bg).fillRect(q.x1,q.y1,q.x2,q.y2);g.setColor(fg).setBgColor(bg).setFont("Vector",20).setFontAlign(0,0).drawString(""+d.getDate(),(q.x1+q.x2)>>1,(q.y1+q.y2)>>1);g.setColor(GRAY).drawRect(q.x1,q.y1,q.x2,q.y2);
+      g.setColor(bg).fillRect(q.x1,q.y1,q.x2,q.y2);g.setColor(fg).setBgColor(bg).setFont("6x8",2).setFontAlign(0,0).drawString(""+d.getDate(),(q.x1+q.x2)>>1,(q.y1+q.y2)>>1);g.setColor(GRAY).drawRect(q.x1,q.y1,q.x2,q.y2);
     }
     function selectedIndex(){if(!selected)return -1;var n=dayNumber(selected)-dayNumber(pageStart);return n>=0&&n<35?n:-1;}
     function logCalError(stage,e){try{Storage.write("orbclo_dev_orbit.err","calendar "+stage+": "+e);}catch(x){}}
@@ -191,7 +195,17 @@
       g.setColor(WHITE).drawRect(q.x1,q.y1,q.x2,q.y2);
       try{g.flip();}catch(e){}
     }
-    function drawCalendar(){g.setBgColor(BLACK).setColor(BLACK).clear();for(var c=0;c<7;c++)drawWeekday(c);for(var i=0;i<35;i++)drawCell(i);drawTop();}
+    function drawCalendar(full){
+      g.setBgColor(BLACK).setColor(BLACK);
+      if(full){
+        g.clear();
+        try{Bangle.drawWidgets();}catch(e){}
+      }else g.fillRect(0,24,W-1,H-1);
+      for(var c=0;c<7;c++)drawWeekday(c);
+      for(var i=0;i<35;i++)drawCell(i);
+      drawTop();
+      try{g.flip();}catch(e){}
+    }
     function clearTimer(t){if(t)clearTimeout(t);}
     function clearTaps(){clearTimer(tapTimer);tapTimer=undefined;tapCount=0;lastXY=undefined;}
     function stopBlink(){clearTimer(blinkTimer);blinkTimer=undefined;}
@@ -255,12 +269,17 @@
       try{
         selected=addDays(pageStart,idx);
         blinkWhite=true;
+        var offset=dayNumber(selected)-dayNumber(today);
         try{
           Storage.write("orbclo_dev_orbit.sel",
             selected.getFullYear()+"-"+(selected.getMonth()+1)+"-"+selected.getDate()+
             " x"+xy.x+" y"+xy.y);
+          Storage.writeJSON("orbclo_orbitdev.sel.json",{
+            offset:offset,y:selected.getFullYear(),m:selected.getMonth()+1,d:selected.getDate()
+          });
         }catch(loge){}
-        if(onSelect)onSelect(copyDate(selected));
+        if(onSelect)onSelect(copyDate(selected),offset);
+        drawSelectionAck(selected);
         try{Bangle.buzz(120);}catch(e){}
         return true;
       }catch(e){
@@ -290,18 +309,18 @@
         tapTimer=setTimeout(function(){
           tapTimer=undefined;tapCount=0;lastXY=undefined;
           if(active)returnToOrbit();
-        },550);
+        },650);
       }catch(e){
         logCalError("touch",e);
         clearTaps();
       }
     }
-    function swipe(lr,ud){if(!active||!ud)return;clearTaps();armAuto();pageStart=addDays(pageStart,ud<0?35:-35);drawCalendar();}
+    function swipe(lr,ud){if(!active||!ud)return;clearTaps();armAuto();pageStart=addDays(pageStart,ud<0?35:-35);drawCalendar(false);}
     function start(opts){
       opts=opts||{};stop();cfg=readConfig();active=true;onReturn=opts.onReturn;onSelect=opts.onSelect;today=midnight(new Date());
       var focus=opts.focusDate?midnight(opts.focusDate):(opts.selectedDate?midnight(opts.selectedDate):today);pageStart=mondayOf(focus);selected=opts.selectedDate?midnight(opts.selectedDate):undefined;blinkWhite=true;
       try{if(typeof WIDGETS==="undefined")Bangle.loadWidgets();}catch(e){}
-      drawCalendar();armAuto();
+      drawCalendar(true);armAuto();
     }
     function isActive(){return active;}
     return {start:start,stop:stop,resetTransient:resetTransient,touch:touch,swipe:swipe,isActive:isActive};
