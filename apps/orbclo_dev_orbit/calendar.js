@@ -26,7 +26,7 @@
     var W=g.getWidth(),H=g.getHeight();
     var BLACK=0x0000,WHITE=0xFFFF,BLUE=0x001F,RED=0xF800,GREEN=0x07E0,GRAY=0x4208;
     var cfg,today,pageStart,selected;
-    var active=false,onReturn;
+    var active=false,onReturn,onSelect;
     var tapTimer,tapCount=0,lastXY;
     var blinkTimer,blinkWhite=true,autoTimer;
 
@@ -216,7 +216,7 @@
     }
     function stopAuto(){clearTimer(autoTimer);autoTimer=undefined;}
     function armAuto(){stopAuto();if(!active||!cfg||!(cfg.timeout>=15))return;autoTimer=setTimeout(function(){autoTimer=undefined;returnToOrbit();},cfg.timeout*1000);}
-    function stop(){stopBlink();stopAuto();clearTaps();active=false;onReturn=undefined;}
+    function stop(){stopBlink();stopAuto();clearTaps();active=false;onReturn=undefined;onSelect=undefined;}
     function resetTransient(){selected=undefined;clearTaps();stopBlink();stopAuto();today=midnight(new Date());pageStart=mondayOf(today);}
     function returnToOrbit(){if(!active)return;var cb=onReturn,sel=selected?copyDate(selected):undefined;stop();if(cb)cb(sel);}
     function copyXY(xy){
@@ -260,7 +260,8 @@
             selected.getFullYear()+"-"+(selected.getMonth()+1)+"-"+selected.getDate()+
             " x"+xy.x+" y"+xy.y);
         }catch(loge){}
-        try{Bangle.buzz(100);}catch(e){}
+        if(onSelect)onSelect(copyDate(selected));
+        try{Bangle.buzz(120);}catch(e){}
         return true;
       }catch(e){
         logCalError("select",e);
@@ -289,7 +290,7 @@
         tapTimer=setTimeout(function(){
           tapTimer=undefined;tapCount=0;lastXY=undefined;
           if(active)returnToOrbit();
-        },400);
+        },550);
       }catch(e){
         logCalError("touch",e);
         clearTaps();
@@ -297,7 +298,7 @@
     }
     function swipe(lr,ud){if(!active||!ud)return;clearTaps();armAuto();pageStart=addDays(pageStart,ud<0?35:-35);drawCalendar();}
     function start(opts){
-      opts=opts||{};stop();cfg=readConfig();active=true;onReturn=opts.onReturn;today=midnight(new Date());
+      opts=opts||{};stop();cfg=readConfig();active=true;onReturn=opts.onReturn;onSelect=opts.onSelect;today=midnight(new Date());
       var focus=opts.focusDate?midnight(opts.focusDate):(opts.selectedDate?midnight(opts.selectedDate):today);pageStart=mondayOf(focus);selected=opts.selectedDate?midnight(opts.selectedDate):undefined;blinkWhite=true;
       try{if(typeof WIDGETS==="undefined")Bangle.loadWidgets();}catch(e){}
       drawCalendar();armAuto();
