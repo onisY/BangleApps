@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.61",
+  "version": "0.62",
   "author": "onisY",
-  "description": "5wCal double-tap event diagnostic: temporarily extend the calendar double-tap window from 400 ms to 700 ms and add distinct haptic acknowledgements. The first calendar touch gives a short 60 ms buzz; a second touch received within 700 ms gives a longer 150 ms buzz before selecting the first-tap date. This distinguishes a timing-window problem from failure to receive the second touch event.",
+  "description": "5wCal coordinate-selection diagnostic/fix. V0.61 proved that the second touch event reaches the app, so V0.62 stops treating timing as the primary fault. Snapshot the first touch x/y as primitive values, validate the calendar cell index explicitly, select by cell index, buzz 200 ms on successful selection, and show NO XY plus a 500 ms buzz if usable touch coordinates are missing. Keep the 700 ms calendar window temporarily for isolation; Orbit remains unchanged.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,7 +15,7 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app61.js"
+      "url": "app62.js"
     },
     {
       "name": "orbclo_dev_orbit.cal.js",
