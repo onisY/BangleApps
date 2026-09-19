@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.53 - cached Moon raster geometry */
+/* Orbclo Dev Orbit 0.54 - lightweight Sun texture */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
@@ -14,6 +14,7 @@
   var minOrbit=EARTHR+2*MOONR;
   if(MOONORBIT<minOrbit)MOONORBIT=minOrbit;
   var SUNRAY=4,SUNX=0,SUNY=0,EARTHX=0,EARTHY=0;
+  var SUN_RAYS=[],SUN_TEX_ORANGE=[],SUN_TEX_DARK=[];
   var SYNODIC=29.530588853,NEWMOON=947182440000;
   var MOONLIT=[],MOONFAR=[],MOONFAROUT=[];
   var MOON_LIT_MAT=[1,0,0,1,0,0],MOON_FAR_MAT=[1,0,0,1,0,0],MOON_NEAR_MAT=[1,0,0,1,0,0];
@@ -136,6 +137,38 @@
     if(c<=-1)return {polar:true,day:true,h0:Math.PI};
     if(c>=1)return {polar:true,day:false,h0:0};
     return {polar:false,day:false,h0:Math.acos(c)};
+  }
+
+  function buildSunCache(){
+    /* Sun geometry is static on this clock face, so cache ray endpoints and
+       a tiny deterministic photosphere pattern once instead of recalculating
+       trig or texture positions on every redraw. */
+    SUN_RAYS=[];SUN_TEX_ORANGE=[];SUN_TEX_DARK=[];
+    var i,a,ri=SUNR+1,ro=SUNR+SUNRAY;
+    for(i=0;i<8;i++){
+      a=i*Math.PI/4;
+      SUN_RAYS.push(
+        Math.round(SUNX+Math.cos(a)*ri),
+        Math.round(SUNY+Math.sin(a)*ri),
+        Math.round(SUNX+Math.cos(a)*ro),
+        Math.round(SUNY+Math.sin(a)*ro)
+      );
+    }
+
+    /* Stylized granulation offsets, scaled from the default 6 px radius.
+       Keep them sparse so the small Sun remains legible on Bangle.js 2. */
+    var p=[
+      -0.50,-0.17, -0.17,-0.50, 0.33,-0.33, 0.50,0.00,
+       0.17,0.50, -0.33,0.33, -0.17,0.00, 0.33,0.17
+    ];
+    for(i=0;i<p.length;i+=2)
+      SUN_TEX_ORANGE.push(Math.round(p[i]*SUNR),Math.round(p[i+1]*SUNR));
+
+    /* Two adjacent darker pixels suggest a small sunspot group. */
+    SUN_TEX_DARK.push(
+      Math.round(-0.33*SUNR),Math.round(0.17*SUNR),
+      Math.round(-0.17*SUNR),Math.round(0.17*SUNR)
+    );
   }
 
   function buildLightingCache(){
@@ -315,15 +348,24 @@
   }
 
   function drawSun(){
-    var r=SUNR;
+    var i;
     /* Reference axis is intentionally behind both bodies. */
     g.setColor(0x8410).drawLine(EARTHX,EARTHY,SUNX,SUNY);
+
+    /* Cached corona rays: no redraw-time trigonometry. */
     g.setColor(ORANGE);
-    for(var i=0;i<8;i++){
-      var a=i*Math.PI/4;
-      g.drawLine(Math.round(SUNX+Math.cos(a)*(r+1)),Math.round(SUNY+Math.sin(a)*(r+1)),Math.round(SUNX+Math.cos(a)*(r+SUNRAY)),Math.round(SUNY+Math.sin(a)*(r+SUNRAY)));
-    }
-    g.setColor(YELLOW).fillCircle(SUNX,SUNY,r);
+    for(i=0;i<SUN_RAYS.length;i+=4)
+      g.drawLine(SUN_RAYS[i],SUN_RAYS[i+1],SUN_RAYS[i+2],SUN_RAYS[i+3]);
+
+    /* Photosphere: yellow disk, orange limb/granulation, small dark sunspot. */
+    g.setColor(YELLOW).fillCircle(SUNX,SUNY,SUNR);
+    g.setColor(ORANGE).drawCircle(SUNX,SUNY,SUNR);
+    for(i=0;i<SUN_TEX_ORANGE.length;i+=2)
+      g.setPixel(SUNX+SUN_TEX_ORANGE[i],SUNY+SUN_TEX_ORANGE[i+1]);
+
+    g.setColor(RED);
+    for(i=0;i<SUN_TEX_DARK.length;i+=2)
+      g.setPixel(SUNX+SUN_TEX_DARK[i],SUNY+SUN_TEX_DARK[i+1]);
   }
 
   function drawEarth(sol){
@@ -528,9 +570,9 @@
 
     var c=ms(t0,t1),s=ms(t1,t2),a=ms(t2,t3),e=ms(t3,t4),o=ms(t4,t5),m=ms(t5,t6),h=ms(t6,t7),tot=ms(t0,t7);
     g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",1).setFontAlign(-1,-1);
-    g.drawString("E"+e+" M"+m+" H"+h+" T"+tot,2,26);
+    g.drawString("S"+s+" E"+e+" M"+m+" H"+h+" T"+tot,2,26);
     g.setFont("4x6",1);
-    g.drawString("V053 X"+(HEMI_NATIVE?1:0)+" Q"+(MOON_NATIVE?1:0)+" K"+(MOON_CACHE_HIT?1:0)+" R"+EARTHR,2,36);
+    g.drawString("V054 X"+(HEMI_NATIVE?1:0)+" Q"+(MOON_NATIVE?1:0)+" K"+(MOON_CACHE_HIT?1:0)+" R"+EARTHR,2,36);
     try{g.flip();}catch(err){}
     busy=false;
   }
@@ -573,6 +615,7 @@
   }
 
   layoutBodies();
+  buildSunCache();
   buildLightingCache();
   buildEarthMapCache();
   buildMoonCache();
