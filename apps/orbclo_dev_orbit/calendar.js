@@ -30,6 +30,7 @@
     var tapTimer,tapCount=0,lastXY;
     var blinkTimer,blinkWhite=true,autoTimer;
     var holidayFlags=new Uint8Array(35),dayNums=new Uint8Array(35),todayIndex=-1,lastCellPrepMs=0;
+    var holidayTimer,holidayToken=0,lastHolidayCalcMs=0,lastHolidayDrawMs=0;
 
     function midnight(d){return new Date(d.getFullYear(),d.getMonth(),d.getDate());}
     function copyDate(d){return d?new Date(d.getFullYear(),d.getMonth(),d.getDate()):undefined;}
@@ -221,17 +222,62 @@
     }
     function drawWeekday(c){var x1=Math.floor(c*W/7),x2=Math.floor((c+1)*W/7)-1,bg=BLACK;if(c===5)bg=BLUE;else if(c===6)bg=RED;g.setColor(bg).fillRect(x1,24,x2,47);if(cfg.lang==="en")g.setColor(WHITE).setFont("6x8",2).setFontAlign(0,0).drawString(["M","T","W","T","F","S","S"][c],(x1+x2)>>1,35);else weekdayGlyph(c,(x1+x2)>>1,35);}
     function cellGeometry(index){var c=index%7,r=(index/7)|0,top=48,gh=H-48;return {x1:Math.floor(c*W/7),x2:Math.floor((c+1)*W/7)-1,y1:top+Math.floor(r*gh/5),y2:top+Math.floor((r+1)*gh/5)-1,c:c};}
-    function buildCellData(){
+    function buildBasicCellData(){
       var t0=Math.round(getTime()*1000),d=copyDate(pageStart);
       todayIndex=-1;
       for(var i=0;i<35;i++){
         dayNums[i]=d.getDate();
-        holidayFlags[i]=(cfg.lang==="en"?isEnglishHoliday(d):isJapanHoliday(d))?1:0;
+        holidayFlags[i]=0;
         if(sameDay(d,today))todayIndex=i;
         d.setDate(d.getDate()+1);
       }
       lastCellPrepMs=Math.round(getTime()*1000)-t0;
       return lastCellPrepMs;
+    }
+
+    function cancelHolidayBatch(){
+      holidayToken++;
+      if(holidayTimer)clearTimeout(holidayTimer);
+      holidayTimer=undefined;
+    }
+
+    function startHolidayBatch(baseTotal,baseDraw,basePrep){
+      cancelHolidayBatch();
+      var token=holidayToken;
+
+      holidayTimer=setTimeout(function(){
+        holidayTimer=undefined;
+        if(!active||token!==holidayToken)return;
+
+        /* Compute all 35 holiday flags first, without touching the LCD. */
+        var t0=Math.round(getTime()*1000),d=copyDate(pageStart),changed=[];
+        for(var i=0;i<35;i++){
+          var h=(cfg.lang==="en"?isEnglishHoliday(d):isJapanHoliday(d))?1:0;
+          holidayFlags[i]=h;
+          if(h&&i!==todayIndex&&(i%7)!==6)changed.push(i);
+          d.setDate(d.getDate()+1);
+        }
+        lastHolidayCalcMs=Math.round(getTime()*1000)-t0;
+
+        if(!active||token!==holidayToken)return;
+
+        /* Then apply every visual holiday change as one batch and flip once. */
+        var t1=Math.round(getTime()*1000);
+        for(var j=0;j<changed.length;j++)drawCell(changed[j]);
+        try{g.flip();}catch(e){}
+        lastHolidayDrawMs=Math.round(getTime()*1000)-t1;
+
+        report({
+          holidayDone:1,
+          holidayCalcMs:lastHolidayCalcMs,
+          holidayDrawMs:lastHolidayDrawMs,
+          holidayCount:changed.length
+        });
+        if(!selected)diagPanel(
+          "T "+baseTotal+" D "+baseDraw,
+          "C "+basePrep+" H "+lastHolidayCalcMs+" U "+lastHolidayDrawMs
+        );
+      },0);
     }
 
     function drawCell(index){
@@ -304,8 +350,8 @@
     }
     function stopAuto(){clearTimer(autoTimer);autoTimer=undefined;}
     function armAuto(){stopAuto();if(!active||!cfg||!(cfg.timeout>=15))return;autoTimer=setTimeout(function(){autoTimer=undefined;returnToOrbit();},cfg.timeout*1000);}
-    function stop(){stopBlink();stopAuto();clearTaps();firstTapMs=undefined;active=false;onReturn=undefined;onSelect=undefined;onDiag=undefined;}
-    function resetTransient(){selected=undefined;clearTaps();stopBlink();stopAuto();today=midnight(new Date());pageStart=mondayOf(today);}
+    function stop(){cancelHolidayBatch();stopBlink();stopAuto();clearTaps();firstTapMs=undefined;active=false;onReturn=undefined;onSelect=undefined;onDiag=undefined;}
+    function resetTransient(){cancelHolidayBatch();selected=undefined;clearTaps();stopBlink();stopAuto();today=midnight(new Date());pageStart=mondayOf(today);}
     function returnToOrbit(){if(!active)return;var cb=onReturn,sel=selected?copyDate(selected):undefined;stop();if(cb)cb(sel);}
     function copyXY(xy){
       if(!xy||typeof xy.x!=="number"||typeof xy.y!=="number")return undefined;
@@ -390,7 +436,20 @@
         clearTaps();firstTapMs=undefined;
       }
     }
-    function swipe(lr,ud){if(!active||!ud)return;clearTaps();armAuto();pageStart=addDays(pageStart,ud<0?35:-35);buildCellData();drawCalendar(false);}
+    function swipe(lr,ud){
+      if(!active||!ud)return;
+      clearTaps();armAuto();cancelHolidayBatch();
+      pageStart=addDays(pageStart,ud<0?35:-35);
+
+      var cMs=buildBasicCellData();
+      var t0=Math.round(getTime()*1000);
+      drawCalendar(false);
+      var dMs=Math.round(getTime()*1000)-t0;
+
+      report({calCellMs:cMs,calDrawMs:dMs,holidayDeferred:1});
+      diagPanel("T "+dMs+" D "+dMs,"C "+cMs+" H ...");
+      startHolidayBatch(dMs,dMs,cMs);
+    }
     function start(opts){
       opts=opts||{};stop();cfg=readConfig();active=true;
       onReturn=opts.onReturn;onSelect=opts.onSelect;onDiag=opts.onDiag;startTapMs=opts.tapMs;
@@ -398,16 +457,27 @@
       today=midnight(new Date());
       var focus=opts.focusDate?midnight(opts.focusDate):(opts.selectedDate?midnight(opts.selectedDate):today);
       pageStart=mondayOf(focus);selected=opts.selectedDate?midnight(opts.selectedDate):undefined;blinkWhite=true;
-      var cellMs=buildCellData();
+
+      /* Stage 1: build only cheap day-number/today data and paint immediately.
+         Holiday flags intentionally remain zero in this first visible frame. */
+      var cellMs=buildBasicCellData();
       var drawStartMs=Math.round(getTime()*1000);
       drawCalendar(true);
       var doneMs=Math.round(getTime()*1000);
       var total=startTapMs===undefined?0:doneMs-startTapMs;
       var drawMs=doneMs-drawStartMs;
       var preMs=startTapMs===undefined?0:startMs-startTapMs;
-      report({calStartMs:startMs,calDrawStartMs:drawStartMs,calDoneMs:doneMs,
-        calTotalMs:total,calDrawMs:drawMs,calStartDelayMs:preMs,calCellMs:cellMs,calReady:1});
-      diagPanel("T "+total+" D "+drawMs,"C "+cellMs+" P "+preMs);
+
+      report({
+        calStartMs:startMs,calDrawStartMs:drawStartMs,calDoneMs:doneMs,
+        calTotalMs:total,calDrawMs:drawMs,calStartDelayMs:preMs,
+        calCellMs:cellMs,holidayDeferred:1,calReady:1
+      });
+      diagPanel("T "+total+" D "+drawMs,"C "+cellMs+" H ...");
+
+      /* Stage 2: after the first frame is already visible, compute all 35
+         holidays in one batch, then update every holiday cell together. */
+      startHolidayBatch(total,drawMs,cellMs);
       armAuto();
     }
     function isActive(){return active;}
