@@ -50,7 +50,7 @@
 
   function create(){
     var W=g.getWidth(),H=g.getHeight();
-    var BLACK=0x0000,WHITE=0xFFFF,BLUE=0x001F,RED=0xF800,GREEN=0x07E0,GRAY=0x4208;
+    var BLACK=0x0000,WHITE=0xFFFF,BLUE=0x001F,RED=0xF800,GREEN=0x07E0,YELLOW=0xFFE0,GRAY=0x4208;
     var cfg,today,pageStart,selected;
     var active=false,onReturn,onSelect,onDiag,startTapMs,firstTapMs;
     var tapTimer,tapCount=0,lastXY;
@@ -131,6 +131,8 @@
       if(w25===6||w25===0)setYMD(bits,y,12,27);else setYMD(bits,y,12,25);
       if(w26===6||w26===0)setYMD(bits,y,12,28);else setYMD(bits,y,12,26);
     }
+    /* Intentional coupling: Japanese display -> Japan holidays.
+       English display -> selected UK region (EW/Scotland/Northern Ireland). */
     function holRegion(){return cfg.lang==="ja"?"jp":cfg.ukRegion;}
     function holFile(region,year){return "och"+HOL_CACHE_VER+region+year;}
     function bitsToString(bits){
@@ -613,11 +615,11 @@
       var i=selectedIndex();if(i<0)return;
       if(!on){drawCell(i);try{g.flip();}catch(e){};return;}
 
-      var q=cellGeometry(i),d=addDays(pageStart,i);
-      g.setColor(WHITE).fillRect(q.x1+1,q.y1+1,q.x2-1,q.y2-1);
-      g.setColor(BLACK).setBgColor(WHITE).setFont("Vector",20).setFontAlign(0,0)
-        .drawString(""+d.getDate(),(q.x1+q.x2)>>1,(q.y1+q.y2)>>1);
-      g.setColor(WHITE).drawRect(q.x1,q.y1,q.x2,q.y2);
+      var q=cellGeometry(i);
+      g.setColor(YELLOW).fillRect(q.x1,q.y1,q.x2,q.y2);
+      g.setColor(BLACK).setBgColor(YELLOW).setFont("6x8",2).setFontAlign(0,0)
+        .drawString(""+dayNums[i],(q.x1+q.x2)>>1,(q.y1+q.y2)>>1);
+      g.setColor(GRAY).drawRect(q.x1,q.y1,q.x2,q.y2);
       try{g.flip();}catch(e){}
     }
     function drawCalendarFast(full){
@@ -764,6 +766,9 @@
           return false;
         }
         stage="DATE";
+        var oldIdx=selectedIndex();
+        stopBlink();
+        if(oldIdx>=0&&oldIdx!==idx)drawCell(oldIdx);
         selected=addDays(pageStart,idx);
         stage="OFFSET";
         offset=dayNumber(selected)-dayNumber(today);
@@ -776,6 +781,7 @@
         });
         diagPanel("SEL "+(offset>=0?"+":"")+offset,
           pad2(selected.getMonth()+1)+"/"+pad2(selected.getDate())+" DT "+dt);
+        startBlink();
         try{Bangle.buzz(120);}catch(be2){}
         return true;
       }catch(e){
