@@ -1,8 +1,8 @@
-/* Orbclo Dev Orbit 0.75 - responsive holiday worker and tap state */
+/* Orbclo Dev Orbit 0.76 - yearly holiday bit caches */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
-  var diag={v:"0.75"};
+  var diag={v:"0.76"};
   function ms(){return Math.round(getTime()*1000);}
   function diagMerge(x){if(!x)return;for(var k in x)diag[k]=x[k];}
   var cfg=Storage.readJSON(CFGFILE,1)||{};
@@ -814,9 +814,9 @@
         onchange:function(v){cc.lang=v?"en":"ja";saveCal();}
       },
       "Cal holidays":{
-        value:cc.ukRegion==="sc"?1:0,min:0,max:1,step:1,
-        format:function(v){return v?"Scotland":"England/Wales";},
-        onchange:function(v){cc.ukRegion=v?"sc":"ew";saveCal();}
+        value:cc.ukRegion==="sc"?1:(cc.ukRegion==="ni"?2:0),min:0,max:2,step:1,
+        format:function(v){return ["England/Wales","Scotland","N. Ireland"][v]||"England/Wales";},
+        onchange:function(v){cc.ukRegion=v===1?"sc":(v===2?"ni":"ew");saveCal();}
       },
       "Cal auto return":{
         value:cc.timeout,min:15,max:120,step:15,
@@ -835,7 +835,7 @@
     if(mode!=="orbit"||busy)return;
     try{if(!Bangle.isLCDOn())return;}catch(e){}
 
-    diag={v:"0.75",orbitTapMs:ms(),orbitTouchSeen:1};
+    diag={v:"0.76",orbitTapMs:ms(),orbitTouchSeen:1};
     clearTaps();
     openCalendar(diag.orbitTapMs);
   }
