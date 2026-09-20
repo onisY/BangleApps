@@ -1,17 +1,10 @@
-/* Orbclo Dev Orbit 0.68 - self-diagnostic interaction timing */
+/* Orbclo Dev Orbit 0.69 - RAM-only selection and prepared calendar */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
-  var SELFILE="orbclo_orbitdev.sel.json",DIAGFILE="orbclo_orbitdev.diag.json";
-  try{Storage.erase(SELFILE);}catch(e){}
-  try{Storage.erase(DIAGFILE);}catch(e){}
-  var diag={v:"0.68"};
-  function diagSave(){try{Storage.writeJSON(DIAGFILE,diag);}catch(e){}}
-  function diagMerge(x){
-    if(!x)return;
-    for(var k in x)diag[k]=x[k];
-    diagSave();
-  }
+  var diag={v:"0.69"};
+  function ms(){return Math.round(getTime()*1000);}
+  function diagMerge(x){if(!x)return;for(var k in x)diag[k]=x[k];}
   var cfg=Storage.readJSON(CFGFILE,1)||{};
   var calModule,calendar;
   try{
@@ -571,16 +564,26 @@
   }
 
   function drawOrbitDiag(){
-    var d=Storage.readJSON(DIAGFILE,1)||diag;
-    var s="";
-    if(d.selOK===1)s="SOK "+(d.selOff>=0?"+":"")+d.selOff+" B"+(d.buzzMs||0);
-    else if(d.selOK===0)s="E:"+String(d.selStage||"?").substr(0,5)+" B"+(d.buzzMs||0);
-    else if(typeof d.calTotalMs==="number")s="C"+d.calTotalMs+" D"+(d.calDrawMs||0);
-    if(d.returnSeen)s+=" R"+(d.appliedOff>=0?"+":"")+d.appliedOff;
-    if(!s)return;
-    g.setColor(BLACK).fillRect(0,H-9,W-1,H-1);
-    g.setColor(WHITE).setBgColor(BLACK).setFont("6x8").setFontAlign(0,-1)
-      .drawString(s,W/2,H-9);
+    var line1="",line2="";
+    if(diag.selOK===1){
+      line1="SEL "+(diag.selOff>=0?"+":"")+diag.selOff;
+      var vd=virtualDate();
+      line2="HDR "+pad(vd.getMonth()+1)+"/"+pad(vd.getDate());
+    }else if(diag.selOK===0){
+      line1="ERR "+String(diag.selStage||"?").substr(0,6);
+      line2="DT "+(diag.selDtMs|0)+" B"+(diag.buzzMs|0);
+    }else if(diag.singleOnly){
+      line1="TAP1 ONLY";
+      line2="WAIT "+(diag.singleWaitMs|0);
+    }else if(typeof diag.calTotalMs==="number"){
+      line1="T "+(diag.calTotalMs|0)+" D "+(diag.calDrawMs|0);
+      line2="P "+(diag.calStartDelayMs|0);
+    }
+    if(!line1)return;
+    g.setColor(BLACK).fillRect(0,H-34,W-1,H-1);
+    g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",2).setFontAlign(0,-1);
+    g.drawString(line1,W/2,H-33);
+    g.drawString(line2,W/2,H-17);
   }
 
   function drawBase(){
@@ -646,10 +649,9 @@
     if(calendar&&calendar.isActive())calendar.stop();
     mode="orbit";
     busy=false;
-    applyStoredSelection();
     diag.returnSeen=1;
-    diag.returnMs=Date.now();
-    diagSave();
+    diag.returnMs=ms();
+    diag.appliedOff=selectedDayOffset;
     drawBase();
     armMinute();
     armSecond();
@@ -661,23 +663,6 @@
     }else{
       try{Bangle.setLocked(false);}catch(e){}
     }
-  }
-
-  function applyStoredSelection(){
-    var s=Storage.readJSON(SELFILE,1);
-    if(s&&typeof s.offset==="number"&&isFinite(s.offset)){
-      selectedDayOffset=s.offset|0;
-      hasSelectedDate=true;
-      MOON_CACHE_BUCKET=-1;
-      diag.appliedOff=selectedDayOffset;
-      return true;
-    }
-    diag.appliedOff=0;
-    return false;
-  }
-
-  function clearStoredSelection(){
-    try{Storage.erase(SELFILE);}catch(e){}
   }
 
   function setDateFromCalendar(d){
@@ -693,7 +678,7 @@
 
   function openCalendar(tapMs){
     if(killed||mode!=="orbit")return;
-    diag.openMs=Date.now();
+    diag.openMs=ms();
     diag.openDelayMs=diag.openMs-(tapMs||diag.orbitTapMs||diag.openMs);
     stopOrbitTimers();
     mode="calendar";
@@ -712,32 +697,20 @@
           onSelect:function(d,offset){
             if(killed||!d)return;
             diag.selectCallback=1;
-            diag.selectCallbackMs=Date.now();
-            try{
-              if(typeof offset==="number"&&isFinite(offset)){
-                selectedDayOffset=offset|0;
-                hasSelectedDate=true;
-                MOON_CACHE_BUCKET=-1;
-                Storage.writeJSON(SELFILE,{
-                  offset:selectedDayOffset,
-                  y:d.getFullYear(),m:d.getMonth()+1,d:d.getDate()
-                });
-              }else setDateFromCalendar(d);
-              Storage.write("orbclo_dev_orbit.handoff",
-                d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate()+
-                " off="+selectedDayOffset);
-              diag.handoffOff=selectedDayOffset;
-              diagSave();
-            }catch(e){
-              try{Storage.write("orbclo_dev_orbit.err","select handoff: "+e);}catch(x){}
-            }
+            diag.selectCallbackMs=ms();
+            if(typeof offset==="number"&&isFinite(offset)){
+              selectedDayOffset=offset|0;
+              hasSelectedDate=true;
+              MOON_CACHE_BUCKET=-1;
+            }else setDateFromCalendar(d);
+            diag.handoffOff=selectedDayOffset;
           },
           onReturn:function(d){
             if(killed)return;
             diag.returnCallback=1;
-            diag.returnCallbackMs=Date.now();
+            diag.returnCallbackMs=ms();
             try{
-              if(!applyStoredSelection()&&d)setDateFromCalendar(d);
+              if(d)setDateFromCalendar(d);
               startOrbit(true);
             }catch(e){
               try{Storage.write("orbclo_dev_orbit.err","return: "+e);}catch(x){}
@@ -850,7 +823,7 @@
     if(mode!=="orbit"||busy)return;
     try{if(!Bangle.isLCDOn())return;}catch(e){}
 
-    diag={v:"0.68",orbitTapMs:Date.now(),orbitTouchSeen:1};
+    diag={v:"0.69",orbitTapMs:ms(),orbitTouchSeen:1};
     clearTaps();
     openCalendar(diag.orbitTapMs);
   }
@@ -868,21 +841,16 @@
     if(!on){
       diag.lcdOffCount=(diag.lcdOffCount||0)+1;
       diag.lcdOffMode=mode;
-      diag.lcdOffMs=Date.now();
-      diagSave();
+      diag.lcdOffMs=ms();
       clearTaps();
       clear(idleTimer);idleTimer=undefined;
       interactive=false;
       try{Bangle.setLocked(false);}catch(e){}
 
       if(mode==="calendar"&&calendar)calendar.stop();
-      if(mode!=="orbit"||selectedDayOffset!==0){
-        selectedDayOffset=0;
-        hasSelectedDate=false;
-        clearStoredSelection();
-        diag.selectionCleared="lcd:"+mode;
-        diagSave();
-        MOON_CACHE_BUCKET=-1;
+      if(mode!=="orbit"){
+        /* Keep a selected day in RAM across LCD power events.  V0.68 could
+           erase a valid choice here before Orbit had a chance to redraw it. */
         resetOnWake=true;
       }
       return;
@@ -935,6 +903,7 @@
   buildLightingCache();
   buildEarthMapCache();
   buildMoonCache();
+  try{if(calendar&&calendar.prepare)calendar.prepare(new Date());}catch(e){diag.prepErr=String(e);}
   try{Bangle.setUI({mode:"custom",touch:onTouch,swipe:onSwipe,btn:onButton});}catch(e){}
   Bangle.on("faceUp",onFaceUp);
   Bangle.on("lcdPower",onLCD);
