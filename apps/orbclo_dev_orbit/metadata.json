@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.68",
+  "version": "0.69",
   "author": "onisY",
-  "description": "Self-diagnostic build. Measure Orbit touch time, calendar start/draw/completion times, first/second 5wCal touch timing, exact selection stage, requested buzz duration, stored day offset, return callback, applied offset, and LCD-off clearing. Show timing/status directly on-screen (C/D/S for calendar timing; Sxx/xx or E:stage with dt and B120/B500 for selection; SOK/E and applied offset on Orbit) and persist the same facts in orbclo_orbitdev.diag.json.",
+  "description": "RAM-only interaction isolation and prepared-calendar speed test. Move current-page holiday/date computation to app startup so Orbit->5wCal only draws a prepared page. Remove all Storage writes from calendar double-tap selection and from date handoff; keep the selected offset in shared RAM and do not erase it on LCD-off. Use integer monotonic millisecond timing. Large two-line panels show T/D/P/C timing, SEL/ERR stage, double-tap interval, and Orbit SEL/HDR result. Calendar double-tap window is temporarily 800 ms.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,11 +15,11 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app68.js"
+      "url": "app69.js"
     },
     {
       "name": "orbclo_dev_orbit.cal.js",
-      "url": "calendar68.js"
+      "url": "calendar69.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
