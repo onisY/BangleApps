@@ -28,9 +28,10 @@
     var cfg,today,pageStart,selected;
     var active=false,onReturn,onSelect,onDiag,startTapMs,firstTapMs;
     var tapTimer,tapCount=0,lastXY;
+    var TAP_WINDOW=400;
     var blinkTimer,blinkWhite=true,autoTimer;
     var holidayFlags=new Uint8Array(35),dayNums=new Uint8Array(35),todayIndex=-1,lastCellPrepMs=0;
-    var holidayTimer,holidayToken=0,lastHolidayCalcMs=0,lastHolidayDrawMs=0;
+    var holidayTimer,holidayToken=0,lastHolidayCalcMs=0,lastHolidayDrawMs=0,lastHolidayElapsedMs=0;
     var cellX1=new Int16Array(7),cellX2=new Int16Array(7),cellY1=new Int16Array(5),cellY2=new Int16Array(5);
     var weekdayImgs,weekdayPal;
     var lastWidgetMs=0,lastWeekdayMs=0,lastBodyMs=0,lastTopMs=0;
@@ -295,24 +296,34 @@
     function startHolidayBatch(baseTotal,baseDraw,basePrep){
       cancelHolidayBatch();
       var token=holidayToken;
+      var d=copyDate(pageStart),i=0,changed=[];
+      var cpuMs=0,wallStart=Math.round(getTime()*1000);
 
-      holidayTimer=setTimeout(function(){
+      function step(){
         holidayTimer=undefined;
         if(!active||token!==holidayToken)return;
 
-        /* Compute all 35 holiday flags first, without touching the LCD. */
-        var t0=Math.round(getTime()*1000),d=copyDate(pageStart),changed=[];
-        for(var i=0;i<35;i++){
-          var h=(cfg.lang==="en"?isEnglishHoliday(d):isJapanHoliday(d))?1:0;
-          holidayFlags[i]=h;
-          if(h&&i!==todayIndex&&(i%7)!==6)changed.push(i);
-          d.setDate(d.getDate()+1);
-        }
-        lastHolidayCalcMs=Math.round(getTime()*1000)-t0;
+        /* Calculate one day, then yield to the event loop.  No holiday cell
+           is repainted until all 35 dates have been classified. */
+        var t0=Math.round(getTime()*1000);
+        var h=(cfg.lang==="en"?isEnglishHoliday(d):isJapanHoliday(d))?1:0;
+        cpuMs+=Math.round(getTime()*1000)-t0;
+        holidayFlags[i]=h;
+        if(h&&i!==todayIndex&&(i%7)!==6)changed.push(i);
 
+        i++;
+        d.setDate(d.getDate()+1);
+
+        if(i<35){
+          holidayTimer=setTimeout(step,0);
+          return;
+        }
+
+        lastHolidayCalcMs=cpuMs;
+        lastHolidayElapsedMs=Math.round(getTime()*1000)-wallStart;
         if(!active||token!==holidayToken)return;
 
-        /* Then apply every visual holiday change as one batch and flip once. */
+        /* Only now update all holiday cells together and flip once. */
         var t1=Math.round(getTime()*1000);
         for(var j=0;j<changed.length;j++)drawCell(changed[j]);
         try{g.flip();}catch(e){}
@@ -321,6 +332,7 @@
         report({
           holidayDone:1,
           holidayCalcMs:lastHolidayCalcMs,
+          holidayElapsedMs:lastHolidayElapsedMs,
           holidayDrawMs:lastHolidayDrawMs,
           holidayCount:changed.length
         });
@@ -328,7 +340,9 @@
           "T "+baseTotal+" D "+baseDraw,
           "C "+basePrep+" H "+lastHolidayCalcMs+" U "+lastHolidayDrawMs
         );
-      },0);
+      }
+
+      holidayTimer=setTimeout(step,0);
     }
 
     function drawCell(index){
@@ -435,7 +449,7 @@
       }catch(e){}
     }
     function clearTimer(t){if(t)clearTimeout(t);}
-    function clearTaps(){clearTimer(tapTimer);tapTimer=undefined;tapCount=0;lastXY=undefined;}
+    function clearTaps(){clearTimer(tapTimer);tapTimer=undefined;tapCount=0;lastXY=undefined;firstTapMs=undefined;}
     function stopBlink(){clearTimer(blinkTimer);blinkTimer=undefined;}
     function blinkTick(){
       blinkTimer=undefined;
@@ -522,26 +536,42 @@
       try{
         armAuto();
         var now=Math.round(getTime()*1000),p=copyXY(xy);
+
         if(tapTimer){
-          var dt=firstTapMs===undefined?0:now-firstTapMs;
-          var selectXY=lastXY||p;
-          clearTimer(tapTimer);tapTimer=undefined;tapCount=0;lastXY=undefined;firstTapMs=undefined;
-          report({calTap2Seen:1,calTap2Ms:now,calDoubleDtMs:dt,singleOnly:0});
-          selectAt(selectXY,dt);
+          var dt=firstTapMs===undefined?999999:now-firstTapMs;
+
+          /* Count as a double tap only when the measured interval itself is
+             within 400 ms. A delayed timer can no longer cause a false double. */
+          if(dt<=TAP_WINDOW){
+            var selectXY=lastXY||p;
+            clearTimer(tapTimer);
+            tapTimer=undefined;tapCount=0;lastXY=undefined;firstTapMs=undefined;
+            report({calTap2Seen:1,calTap2Ms:now,calDoubleDtMs:dt,singleOnly:0});
+            selectAt(selectXY,dt);
+            return;
+          }
+
+          /* The first tap already aged out. Resolve it as the intended single
+             tap rather than pairing this late event into a false double. */
+          clearTaps();
+          report({calTap2Seen:1,calTap2Late:1,calDoubleDtMs:dt,singleOnly:1});
+          if(active)returnToOrbit();
           return;
         }
+
         firstTapMs=now;lastXY=p;tapCount=1;
         report({calTap1Seen:1,calTap1Ms:now,singleOnly:0});
         tapTimer=setTimeout(function(){
           tapTimer=undefined;tapCount=0;lastXY=undefined;
-          var waited=Math.round(getTime()*1000)-firstTapMs;
+          var waited=firstTapMs===undefined?TAP_WINDOW:
+            Math.round(getTime()*1000)-firstTapMs;
           firstTapMs=undefined;
           report({calTap2Seen:0,calSingleTimeout:1,singleOnly:1,singleWaitMs:waited});
           if(active)returnToOrbit();
-        },400);
+        },TAP_WINDOW);
       }catch(e){
         report({selOK:0,selStage:"TOUCH",selErr:String(e),buzzMs:0});
-        clearTaps();firstTapMs=undefined;
+        clearTaps();
       }
     }
     function swipe(lr,ud){
@@ -583,8 +613,10 @@
       });
       diagPerf(total,drawMs,cellMs);
 
-      /* Stage 2: after the first frame is already visible, compute all 35
-         holidays in one batch, then update every holiday cell together. */
+      /* Stage 2: after the first frame is already visible, calculate all 35
+         holiday results cooperatively (one date per event-loop turn), while
+         keeping the display unchanged. When all 35 are ready, update holiday
+         cells together in one batch. */
       startHolidayBatch(total,drawMs,cellMs);
       armAuto();
     }
