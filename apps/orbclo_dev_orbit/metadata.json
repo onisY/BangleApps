@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.69",
+  "version": "0.70",
   "author": "onisY",
-  "description": "RAM-only interaction isolation and prepared-calendar speed test. Move current-page holiday/date computation to app startup so Orbit->5wCal only draws a prepared page. Remove all Storage writes from calendar double-tap selection and from date handoff; keep the selected offset in shared RAM and do not erase it on LCD-off. Use integer monotonic millisecond timing. Large two-line panels show T/D/P/C timing, SEL/ERR stage, double-tap interval, and Orbit SEL/HDR result. Calendar double-tap window is temporarily 800 ms.",
+  "description": "Controlled rollback after V0.69 CAL ERR. Restore the V0.68 calendar renderer that was known to display on hardware, remove the new prepared-page cache entirely, but keep RAM-only date handoff and readable timing/selection diagnostics. Calendar startup errors now show the actual exception text under CAL ERR. Normal calendar startup shows T/D/P timings; selection shows SEL/ERR and DT.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,11 +15,11 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app69.js"
+      "url": "app70.js"
     },
     {
       "name": "orbclo_dev_orbit.cal.js",
-      "url": "calendar69.js"
+      "url": "calendar70.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
