@@ -4,12 +4,39 @@
   var CFG_FILE="orbclo_orbitdev.cal.json";
   var DAY=86400000;
   var HOL_CACHE_VER=1,HOL_BYTES=46,HOL_RAM_MAX=2;
-  function cleanupHolidayFiles(){
-    var y=new Date().getFullYear(),prefix="och"+HOL_CACHE_VER;
+  function cacheFileParts(f){
+    var m=/^och([0-9]+)(jp|ew|sc|ni)([0-9][0-9][0-9][0-9])$/.exec(f);
+    return m?{ver:parseInt(m[1],10),region:m[2],year:parseInt(m[3],10)}:undefined;
+  }
+  function listHolidayCaches(){
+    var out={jp:0,ew:0,sc:0,ni:0,total:0};
     try{
       Storage.list(/^och[0-9]+(jp|ew|sc|ni)[0-9][0-9][0-9][0-9]$/).forEach(function(f){
-        var fy=parseInt(f.substr(f.length-4),10);
-        if(f.indexOf(prefix)!==0||(fy!==y&&fy!==y+1))Storage.erase(f);
+        var p=cacheFileParts(f);if(!p)return;
+        out[p.region]++;out.total++;
+      });
+    }catch(e){}
+    return out;
+  }
+  function clearHolidayCaches(region){
+    var n=0;
+    try{
+      Storage.list(/^och[0-9]+(jp|ew|sc|ni)[0-9][0-9][0-9][0-9]$/).forEach(function(f){
+        var p=cacheFileParts(f);if(!p)return;
+        if(region===undefined||p.region===region){Storage.erase(f);n++;}
+      });
+    }catch(e){}
+    return n;
+  }
+  function cleanupActiveRegionFiles(region){
+    /* Only the region currently in use is normalized to current+next year.
+       Other regions are intentionally left untouched until the user selects
+       them again or explicitly deletes them from the settings menu. */
+    var y=new Date().getFullYear();
+    try{
+      Storage.list(/^och[0-9]+(jp|ew|sc|ni)[0-9][0-9][0-9][0-9]$/).forEach(function(f){
+        var p=cacheFileParts(f);if(!p||p.region!==region)return;
+        if(p.ver!==HOL_CACHE_VER||(p.year!==y&&p.year!==y+1))Storage.erase(f);
       });
     }catch(e){}
   }
@@ -33,7 +60,6 @@
   function writeConfig(c){Storage.writeJSON(CFG_FILE,normalizeConfig(c));}
 
   function create(){
-    cleanupHolidayFiles();
     var W=g.getWidth(),H=g.getHeight();
     var BLACK=0x0000,WHITE=0xFFFF,BLUE=0x001F,RED=0xF800,GREEN=0x07E0,GRAY=0x4208;
     var cfg,today,pageStart,selected;
@@ -811,7 +837,7 @@
       startHolidayBatch(dMs,dMs,cMs,holidayState);
     }
     function start(opts){
-      opts=opts||{};stop();cfg=readConfig();active=true;
+      opts=opts||{};stop();cfg=readConfig();cleanupActiveRegionFiles(holRegion());active=true;
       onReturn=opts.onReturn;onSelect=opts.onSelect;onDiag=opts.onDiag;startTapMs=opts.tapMs;
       var startMs=Math.round(getTime()*1000);
       today=midnight(new Date());
@@ -849,5 +875,8 @@
     return {start:start,stop:stop,resetTransient:resetTransient,touch:touch,swipe:swipe,isActive:isActive};
   }
 
-  return {create:create,readConfig:readConfig,writeConfig:writeConfig};
+  return {
+    create:create,readConfig:readConfig,writeConfig:writeConfig,
+    listHolidayCaches:listHolidayCaches,clearHolidayCaches:clearHolidayCaches
+  };
 })()
