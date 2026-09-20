@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.76",
+  "version": "0.77",
   "author": "onisY",
-  "description": "Replace repeated 35-day holiday calculations with persistent yearly 366-bit caches. Each region/year is stored as a 46-byte raw bitset and kept in a small RAM LRU. Japan, England/Wales, Scotland, and Northern Ireland use separate caches. Existing yearly caches are applied before the first calendar frame; a missing year is generated once, saved, and then reused. Add Northern Ireland as the third UK holiday-region setting. Keep Saturday/Sunday/today colors, the 400 ms tap fix, and the V0.74 fast renderer.",
+  "description": "Bound persistent holiday storage to the real current year and following year only. At calendar-module startup, erase holiday bit-cache files for older/future years and old cache versions. Keep only two decoded year bitsets in RAM. Pages wholly within current/next year use the 46-byte yearly bit caches; if a scroll reaches any page outside that two-year window, do not create or save a yearly cache and instead calculate only that visible 35-day page transiently, then apply its holiday colors together. Japan and all three UK regions follow the same policy.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,11 +15,11 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app76.js"
+      "url": "app77.js"
     },
     {
       "name": "orbclo_dev_orbit.cal.js",
-      "url": "calendar76.js"
+      "url": "calendar77.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
