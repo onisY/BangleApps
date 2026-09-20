@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.79",
+  "version": "0.80",
   "author": "onisY",
-  "description": "Holiday bit-cache lifecycle now matches the requested policy. For the selected Japan/England-Wales/Scotland/Northern-Ireland setting, prewarm only the real current year and next year after Orbit has already drawn. If calendar scrolling later reaches any other year, generate that whole 366-bit/46-byte year table on first need and persist it too. Never auto-delete old years or inactive-region caches. Keep the existing Holiday cache settings submenu so the user can manually delete Japan, England/Wales, Scotland, Northern Ireland, or all stored caches. Japanese year generation is also made direct/rule-based rather than scanning every date.",
+  "description": "Add clear selected-date feedback: a calendar date chosen by double tap now blinks with a yellow background every 500 ms, alternating with its normal holiday/weekend/today color until returning to Orbit. Use the existing low-cost 6x8x2 digit renderer for the blink. Preserve the intentional language/holiday coupling: Japanese display always uses Japan holidays; English display uses the selected England/Wales, Scotland, or Northern Ireland bank-holiday region. Region generators/settings were cross-checked for 2026 and 2027 against official Japan Cabinet Office/NAOJ and GOV.UK bank-holiday dates.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,11 +15,11 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app79.js"
+      "url": "app80.js"
     },
     {
       "name": "orbclo_dev_orbit.cal.js",
-      "url": "calendar79.js"
+      "url": "calendar80.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
