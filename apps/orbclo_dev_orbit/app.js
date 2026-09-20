@@ -1,8 +1,8 @@
-/* Orbclo Dev Orbit 0.77 - bounded holiday caches */
+/* Orbclo Dev Orbit 0.78 - region-aware holiday cache retention */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
-  var diag={v:"0.77"};
+  var diag={v:"0.78"};
   function ms(){return Math.round(getTime()*1000);}
   function diagMerge(x){if(!x)return;for(var k in x)diag[k]=x[k];}
   var cfg=Storage.readJSON(CFGFILE,1)||{};
@@ -779,53 +779,79 @@
 
     var cc=calModule?calModule.readConfig():{lang:"ja",ukRegion:"ew",timeout:30};
     function saveCal(){if(calModule)calModule.writeConfig(cc);}
-    E.showMenu({
-      "":{title:"Orbit / 5wCal"},
-      "< Back":function(){load("orbclo_dev_orbit.app.js");},
-      "Latitude":{
-        value:TESTLAT,min:-90,max:90,step:0.001,
-        format:function(v){return v.toFixed(3);},
-        onchange:function(v){cfg.lat=v;saveCfg();}
-      },
-      "Longitude":{
-        value:TESTLON,min:-180,max:180,step:0.001,
-        format:function(v){return v.toFixed(3);},
-        onchange:function(v){cfg.lon=v;saveCfg();}
-      },
-      "Sun size":{
-        value:SUNR,min:4,max:15,step:1,
-        onchange:function(v){cfg.sunSize=v;saveCfg();}
-      },
-      "Earth size":{
-        value:EARTHR,min:25,max:50,step:1,
-        onchange:function(v){cfg.earthSize=v;saveCfg();}
-      },
-      "Moon size":{
-        value:MOONR,min:4,max:15,step:1,
-        onchange:function(v){cfg.moonSize=v;saveCfg();}
-      },
-      "Moon orbit":{
-        value:MOONORBIT,min:40,max:80,step:1,
-        onchange:function(v){cfg.moonOrbit=v;saveCfg();}
-      },
-      "Cal language":{
-        value:cc.lang==="en"?1:0,min:0,max:1,step:1,
-        format:function(v){return v?"English":"Japanese";},
-        onchange:function(v){cc.lang=v?"en":"ja";saveCal();}
-      },
-      "Cal holidays":{
-        value:cc.ukRegion==="sc"?1:(cc.ukRegion==="ni"?2:0),min:0,max:2,step:1,
-        format:function(v){return ["England/Wales","Scotland","N. Ireland"][v]||"England/Wales";},
-        onchange:function(v){cc.ukRegion=v===1?"sc":(v===2?"ni":"ew");saveCal();}
-      },
-      "Cal auto return":{
-        value:cc.timeout,min:15,max:120,step:15,
-        format:function(v){return v+" s";},
-        onchange:function(v){cc.timeout=v;saveCal();}
-      }
-    });
-  }
 
+    function cacheInfo(){
+      return calModule&&calModule.listHolidayCaches?
+        calModule.listHolidayCaches():{jp:0,ew:0,sc:0,ni:0,total:0};
+    }
+    function clearCache(region,label){
+      var msg="Delete "+label+" cache?";
+      E.showPrompt(msg,{title:"Holiday cache"}).then(function(ok){
+        if(ok&&calModule&&calModule.clearHolidayCaches)
+          calModule.clearHolidayCaches(region);
+        showCacheMenu();
+      });
+    }
+    function showCacheMenu(){
+      var n=cacheInfo();
+      var m={"":{title:"Holiday cache"},"< Back":showMainMenu};
+      m["JP cache ("+n.jp+")"]=function(){clearCache("jp","Japan");};
+      m["EW cache ("+n.ew+")"]=function(){clearCache("ew","England/Wales");};
+      m["SC cache ("+n.sc+")"]=function(){clearCache("sc","Scotland");};
+      m["NI cache ("+n.ni+")"]=function(){clearCache("ni","N. Ireland");};
+      m["All cache ("+n.total+")"]=function(){clearCache(undefined,"ALL");};
+      E.showMenu(m);
+    }
+    function showMainMenu(){
+      E.showMenu({
+        "":{title:"Orbit / 5wCal"},
+        "< Back":function(){load("orbclo_dev_orbit.app.js");},
+        "Latitude":{
+          value:TESTLAT,min:-90,max:90,step:0.001,
+          format:function(v){return v.toFixed(3);},
+          onchange:function(v){cfg.lat=v;saveCfg();}
+        },
+        "Longitude":{
+          value:TESTLON,min:-180,max:180,step:0.001,
+          format:function(v){return v.toFixed(3);},
+          onchange:function(v){cfg.lon=v;saveCfg();}
+        },
+        "Sun size":{
+          value:SUNR,min:4,max:15,step:1,
+          onchange:function(v){cfg.sunSize=v;saveCfg();}
+        },
+        "Earth size":{
+          value:EARTHR,min:25,max:50,step:1,
+          onchange:function(v){cfg.earthSize=v;saveCfg();}
+        },
+        "Moon size":{
+          value:MOONR,min:4,max:15,step:1,
+          onchange:function(v){cfg.moonSize=v;saveCfg();}
+        },
+        "Moon orbit":{
+          value:MOONORBIT,min:40,max:80,step:1,
+          onchange:function(v){cfg.moonOrbit=v;saveCfg();}
+        },
+        "Cal language":{
+          value:cc.lang==="en"?1:0,min:0,max:1,step:1,
+          format:function(v){return v?"English":"Japanese";},
+          onchange:function(v){cc.lang=v?"en":"ja";saveCal();}
+        },
+        "Cal holidays":{
+          value:cc.ukRegion==="sc"?1:(cc.ukRegion==="ni"?2:0),min:0,max:2,step:1,
+          format:function(v){return ["England/Wales","Scotland","N. Ireland"][v]||"England/Wales";},
+          onchange:function(v){cc.ukRegion=v===1?"sc":(v===2?"ni":"ew");saveCal();}
+        },
+        "Holiday cache":showCacheMenu,
+        "Cal auto return":{
+          value:cc.timeout,min:15,max:120,step:15,
+          format:function(v){return v+" s";},
+          onchange:function(v){cc.timeout=v;saveCal();}
+        }
+      });
+    }
+    showMainMenu();
+  }
   function onTouch(button,xy){
     if(killed)return;
     if(mode==="calendar"){
@@ -835,7 +861,7 @@
     if(mode!=="orbit"||busy)return;
     try{if(!Bangle.isLCDOn())return;}catch(e){}
 
-    diag={v:"0.77",orbitTapMs:ms(),orbitTouchSeen:1};
+    diag={v:"0.78",orbitTapMs:ms(),orbitTouchSeen:1};
     clearTaps();
     openCalendar(diag.orbitTapMs);
   }
