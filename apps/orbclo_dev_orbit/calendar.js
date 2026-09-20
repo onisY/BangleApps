@@ -3,7 +3,16 @@
   var Storage=require("Storage");
   var CFG_FILE="orbclo_orbitdev.cal.json";
   var DAY=86400000;
-  var HOL_CACHE_VER=1,HOL_BYTES=46,HOL_RAM_MAX=4;
+  var HOL_CACHE_VER=1,HOL_BYTES=46,HOL_RAM_MAX=2;
+  function cleanupHolidayFiles(){
+    var y=new Date().getFullYear(),prefix="och"+HOL_CACHE_VER;
+    try{
+      Storage.list(/^och[0-9]+(jp|ew|sc|ni)[0-9][0-9][0-9][0-9]$/).forEach(function(f){
+        var fy=parseInt(f.substr(f.length-4),10);
+        if(f.indexOf(prefix)!==0||(fy!==y&&fy!==y+1))Storage.erase(f);
+      });
+    }catch(e){}
+  }
 
   function normalizeConfig(c){
     c=c||{};
@@ -24,6 +33,7 @@
   function writeConfig(c){Storage.writeJSON(CFG_FILE,normalizeConfig(c));}
 
   function create(){
+    cleanupHolidayFiles();
     var W=g.getWidth(),H=g.getHeight();
     var BLACK=0x0000,WHITE=0xFFFF,BLUE=0x001F,RED=0xF800,GREEN=0x07E0,GRAY=0x4208;
     var cfg,today,pageStart,selected;
@@ -438,44 +448,100 @@
       return lastCellPrepMs;
     }
 
-    function applyCachedPageHolidays(){
-      var region=holRegion(),y0=yearNums[0],y1=yearNums[34];
-      var b0=loadHolidayBits(region,y0),b1=(y1===y0)?b0:loadHolidayBits(region,y1);
-      var missing=[];
-      if(!b0)missing.push(y0);
-      if(y1!==y0&&!b1)missing.push(y1);
-      for(var i=0;i<35;i++){
-        var b=(yearNums[i]===y0)?b0:b1;
-        holidayFlags[i]=(b&&bitGet(b,doyNums[i]))?1:0;
-      }
-      return {region:region,years:missing};
-    }
+    function preparePageHolidayState(){
+      var currentYear=(new Date()).getFullYear(),nextYear=currentYear+1;
+      var firstYear=yearNums[0],lastYear=yearNums[34];
 
+      /* Persistent 46-byte bitsets are allowed only for the real current year
+         and the following year.  Any page that reaches outside that range is
+         deliberately handled as a transient 35-day calculation. */
+      if(firstYear<currentYear||lastYear>nextYear){
+        for(var i=0;i<35;i++)holidayFlags[i]=0;
+        return {mode:"page",region:holRegion(),years:[]};
+      }
+
+      var region=holRegion();
+      var b0=loadHolidayBits(region,firstYear);
+      var b1=(lastYear===firstYear)?b0:loadHolidayBits(region,lastYear);
+      var missing=[];
+      if(!b0)missing.push(firstYear);
+      if(lastYear!==firstYear&&!b1)missing.push(lastYear);
+
+      for(var j=0;j<35;j++){
+        var b=(yearNums[j]===firstYear)?b0:b1;
+        holidayFlags[j]=(b&&bitGet(b,doyNums[j]))?1:0;
+      }
+      return {mode:"cache",region:region,years:missing};
+    }
     function cancelHolidayBatch(){
       holidayToken++;
       if(holidayTimer)clearTimeout(holidayTimer);
       holidayTimer=undefined;
     }
 
-    function startHolidayBatch(baseTotal,baseDraw,basePrep,cacheState){
+    function startHolidayBatch(baseTotal,baseDraw,basePrep,state){
       cancelHolidayBatch();
-      if(!cacheState||!cacheState.years.length){
+      if(!state)return;
+
+      if(state.mode==="cache"&&!state.years.length){
         lastHolidayCalcMs=0;lastHolidayDrawMs=0;
         report({holidayDone:1,holidayCacheHit:1,holidayCalcMs:0,holidayDrawMs:0});
         return;
       }
 
-      var token=holidayToken,region=cacheState.region,years=cacheState.years.slice();
+      var token=holidayToken;
+
+      if(state.mode==="page"){
+        var d=copyDate(pageStart),i=0,cpuMs=0,changed=[],wallStart=Math.round(getTime()*1000);
+        function pageStep(){
+          holidayTimer=undefined;
+          if(!active||token!==holidayToken)return;
+
+          var t0=Math.round(getTime()*1000);
+          var h=(cfg.lang==="en"?isEnglishHoliday(d):isJapanHoliday(d))?1:0;
+          cpuMs+=Math.round(getTime()*1000)-t0;
+          holidayFlags[i]=h;
+          if(h&&i!==todayIndex&&(i%7)!==6)changed.push(i);
+
+          i++;d.setDate(d.getDate()+1);
+          if(i<35){holidayTimer=setTimeout(pageStep,0);return;}
+
+          lastHolidayCalcMs=cpuMs;
+          lastHolidayElapsedMs=Math.round(getTime()*1000)-wallStart;
+          if(!active||token!==holidayToken)return;
+
+          var t1=Math.round(getTime()*1000);
+          for(var j=0;j<changed.length;j++)drawCell(changed[j]);
+          try{g.flip();}catch(e){}
+          lastHolidayDrawMs=Math.round(getTime()*1000)-t1;
+
+          report({
+            holidayDone:1,holidayTransientPage:1,holidayCalcMs:lastHolidayCalcMs,
+            holidayElapsedMs:lastHolidayElapsedMs,holidayDrawMs:lastHolidayDrawMs,
+            holidayCount:changed.length
+          });
+          if(!selected)diagPanel(
+            "T "+baseTotal+" D "+baseDraw,
+            "C "+basePrep+" H "+lastHolidayCalcMs+" U "+lastHolidayDrawMs
+          );
+        }
+        holidayTimer=setTimeout(pageStep,0);
+        return;
+      }
+
+      var region=state.region,years=state.years.slice();
       holidayTimer=setTimeout(function(){
         holidayTimer=undefined;
         if(!active||token!==holidayToken)return;
 
         var t0=Math.round(getTime()*1000);
-        for(var k=0;k<years.length;k++)saveHolidayBits(region,years[k],generateHolidayBits(region,years[k]));
+        for(var k=0;k<years.length;k++){
+          saveHolidayBits(region,years[k],generateHolidayBits(region,years[k]));
+        }
         lastHolidayCalcMs=Math.round(getTime()*1000)-t0;
         if(!active||token!==holidayToken)return;
 
-        applyCachedPageHolidays();
+        preparePageHolidayState();
 
         var t1=Math.round(getTime()*1000),changed=0;
         for(var i=0;i<35;i++){
@@ -486,7 +552,8 @@
 
         report({
           holidayDone:1,holidayCacheHit:0,holidayGeneratedYears:years.length,
-          holidayCalcMs:lastHolidayCalcMs,holidayDrawMs:lastHolidayDrawMs,holidayCount:changed
+          holidayCalcMs:lastHolidayCalcMs,holidayDrawMs:lastHolidayDrawMs,
+          holidayCount:changed
         });
         if(!selected)diagPanel(
           "T "+baseTotal+" D "+baseDraw,
@@ -734,14 +801,14 @@
       pageStart=addDays(pageStart,ud<0?35:-35);
 
       var cMs=buildBasicCellData();
-      var cacheState=applyCachedPageHolidays();
+      var holidayState=preparePageHolidayState();
       var t0=Math.round(getTime()*1000);
       drawCalendar(false);
       var dMs=Math.round(getTime()*1000)-t0;
 
-      report({calCellMs:cMs,calDrawMs:dMs,holidayDeferred:cacheState.years.length?1:0});
+      report({calCellMs:cMs,calDrawMs:dMs,holidayDeferred:holidayState.mode==="cache"?holidayState.years.length:1?1:0});
       diagPerf(dMs,dMs,cMs);
-      startHolidayBatch(dMs,dMs,cMs,cacheState);
+      startHolidayBatch(dMs,dMs,cMs,holidayState);
     }
     function start(opts){
       opts=opts||{};stop();cfg=readConfig();active=true;
@@ -754,7 +821,7 @@
       /* Stage 1: build only cheap day-number/today data and paint immediately.
          Holiday flags intentionally remain zero in this first visible frame. */
       var cellMs=buildBasicCellData();
-      var cacheState=applyCachedPageHolidays();
+      var holidayState=preparePageHolidayState();
       var drawStartMs=Math.round(getTime()*1000);
       drawCalendar(true);
       var doneMs=Math.round(getTime()*1000);
@@ -765,7 +832,7 @@
       report({
         calStartMs:startMs,calDrawStartMs:drawStartMs,calDoneMs:doneMs,
         calTotalMs:total,calDrawMs:drawMs,calStartDelayMs:preMs,
-        calCellMs:cellMs,holidayDeferred:cacheState.years.length?1:0,calReady:1
+        calCellMs:cellMs,holidayDeferred:holidayState.mode==="cache"?holidayState.years.length:1?1:0,calReady:1
       });
       diagPerf(total,drawMs,cellMs);
 
@@ -773,7 +840,7 @@
          holiday results cooperatively (one date per event-loop turn), while
          keeping the display unchanged. When all 35 are ready, update holiday
          cells together in one batch. */
-      startHolidayBatch(total,drawMs,cellMs,cacheState);
+      startHolidayBatch(total,drawMs,cellMs,holidayState);
       armAuto();
     }
     function isActive(){return active;}
