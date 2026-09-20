@@ -1,8 +1,8 @@
-/* Orbclo Dev Orbit 0.74 - fast first calendar frame */
+/* Orbclo Dev Orbit 0.75 - responsive holiday worker and tap state */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
-  var diag={v:"0.74"};
+  var diag={v:"0.75"};
   function ms(){return Math.round(getTime()*1000);}
   function diagMerge(x){if(!x)return;for(var k in x)diag[k]=x[k];}
   var cfg=Storage.readJSON(CFGFILE,1)||{};
@@ -835,7 +835,7 @@
     if(mode!=="orbit"||busy)return;
     try{if(!Bangle.isLCDOn())return;}catch(e){}
 
-    diag={v:"0.74",orbitTapMs:ms(),orbitTouchSeen:1};
+    diag={v:"0.75",orbitTapMs:ms(),orbitTouchSeen:1};
     clearTaps();
     openCalendar(diag.orbitTapMs);
   }
