@@ -28,18 +28,7 @@
     }catch(e){}
     return n;
   }
-  function cleanupActiveRegionFiles(region){
-    /* Only the region currently in use is normalized to current+next year.
-       Other regions are intentionally left untouched until the user selects
-       them again or explicitly deletes them from the settings menu. */
-    var y=new Date().getFullYear();
-    try{
-      Storage.list(/^och[0-9]+(jp|ew|sc|ni)[0-9][0-9][0-9][0-9]$/).forEach(function(f){
-        var p=cacheFileParts(f);if(!p||p.region!==region)return;
-        if(p.ver!==HOL_CACHE_VER||(p.year!==y&&p.year!==y+1))Storage.erase(f);
-      });
-    }catch(e){}
-  }
+
 
   function normalizeConfig(c){
     c=c||{};
@@ -69,7 +58,7 @@
     var blinkTimer,blinkWhite=true,autoTimer;
     var holidayFlags=new Uint8Array(35),dayNums=new Uint8Array(35),yearNums=new Uint16Array(35),doyNums=new Uint16Array(35),todayIndex=-1,lastCellPrepMs=0;
     var holidayTimer,holidayToken=0,lastHolidayCalcMs=0,lastHolidayDrawMs=0,lastHolidayElapsedMs=0;
-    var holRam=[];
+    var holRam=[],primeTimer,primeQueue,primePos=0;
     var cellX1=new Int16Array(7),cellX2=new Int16Array(7),cellY1=new Int16Array(5),cellY2=new Int16Array(5);
     var weekdayImgs,weekdayPal;
     var lastWidgetMs=0,lastWeekdayMs=0,lastBodyMs=0,lastTopMs=0;
@@ -196,12 +185,48 @@
     }
     function generateJapanBits(y){
       var base=new Uint8Array(HOL_BYTES),bits=new Uint8Array(HOL_BYTES);
-      var m,d,i,days=leap(y)?366:365;
-      for(m=1;m<=12;m++)for(d=1;d<=dim(y,m);d++)if(baseHolidayYMD(y,m,d))bitSet(base,doyYMD(y,m,d));
+      var days=leap(y)?366:365,i;
+
+      if(y>=1949){
+        setYMD(base,y,1,1);
+        if(y>=2000)setYMD(base,y,1,nthMonday(y,1,2));else setYMD(base,y,1,15);
+        if(y>=1967)setYMD(base,y,2,11);
+        if(y>=2020)setYMD(base,y,2,23);
+        setYMD(base,y,3,vernal(y));
+        setYMD(base,y,4,29);
+        setYMD(base,y,5,3);
+        if(y>=2007)setYMD(base,y,5,4);
+        setYMD(base,y,5,5);
+
+        if(y===2020)setYMD(base,y,7,23);
+        else if(y===2021)setYMD(base,y,7,22);
+        else if(y>=2003)setYMD(base,y,7,nthMonday(y,7,3));
+        else if(y>=1996)setYMD(base,y,7,20);
+
+        if(y===2020)setYMD(base,y,8,10);
+        else if(y===2021)setYMD(base,y,8,8);
+        else if(y>=2016)setYMD(base,y,8,11);
+
+        if(y>=2003)setYMD(base,y,9,nthMonday(y,9,3));
+        else if(y>=1966)setYMD(base,y,9,15);
+        setYMD(base,y,9,autumn(y));
+
+        if(y===2020)setYMD(base,y,7,24);
+        else if(y===2021)setYMD(base,y,7,23);
+        else if(y>=2000)setYMD(base,y,10,nthMonday(y,10,2));
+        else if(y>=1966)setYMD(base,y,10,10);
+
+        setYMD(base,y,11,3);
+        setYMD(base,y,11,23);
+        if(y>=1989&&y<=2018)setYMD(base,y,12,23);
+        if(y===2019){setYMD(base,y,5,1);setYMD(base,y,10,22);}
+      }
+
       for(i=0;i<HOL_BYTES;i++)bits[i]=base[i];
 
       if(y>=1986){
-        for(i=1;i<days-1;i++)if(!bitGet(base,i)&&bitGet(base,i-1)&&bitGet(base,i+1))bitSet(bits,i);
+        for(i=1;i<days-1;i++)
+          if(!bitGet(base,i)&&bitGet(base,i-1)&&bitGet(base,i+1))bitSet(bits,i);
       }
       if(y>=1973){
         var jan1=dowYMD(y,1,1);
@@ -251,6 +276,35 @@
       if(region==="ni")return generateNIBits(year);
       return generateEnglandWalesBits(year);
     }
+    function ensureHolidayBits(region,year){
+      var b=loadHolidayBits(region,year);
+      if(b)return b;
+      return saveHolidayBits(region,year,generateHolidayBits(region,year));
+    }
+    function scheduleInitialHolidayCaches(){
+      if(primeTimer)clearTimeout(primeTimer);
+      cfg=readConfig();
+      var region=holRegion(),y=(new Date()).getFullYear();
+      primeQueue=[{r:region,y:y},{r:region,y:y+1}];
+      primePos=0;
+
+      function step(){
+        primeTimer=undefined;
+        /* Do not compete with live calendar interaction. If the user opens
+           5wCal first, the normal on-demand path will create what it needs. */
+        if(active){primeTimer=setTimeout(step,750);return;}
+        if(!primeQueue||primePos>=primeQueue.length){primeQueue=undefined;return;}
+        var q=primeQueue[primePos++];
+        ensureHolidayBits(q.r,q.y);
+        if(primePos<primeQueue.length)primeTimer=setTimeout(step,0);
+        else primeQueue=undefined;
+      }
+
+      /* Module creation happens before the first Orbit draw. Deferring the
+         prewarm lets the clock face appear first. */
+      primeTimer=setTimeout(step,1200);
+    }
+
 
 
     function baseHolidayYMD(y,m,n){
@@ -475,21 +529,11 @@
     }
 
     function preparePageHolidayState(){
-      var currentYear=(new Date()).getFullYear(),nextYear=currentYear+1;
-      var firstYear=yearNums[0],lastYear=yearNums[34];
-
-      /* Persistent 46-byte bitsets are allowed only for the real current year
-         and the following year.  Any page that reaches outside that range is
-         deliberately handled as a transient 35-day calculation. */
-      if(firstYear<currentYear||lastYear>nextYear){
-        for(var i=0;i<35;i++)holidayFlags[i]=0;
-        return {mode:"page",region:holRegion(),years:[]};
-      }
-
-      var region=holRegion();
+      var firstYear=yearNums[0],lastYear=yearNums[34],region=holRegion();
       var b0=loadHolidayBits(region,firstYear);
       var b1=(lastYear===firstYear)?b0:loadHolidayBits(region,lastYear);
       var missing=[];
+
       if(!b0)missing.push(firstYear);
       if(lastYear!==firstYear&&!b1)missing.push(lastYear);
 
@@ -517,43 +561,6 @@
 
       var token=holidayToken;
 
-      if(state.mode==="page"){
-        var d=copyDate(pageStart),i=0,cpuMs=0,changed=[],wallStart=Math.round(getTime()*1000);
-        function pageStep(){
-          holidayTimer=undefined;
-          if(!active||token!==holidayToken)return;
-
-          var t0=Math.round(getTime()*1000);
-          var h=(cfg.lang==="en"?isEnglishHoliday(d):isJapanHoliday(d))?1:0;
-          cpuMs+=Math.round(getTime()*1000)-t0;
-          holidayFlags[i]=h;
-          if(h&&i!==todayIndex&&(i%7)!==6)changed.push(i);
-
-          i++;d.setDate(d.getDate()+1);
-          if(i<35){holidayTimer=setTimeout(pageStep,0);return;}
-
-          lastHolidayCalcMs=cpuMs;
-          lastHolidayElapsedMs=Math.round(getTime()*1000)-wallStart;
-          if(!active||token!==holidayToken)return;
-
-          var t1=Math.round(getTime()*1000);
-          for(var j=0;j<changed.length;j++)drawCell(changed[j]);
-          try{g.flip();}catch(e){}
-          lastHolidayDrawMs=Math.round(getTime()*1000)-t1;
-
-          report({
-            holidayDone:1,holidayTransientPage:1,holidayCalcMs:lastHolidayCalcMs,
-            holidayElapsedMs:lastHolidayElapsedMs,holidayDrawMs:lastHolidayDrawMs,
-            holidayCount:changed.length
-          });
-          if(!selected)diagPanel(
-            "T "+baseTotal+" D "+baseDraw,
-            "C "+basePrep+" H "+lastHolidayCalcMs+" U "+lastHolidayDrawMs
-          );
-        }
-        holidayTimer=setTimeout(pageStep,0);
-        return;
-      }
 
       var region=state.region,years=state.years.slice();
       holidayTimer=setTimeout(function(){
@@ -832,12 +839,12 @@
       drawCalendar(false);
       var dMs=Math.round(getTime()*1000)-t0;
 
-      report({calCellMs:cMs,calDrawMs:dMs,holidayDeferred:holidayState.mode==="cache"?holidayState.years.length:1?1:0});
+      report({calCellMs:cMs,calDrawMs:dMs,holidayDeferred:holidayState.years.length?1:0});
       diagPerf(dMs,dMs,cMs);
       startHolidayBatch(dMs,dMs,cMs,holidayState);
     }
     function start(opts){
-      opts=opts||{};stop();cfg=readConfig();cleanupActiveRegionFiles(holRegion());active=true;
+      opts=opts||{};stop();cfg=readConfig();active=true;
       onReturn=opts.onReturn;onSelect=opts.onSelect;onDiag=opts.onDiag;startTapMs=opts.tapMs;
       var startMs=Math.round(getTime()*1000);
       today=midnight(new Date());
@@ -872,6 +879,7 @@
     function isActive(){return active;}
     buildGeometry();
     buildWeekdayImages();
+    scheduleInitialHolidayCaches();
     return {start:start,stop:stop,resetTransient:resetTransient,touch:touch,swipe:swipe,isActive:isActive};
   }
 
