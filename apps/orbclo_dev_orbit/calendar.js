@@ -29,6 +29,7 @@
     var active=false,onReturn,onSelect,onDiag,startTapMs,firstTapMs;
     var tapTimer,tapCount=0,lastXY;
     var blinkTimer,blinkWhite=true,autoTimer;
+    var benchDone=false,benchResult,digitImgs,digitPal,digitBytes=0;
 
     function midnight(d){return new Date(d.getFullYear(),d.getMonth(),d.getDate());}
     function copyDate(d){return d?new Date(d.getFullYear(),d.getMonth(),d.getDate()):undefined;}
@@ -176,6 +177,86 @@
     }
     function drawWeekday(c){var x1=Math.floor(c*W/7),x2=Math.floor((c+1)*W/7)-1,bg=BLACK;if(c===5)bg=BLUE;else if(c===6)bg=RED;g.setColor(bg).fillRect(x1,24,x2,47);if(cfg.lang==="en")g.setColor(WHITE).setFont("6x8",2).setFontAlign(0,0).drawString(["M","T","W","T","F","S","S"][c],(x1+x2)>>1,35);else weekdayGlyph(c,(x1+x2)>>1,35);}
     function cellGeometry(index){var c=index%7,r=(index/7)|0,top=48,gh=H-48;return {x1:Math.floor(c*W/7),x2:Math.floor((c+1)*W/7)-1,y1:top+Math.floor(r*gh/5),y2:top+Math.floor((r+1)*gh/5)-1,c:c};}
+    function ensureDigitImages(){
+      if(digitImgs)return;
+      digitImgs=[];digitPal=new Uint16Array([0,WHITE]);digitBytes=0;
+      for(var n=0;n<10;n++){
+        var dg=Graphics.createArrayBuffer(5,8,1,{msb:true});
+        dg.setColor(1).setBgColor(0).clear();
+        dg.setFont("6x8").setFontAlign(-1,-1).drawString(""+n,0,0);
+        var buf=dg.buffer;
+        digitBytes+=(buf.byteLength||buf.length||0);
+        digitImgs.push({width:5,height:8,bpp:1,buffer:buf,transparent:0,palette:digitPal});
+      }
+    }
+
+    function benchmarkCells(){
+      var out=[],t0=Math.round(getTime()*1000);
+      for(var i=0;i<35;i++){
+        var q=cellGeometry(i),d=addDays(pageStart,i),bg=BLACK,fg=WHITE;
+        if(q.c===5)bg=BLUE;
+        if(q.c===6||(cfg.lang==="en"?isEnglishHoliday(d):isJapanHoliday(d)))bg=RED;
+        if(sameDay(d,today)){bg=GREEN;fg=BLACK;}
+        out.push({x1:q.x1,y1:q.y1,x2:q.x2,y2:q.y2,bg:bg,fg:fg,day:d.getDate()});
+      }
+      return {cells:out,prep:Math.round(getTime()*1000)-t0};
+    }
+
+    function drawBitmapDay(day,q,fg){
+      ensureDigitImages();
+      var s=""+day,count=s.length,total=count*10+(count-1)*2;
+      var x=Math.round((q.x1+q.x2-total+1)/2);
+      var y=Math.round((q.y1+q.y2-15)/2);
+      digitPal[1]=fg;
+      for(var j=0;j<count;j++){
+        g.drawImage(digitImgs[s.charCodeAt(j)-48],x,y,{scale:2});
+        x+=12;
+      }
+    }
+
+    function drawBenchPass(cells,mode){
+      g.setBgColor(BLACK).setColor(BLACK).fillRect(0,48,W-1,H-1);
+      for(var i=0;i<cells.length;i++){
+        var q=cells[i];
+        g.setColor(q.bg).fillRect(q.x1,q.y1,q.x2,q.y2);
+        if(mode===1){
+          g.setColor(q.fg).setBgColor(q.bg).setFont("6x8",2).setFontAlign(0,0)
+            .drawString(""+q.day,(q.x1+q.x2)>>1,(q.y1+q.y2)>>1);
+        }else if(mode===2){
+          drawBitmapDay(q.day,q,q.fg);
+        }
+        g.setColor(GRAY).drawRect(q.x1,q.y1,q.x2,q.y2);
+      }
+      try{g.flip();}catch(e){}
+    }
+
+    function timeBenchPass(cells,mode){
+      var t0=Math.round(getTime()*1000);
+      drawBenchPass(cells,mode);
+      return Math.round(getTime()*1000)-t0;
+    }
+
+    function runRenderBenchmark(){
+      var bc=benchmarkCells(),cells=bc.cells;
+      ensureDigitImages();
+      var base=timeBenchPass(cells,0);
+      var font=timeBenchPass(cells,1);
+      var image=timeBenchPass(cells,2);
+      benchResult={base:base,font:font,image:image,prep:bc.prep,bytes:digitBytes};
+      cells=undefined;
+      benchDone=true;
+      return benchResult;
+    }
+
+    function drawBenchmarkPanel(){
+      if(!benchResult)return;
+      g.setColor(BLACK).fillRect(0,H-50,W-1,H-1);
+      g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",2).setFontAlign(0,-1);
+      g.drawString("B "+benchResult.base+" F "+benchResult.font,W/2,H-49);
+      g.drawString("I "+benchResult.image+" P "+benchResult.prep,W/2,H-33);
+      g.drawString("M "+benchResult.bytes+" bytes",W/2,H-17);
+      try{g.flip();}catch(e){}
+    }
     function drawCell(index){
       if(index<0||index>=35)return;var q=cellGeometry(index),d=addDays(pageStart,index),bg=BLACK,fg=WHITE;
       if(q.c===5)bg=BLUE;if(q.c===6||(cfg.lang==="en"?isEnglishHoliday(d):isJapanHoliday(d)))bg=RED;if(sameDay(d,today)){bg=GREEN;fg=BLACK;}
@@ -334,6 +415,20 @@
       today=midnight(new Date());
       var focus=opts.focusDate?midnight(opts.focusDate):(opts.selectedDate?midnight(opts.selectedDate):today);
       pageStart=mondayOf(focus);selected=opts.selectedDate?midnight(opts.selectedDate):undefined;blinkWhite=true;
+
+      /* V0.71 first-entry benchmark.  It deliberately draws the 35-cell body
+         three times on the real LCD so timings include the actual display path:
+         B=background+border, F=current 6x8 drawString, I=1-bit digit images.
+         Holiday/date preparation is measured separately as P. */
+      if(!benchDone){
+        try{runRenderBenchmark();}
+        catch(be){
+          benchDone=true;
+          benchResult={base:-1,font:-1,image:-1,prep:-1,bytes:digitBytes};
+          report({benchErr:String(be)});
+        }
+      }
+
       var drawStartMs=Math.round(getTime()*1000);
       drawCalendar(true);
       var doneMs=Math.round(getTime()*1000);
@@ -341,8 +436,11 @@
       var drawMs=doneMs-drawStartMs;
       var preMs=startTapMs===undefined?0:startMs-startTapMs;
       report({calStartMs:startMs,calDrawStartMs:drawStartMs,calDoneMs:doneMs,
-        calTotalMs:total,calDrawMs:drawMs,calStartDelayMs:preMs,calReady:1});
-      diagPanel("T "+total+" D "+drawMs,"P "+preMs);
+        calTotalMs:total,calDrawMs:drawMs,calStartDelayMs:preMs,calReady:1,
+        benchBase:benchResult&&benchResult.base,benchFont:benchResult&&benchResult.font,
+        benchImage:benchResult&&benchResult.image,benchPrep:benchResult&&benchResult.prep,
+        benchBytes:benchResult&&benchResult.bytes});
+      drawBenchmarkPanel();
       armAuto();
     }
     function isActive(){return active;}
