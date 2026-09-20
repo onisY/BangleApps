@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.67",
+  "version": "0.68",
   "author": "onisY",
-  "description": "Input/state architecture reset. Use Bangle.setUI custom touch/swipe/button handlers instead of raw listeners, preload widgets at Orbit startup, and speed 5wCal drawing with native bitmap fonts and one-time widget drawing. Calendar selection writes a shared numeric day-offset record immediately; Orbit re-reads that record before every return redraw, so selected dates do not depend on a callback surviving. Successful selection shows SEL MM/DD and buzzes 120 ms. Calendar double-tap window is temporarily 650 ms.",
+  "description": "Self-diagnostic build. Measure Orbit touch time, calendar start/draw/completion times, first/second 5wCal touch timing, exact selection stage, requested buzz duration, stored day offset, return callback, applied offset, and LCD-off clearing. Show timing/status directly on-screen (C/D/S for calendar timing; Sxx/xx or E:stage with dt and B120/B500 for selection; SOK/E and applied offset on Orbit) and persist the same facts in orbclo_orbitdev.diag.json.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,11 +15,11 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app67.js"
+      "url": "app68.js"
     },
     {
       "name": "orbclo_dev_orbit.cal.js",
-      "url": "calendar67.js"
+      "url": "calendar68.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
@@ -36,6 +36,9 @@
     },
     {
       "name": "orbclo_orbitdev.sel.json"
+    },
+    {
+      "name": "orbclo_orbitdev.diag.json"
     }
   ]
 }
