@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.75",
+  "version": "0.76",
   "author": "onisY",
-  "description": "Keep the V0.74 fast first calendar frame with Saturday blue, Sunday red and today green before holiday processing. Make the 35-day holiday phase cooperative: compute one date per event-loop turn, accumulate all results in RAM, do not change holiday colors until all 35 checks are complete, then repaint all holiday cells together and flip once. Harden tap recognition so only a measured <=400 ms second tap is a double tap, clear stale tap timestamps on every reset, and prevent delayed timers from turning an expired single tap into a false double.",
+  "description": "Replace repeated 35-day holiday calculations with persistent yearly 366-bit caches. Each region/year is stored as a 46-byte raw bitset and kept in a small RAM LRU. Japan, England/Wales, Scotland, and Northern Ireland use separate caches. Existing yearly caches are applied before the first calendar frame; a missing year is generated once, saved, and then reused. Add Northern Ireland as the third UK holiday-region setting. Keep Saturday/Sunday/today colors, the 400 ms tap fix, and the V0.74 fast renderer.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,11 +15,11 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app75.js"
+      "url": "app76.js"
     },
     {
       "name": "orbclo_dev_orbit.cal.js",
-      "url": "calendar75.js"
+      "url": "calendar76.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
