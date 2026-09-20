@@ -26,7 +26,7 @@
     var W=g.getWidth(),H=g.getHeight();
     var BLACK=0x0000,WHITE=0xFFFF,BLUE=0x001F,RED=0xF800,GREEN=0x07E0,GRAY=0x4208;
     var cfg,today,pageStart,selected;
-    var active=false,onReturn,onSelect;
+    var active=false,onReturn,onSelect,onDiag,startTapMs,firstTapMs;
     var tapTimer,tapCount=0,lastXY;
     var blinkTimer,blinkWhite=true,autoTimer;
 
@@ -206,6 +206,22 @@
       drawTop();
       try{g.flip();}catch(e){}
     }
+    function report(x){
+      if(onDiag)try{onDiag(x);}catch(e){}
+      try{
+        var d=Storage.readJSON("orbclo_orbitdev.diag.json",1)||{};
+        for(var k in x)d[k]=x[k];
+        Storage.writeJSON("orbclo_orbitdev.diag.json",d);
+      }catch(e){}
+    }
+    function diagLine(s){
+      try{
+        g.setColor(BLACK).fillRect(0,H-9,W-1,H-1);
+        g.setColor(WHITE).setBgColor(BLACK).setFont("6x8").setFontAlign(0,-1)
+          .drawString(s,W/2,H-9);
+        try{g.flip();}catch(e){}
+      }catch(e){}
+    }
     function clearTimer(t){if(t)clearTimeout(t);}
     function clearTaps(){clearTimer(tapTimer);tapTimer=undefined;tapCount=0;lastXY=undefined;}
     function stopBlink(){clearTimer(blinkTimer);blinkTimer=undefined;}
@@ -230,7 +246,7 @@
     }
     function stopAuto(){clearTimer(autoTimer);autoTimer=undefined;}
     function armAuto(){stopAuto();if(!active||!cfg||!(cfg.timeout>=15))return;autoTimer=setTimeout(function(){autoTimer=undefined;returnToOrbit();},cfg.timeout*1000);}
-    function stop(){stopBlink();stopAuto();clearTaps();active=false;onReturn=undefined;onSelect=undefined;}
+    function stop(){stopBlink();stopAuto();clearTaps();firstTapMs=undefined;active=false;onReturn=undefined;onSelect=undefined;onDiag=undefined;}
     function resetTransient(){selected=undefined;clearTaps();stopBlink();stopAuto();today=midnight(new Date());pageStart=mondayOf(today);}
     function returnToOrbit(){if(!active)return;var cb=onReturn,sel=selected?copyDate(selected):undefined;stop();if(cb)cb(sel);}
     function copyXY(xy){
@@ -257,34 +273,49 @@
       }catch(e){}
       try{Bangle.buzz(500);}catch(e){}
     }
-    function selectAt(xy){
-      stopBlink();
-      var idx=dateIndexAt(xy);
-      if(idx<0){
-        try{Storage.write("orbclo_dev_orbit.err","calendar NO_XY");}catch(e){}
-        showCoordError();
-        return false;
-      }
-
+    function selectAt(xy,dt){
+      var stage="IDX",idx=-1,offset=0;
       try{
+        idx=dateIndexAt(xy);
+        if(idx<0){
+          report({selOK:0,selStage:"NOXY",selDtMs:dt,buzzMs:500});
+          diagLine("E:NOXY dt"+dt+" B500");
+          try{Bangle.buzz(500);}catch(be){}
+          return false;
+        }
+
+        stage="DATE";
         selected=addDays(pageStart,idx);
-        blinkWhite=true;
-        var offset=dayNumber(selected)-dayNumber(today);
-        try{
-          Storage.write("orbclo_dev_orbit.sel",
-            selected.getFullYear()+"-"+(selected.getMonth()+1)+"-"+selected.getDate()+
-            " x"+xy.x+" y"+xy.y);
-          Storage.writeJSON("orbclo_orbitdev.sel.json",{
-            offset:offset,y:selected.getFullYear(),m:selected.getMonth()+1,d:selected.getDate()
-          });
-        }catch(loge){}
+
+        stage="OFFSET";
+        offset=dayNumber(selected)-dayNumber(today);
+
+        stage="WRITE";
+        Storage.writeJSON("orbclo_orbitdev.sel.json",{
+          offset:offset,y:selected.getFullYear(),m:selected.getMonth()+1,d:selected.getDate()
+        });
+
+        stage="CALL";
         if(onSelect)onSelect(copyDate(selected),offset);
-        drawSelectionAck(selected);
-        try{Bangle.buzz(120);}catch(e){}
+
+        stage="ACK";
+        var mm=pad2(selected.getMonth()+1),dd=pad2(selected.getDate());
+        report({
+          selOK:1,selStage:"OK",selIdx:idx,selOff:offset,selDtMs:dt,
+          selMonth:selected.getMonth()+1,selDay:selected.getDate(),buzzMs:120
+        });
+        diagLine("S"+mm+"/"+dd+" dt"+dt+" B120");
+
+        stage="BUZZ";
+        try{Bangle.buzz(120);}catch(be2){}
         return true;
       }catch(e){
-        logCalError("select",e);
-        try{Bangle.buzz(500);}catch(be){}
+        report({
+          selOK:0,selStage:stage,selIdx:idx,selOff:offset,selDtMs:dt,
+          selErr:String(e),buzzMs:500
+        });
+        diagLine("E:"+stage+" dt"+dt+" B500");
+        try{Bangle.buzz(500);}catch(be3){}
         return false;
       }
     }
@@ -292,35 +323,53 @@
       if(!active)return;
       try{
         armAuto();
-        var p=copyXY(xy);
+        var now=Date.now(),p=copyXY(xy);
 
         if(tapTimer){
-          /* Second event is known to arrive on hardware. Use a copied first
-             coordinate so later event-object reuse cannot alter the target. */
+          var dt=firstTapMs===undefined?0:now-firstTapMs;
           var selectXY=lastXY||p;
-          clearTimer(tapTimer);tapTimer=undefined;tapCount=0;lastXY=undefined;
-          selectAt(selectXY);
+          clearTimer(tapTimer);tapTimer=undefined;tapCount=0;lastXY=undefined;firstTapMs=undefined;
+          report({calTap2Seen:1,calTap2Ms:now,calDoubleDtMs:dt});
+          selectAt(selectXY,dt);
           return;
         }
 
-        /* Snapshot x/y now instead of retaining the firmware event object. */
+        firstTapMs=now;
         lastXY=p;
         tapCount=1;
+        report({calTap1Seen:1,calTap1Ms:now});
         tapTimer=setTimeout(function(){
           tapTimer=undefined;tapCount=0;lastXY=undefined;
+          var waited=Date.now()-firstTapMs;
+          firstTapMs=undefined;
+          report({calTap2Seen:0,calSingleTimeout:1,calSingleWaitMs:waited});
           if(active)returnToOrbit();
         },650);
       }catch(e){
-        logCalError("touch",e);
-        clearTaps();
+        report({selOK:0,selStage:"TOUCH",selErr:String(e),buzzMs:0});
+        clearTaps();firstTapMs=undefined;
       }
     }
     function swipe(lr,ud){if(!active||!ud)return;clearTaps();armAuto();pageStart=addDays(pageStart,ud<0?35:-35);drawCalendar(false);}
     function start(opts){
-      opts=opts||{};stop();cfg=readConfig();active=true;onReturn=opts.onReturn;onSelect=opts.onSelect;today=midnight(new Date());
-      var focus=opts.focusDate?midnight(opts.focusDate):(opts.selectedDate?midnight(opts.selectedDate):today);pageStart=mondayOf(focus);selected=opts.selectedDate?midnight(opts.selectedDate):undefined;blinkWhite=true;
-      try{if(typeof WIDGETS==="undefined")Bangle.loadWidgets();}catch(e){}
-      drawCalendar(true);armAuto();
+      opts=opts||{};stop();cfg=readConfig();active=true;
+      onReturn=opts.onReturn;onSelect=opts.onSelect;onDiag=opts.onDiag;startTapMs=opts.tapMs;
+      var startMs=Date.now();
+      today=midnight(new Date());
+      var focus=opts.focusDate?midnight(opts.focusDate):(opts.selectedDate?midnight(opts.selectedDate):today);
+      pageStart=mondayOf(focus);selected=opts.selectedDate?midnight(opts.selectedDate):undefined;blinkWhite=true;
+      var drawStartMs=Date.now();
+      drawCalendar(true);
+      var doneMs=Date.now();
+      var total=startTapMs===undefined?0:doneMs-startTapMs;
+      var drawMs=doneMs-drawStartMs;
+      report({
+        calStartMs:startMs,calDrawStartMs:drawStartMs,calDoneMs:doneMs,
+        calTotalMs:total,calDrawMs:drawMs,calStartDelayMs:startTapMs===undefined?0:startMs-startTapMs,
+        calReady:1
+      });
+      diagLine("C"+total+" D"+drawMs+" S"+(startMs-(startTapMs||startMs)));
+      armAuto();
     }
     function isActive(){return active;}
     return {start:start,stop:stop,resetTransient:resetTransient,touch:touch,swipe:swipe,isActive:isActive};
