@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.70",
+  "version": "0.71",
   "author": "onisY",
-  "description": "Controlled rollback after V0.69 CAL ERR. Restore the V0.68 calendar renderer that was known to display on hardware, remove the new prepared-page cache entirely, but keep RAM-only date handoff and readable timing/selection diagnostics. Calendar startup errors now show the actual exception text under CAL ERR. Normal calendar startup shows T/D/P timings; selection shows SEL/ERR and DT.",
+  "description": "One-time real-LCD calendar rendering benchmark. On the first 5wCal entry after app launch, time the same 35 cells in three modes: B=background+border only, F=current built-in 6x8 drawString digits, I=10 reusable monochrome 1-bit digit images transferred with drawImage. P separately measures date/holiday preparation. The final calendar screen shows B/F, I/P, and raw digit-bitmap bytes M. Benchmark runs only once per app session.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,11 +15,11 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app70.js"
+      "url": "app71.js"
     },
     {
       "name": "orbclo_dev_orbit.cal.js",
-      "url": "calendar70.js"
+      "url": "calendar71.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
