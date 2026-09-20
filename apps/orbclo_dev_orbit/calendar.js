@@ -3,11 +3,12 @@
   var Storage=require("Storage");
   var CFG_FILE="orbclo_orbitdev.cal.json";
   var DAY=86400000;
+  var HOL_CACHE_VER=1,HOL_BYTES=46,HOL_RAM_MAX=4;
 
   function normalizeConfig(c){
     c=c||{};
     if(c.lang!=="ja"&&c.lang!=="en")c.lang="ja";
-    if(c.ukRegion!=="ew"&&c.ukRegion!=="sc")c.ukRegion="ew";
+    if(c.ukRegion!=="ew"&&c.ukRegion!=="sc"&&c.ukRegion!=="ni")c.ukRegion="ew";
     if(!(c.timeout>=15&&c.timeout<=120))c.timeout=30;
     return c;
   }
@@ -30,8 +31,9 @@
     var tapTimer,tapCount=0,lastXY;
     var TAP_WINDOW=400;
     var blinkTimer,blinkWhite=true,autoTimer;
-    var holidayFlags=new Uint8Array(35),dayNums=new Uint8Array(35),todayIndex=-1,lastCellPrepMs=0;
+    var holidayFlags=new Uint8Array(35),dayNums=new Uint8Array(35),yearNums=new Uint16Array(35),doyNums=new Uint16Array(35),todayIndex=-1,lastCellPrepMs=0;
     var holidayTimer,holidayToken=0,lastHolidayCalcMs=0,lastHolidayDrawMs=0,lastHolidayElapsedMs=0;
+    var holRam=[];
     var cellX1=new Int16Array(7),cellX2=new Int16Array(7),cellY1=new Int16Array(5),cellY2=new Int16Array(5);
     var weekdayImgs,weekdayPal;
     var lastWidgetMs=0,lastWeekdayMs=0,lastBodyMs=0,lastTopMs=0;
@@ -82,6 +84,138 @@
     function lastMonday(y,m){var n=dim(y,m);return n-((dowYMD(y,m,n)+6)%7);}
     function vernal(y){return Math.floor(20.8431+0.242194*(y-1980)-Math.floor((y-1980)/4));}
     function autumn(y){return Math.floor(23.2488+0.242194*(y-1980)-Math.floor((y-1980)/4));}
+    var MONTH_START=[0,31,59,90,120,151,181,212,243,273,304,334];
+    function doyYMD(y,m,d){return MONTH_START[m-1]+d-1+((m>2&&leap(y))?1:0);}
+    function bitGet(bits,n){return !!(bits[n>>3]&(1<<(n&7)));}
+    function bitSet(bits,n){bits[n>>3]|=1<<(n&7);}
+    function setYMD(bits,y,m,d){bitSet(bits,doyYMD(y,m,d));}
+    function shiftedYMD(y,m,d,delta){
+      while(delta>0){d++;if(d>dim(y,m)){d=1;m++;if(m>12){m=1;y++;}}delta--;}
+      while(delta<0){d--;if(d<1){m--;if(m<1){m=12;y--;}d=dim(y,m);}delta++;}
+      return [y,m,d];
+    }
+    function setShifted(bits,y,m,d,delta){var q=shiftedYMD(y,m,d,delta);if(q[0]===y)setYMD(bits,y,q[1],q[2]);}
+    function setObservedFixed(bits,y,m,d){
+      var w=dowYMD(y,m,d);
+      if(w===6)setShifted(bits,y,m,d,2);
+      else if(w===0)setShifted(bits,y,m,d,1);
+      else setYMD(bits,y,m,d);
+    }
+    function setChristmas(bits,y){
+      var w25=dowYMD(y,12,25),w26=dowYMD(y,12,26);
+      if(w25===6||w25===0)setYMD(bits,y,12,27);else setYMD(bits,y,12,25);
+      if(w26===6||w26===0)setYMD(bits,y,12,28);else setYMD(bits,y,12,26);
+    }
+    function holRegion(){return cfg.lang==="ja"?"jp":cfg.ukRegion;}
+    function holFile(region,year){return "och"+HOL_CACHE_VER+region+year;}
+    function bitsToString(bits){
+      var s="";for(var i=0;i<HOL_BYTES;i++)s+=String.fromCharCode(bits[i]);return s;
+    }
+    function stringToBits(s){
+      if(!s||s.length!==HOL_BYTES)return undefined;
+      var b=new Uint8Array(HOL_BYTES);
+      for(var i=0;i<HOL_BYTES;i++)b[i]=s.charCodeAt(i)&255;
+      return b;
+    }
+    function ramKey(region,year){return region+year;}
+    function ramGet(region,year){
+      var k=ramKey(region,year);
+      for(var i=0;i<holRam.length;i++)if(holRam[i].k===k)return holRam[i].b;
+    }
+    function ramPut(region,year,bits){
+      var k=ramKey(region,year),i;
+      for(i=0;i<holRam.length;i++)if(holRam[i].k===k){holRam[i].b=bits;return bits;}
+      holRam.push({k:k,b:bits});
+      if(holRam.length>HOL_RAM_MAX)holRam.shift();
+      return bits;
+    }
+    function loadHolidayBits(region,year){
+      var b=ramGet(region,year);if(b)return b;
+      b=stringToBits(Storage.read(holFile(region,year)));
+      return b?ramPut(region,year,b):undefined;
+    }
+    function saveHolidayBits(region,year,bits){
+      try{Storage.write(holFile(region,year),bitsToString(bits));}catch(e){}
+      return ramPut(region,year,bits);
+    }
+    function setCommonUK(bits,y){
+      if(y===2011)setYMD(bits,y,4,29);
+      if(y===2022)setYMD(bits,y,9,19);
+      if(y===2023)setYMD(bits,y,5,8);
+    }
+    function setEarlyMay(bits,y){
+      if(y===2020)setYMD(bits,y,5,8);
+      else setYMD(bits,y,5,nthMonday(y,5,1));
+    }
+    function setSpring(bits,y){
+      if(y===2002){setYMD(bits,y,6,3);setYMD(bits,y,6,4);}
+      else if(y===2012){setYMD(bits,y,6,4);setYMD(bits,y,6,5);}
+      else if(y===2022){setYMD(bits,y,6,2);setYMD(bits,y,6,3);}
+      else setYMD(bits,y,5,lastMonday(y,5));
+    }
+    function setEaster(bits,y,withMonday){
+      var e=easterSunday(y),gf=addDays(e,-2);
+      setYMD(bits,y,gf.getMonth()+1,gf.getDate());
+      if(withMonday){var em=addDays(e,1);setYMD(bits,y,em.getMonth()+1,em.getDate());}
+    }
+    function generateJapanBits(y){
+      var base=new Uint8Array(HOL_BYTES),bits=new Uint8Array(HOL_BYTES);
+      var m,d,i,days=leap(y)?366:365;
+      for(m=1;m<=12;m++)for(d=1;d<=dim(y,m);d++)if(baseHolidayYMD(y,m,d))bitSet(base,doyYMD(y,m,d));
+      for(i=0;i<HOL_BYTES;i++)bits[i]=base[i];
+
+      if(y>=1986){
+        for(i=1;i<days-1;i++)if(!bitGet(base,i)&&bitGet(base,i-1)&&bitGet(base,i+1))bitSet(bits,i);
+      }
+      if(y>=1973){
+        var jan1=dowYMD(y,1,1);
+        for(i=0;i<days;i++)if(bitGet(base,i)&&((jan1+i)%7)===0){
+          var p=i+1;
+          if(y<2007){if(p<days)bitSet(bits,p);}
+          else{
+            while(p<days&&bitGet(base,p))p++;
+            if(p<days)bitSet(bits,p);
+          }
+        }
+      }
+      return bits;
+    }
+    function setUKNewYear(bits,y){setObservedFixed(bits,y,1,1);}
+    function setScotlandNewYear(bits,y){
+      var w=dowYMD(y,1,1),a,b;
+      if(w===6){a=3;b=4;}else if(w===0){a=2;b=3;}else if(w===5){a=1;b=4;}else{a=1;b=2;}
+      setYMD(bits,y,1,a);setYMD(bits,y,1,b);
+    }
+    function generateEnglandWalesBits(y){
+      var b=new Uint8Array(HOL_BYTES);
+      setUKNewYear(b,y);setEaster(b,y,true);setEarlyMay(b,y);setSpring(b,y);setCommonUK(b,y);
+      setYMD(b,y,8,lastMonday(y,8));setChristmas(b,y);
+      return b;
+    }
+    function generateScotlandBits(y){
+      var b=new Uint8Array(HOL_BYTES);
+      setScotlandNewYear(b,y);setEaster(b,y,false);setEarlyMay(b,y);setSpring(b,y);setCommonUK(b,y);
+      if(y===2026)setYMD(b,y,6,15);
+      setYMD(b,y,8,nthMonday(y,8,1));
+      var w=dowYMD(y,11,30);
+      if(w===6)setYMD(b,y,12,2);else if(w===0)setYMD(b,y,12,1);else setYMD(b,y,11,30);
+      setChristmas(b,y);
+      return b;
+    }
+    function generateNIBits(y){
+      var b=new Uint8Array(HOL_BYTES);
+      setUKNewYear(b,y);setObservedFixed(b,y,3,17);setEaster(b,y,true);
+      setEarlyMay(b,y);setSpring(b,y);setCommonUK(b,y);
+      setObservedFixed(b,y,7,12);setYMD(b,y,8,lastMonday(y,8));setChristmas(b,y);
+      return b;
+    }
+    function generateHolidayBits(region,year){
+      if(region==="jp")return generateJapanBits(year);
+      if(region==="sc")return generateScotlandBits(year);
+      if(region==="ni")return generateNIBits(year);
+      return generateEnglandWalesBits(year);
+    }
+
 
     function baseHolidayYMD(y,m,n){
       if(m===1&&n===1)return true;
@@ -189,7 +323,25 @@
       if(m===sm&&n===sn)return true;
       return christmasHoliday(d);
     }
-    function isEnglishHoliday(d){return cfg.ukRegion==="sc"?isScotlandHoliday(d):isEnglandWalesHoliday(d);}
+    function isNorthernIrelandHoliday(d){
+      var y=d.getFullYear(),m=d.getMonth()+1,n=d.getDate(),w;
+      w=dowYMD(y,1,1);var ny=(w===6)?3:(w===0?2:1);if(m===1&&n===ny)return true;
+      w=dowYMD(y,3,17);var sp=(w===6)?19:(w===0?18:17);if(m===3&&n===sp)return true;
+      var easter=easterSunday(y);
+      if(sameDay(d,addDays(easter,-2))||sameDay(d,addDays(easter,1)))return true;
+      if(y===2020){if(m===5&&n===8)return true;}else if(m===5&&n===nthMonday(y,5,1))return true;
+      if(y===2002){if(m===6&&(n===3||n===4))return true;}
+      else if(y===2012){if(m===6&&(n===4||n===5))return true;}
+      else if(y===2022){if(m===6&&(n===2||n===3))return true;}
+      else if(m===5&&n===lastMonday(y,5))return true;
+      if(commonUKSpecial(d))return true;
+      w=dowYMD(y,7,12);var bo=(w===6)?14:(w===0?13:12);if(m===7&&n===bo)return true;
+      if(m===8&&n===lastMonday(y,8))return true;
+      return christmasHoliday(d);
+    }
+    function isEnglishHoliday(d){
+      return cfg.ukRegion==="sc"?isScotlandHoliday(d):(cfg.ukRegion==="ni"?isNorthernIrelandHoliday(d):isEnglandWalesHoliday(d));
+    }
 
     function topFreeGap(){
       var spans=[];
@@ -278,13 +430,25 @@
       var ti=todayNo-startNo;
       todayIndex=(ti>=0&&ti<35)?ti:-1;
       for(var i=0;i<35;i++){
-        dayNums[i]=d;
-        holidayFlags[i]=0;
+        dayNums[i]=d;yearNums[i]=y;doyNums[i]=doyYMD(y,m,d);holidayFlags[i]=0;
         d++;
         if(d>dim(y,m)){d=1;m++;if(m>12){m=1;y++;}}
       }
       lastCellPrepMs=Math.round(getTime()*1000)-t0;
       return lastCellPrepMs;
+    }
+
+    function applyCachedPageHolidays(){
+      var region=holRegion(),y0=yearNums[0],y1=yearNums[34];
+      var b0=loadHolidayBits(region,y0),b1=(y1===y0)?b0:loadHolidayBits(region,y1);
+      var missing=[];
+      if(!b0)missing.push(y0);
+      if(y1!==y0&&!b1)missing.push(y1);
+      for(var i=0;i<35;i++){
+        var b=(yearNums[i]===y0)?b0:b1;
+        holidayFlags[i]=(b&&bitGet(b,doyNums[i]))?1:0;
+      }
+      return {region:region,years:missing};
     }
 
     function cancelHolidayBatch(){
@@ -293,56 +457,42 @@
       holidayTimer=undefined;
     }
 
-    function startHolidayBatch(baseTotal,baseDraw,basePrep){
+    function startHolidayBatch(baseTotal,baseDraw,basePrep,cacheState){
       cancelHolidayBatch();
-      var token=holidayToken;
-      var d=copyDate(pageStart),i=0,changed=[];
-      var cpuMs=0,wallStart=Math.round(getTime()*1000);
+      if(!cacheState||!cacheState.years.length){
+        lastHolidayCalcMs=0;lastHolidayDrawMs=0;
+        report({holidayDone:1,holidayCacheHit:1,holidayCalcMs:0,holidayDrawMs:0});
+        return;
+      }
 
-      function step(){
+      var token=holidayToken,region=cacheState.region,years=cacheState.years.slice();
+      holidayTimer=setTimeout(function(){
         holidayTimer=undefined;
         if(!active||token!==holidayToken)return;
 
-        /* Calculate one day, then yield to the event loop.  No holiday cell
-           is repainted until all 35 dates have been classified. */
         var t0=Math.round(getTime()*1000);
-        var h=(cfg.lang==="en"?isEnglishHoliday(d):isJapanHoliday(d))?1:0;
-        cpuMs+=Math.round(getTime()*1000)-t0;
-        holidayFlags[i]=h;
-        if(h&&i!==todayIndex&&(i%7)!==6)changed.push(i);
-
-        i++;
-        d.setDate(d.getDate()+1);
-
-        if(i<35){
-          holidayTimer=setTimeout(step,0);
-          return;
-        }
-
-        lastHolidayCalcMs=cpuMs;
-        lastHolidayElapsedMs=Math.round(getTime()*1000)-wallStart;
+        for(var k=0;k<years.length;k++)saveHolidayBits(region,years[k],generateHolidayBits(region,years[k]));
+        lastHolidayCalcMs=Math.round(getTime()*1000)-t0;
         if(!active||token!==holidayToken)return;
 
-        /* Only now update all holiday cells together and flip once. */
-        var t1=Math.round(getTime()*1000);
-        for(var j=0;j<changed.length;j++)drawCell(changed[j]);
+        applyCachedPageHolidays();
+
+        var t1=Math.round(getTime()*1000),changed=0;
+        for(var i=0;i<35;i++){
+          if(holidayFlags[i]&&i!==todayIndex&&(i%7)!==6){drawCell(i);changed++;}
+        }
         try{g.flip();}catch(e){}
         lastHolidayDrawMs=Math.round(getTime()*1000)-t1;
 
         report({
-          holidayDone:1,
-          holidayCalcMs:lastHolidayCalcMs,
-          holidayElapsedMs:lastHolidayElapsedMs,
-          holidayDrawMs:lastHolidayDrawMs,
-          holidayCount:changed.length
+          holidayDone:1,holidayCacheHit:0,holidayGeneratedYears:years.length,
+          holidayCalcMs:lastHolidayCalcMs,holidayDrawMs:lastHolidayDrawMs,holidayCount:changed
         });
         if(!selected)diagPanel(
           "T "+baseTotal+" D "+baseDraw,
           "C "+basePrep+" H "+lastHolidayCalcMs+" U "+lastHolidayDrawMs
         );
-      }
-
-      holidayTimer=setTimeout(step,0);
+      },0);
     }
 
     function drawCell(index){
@@ -393,6 +543,10 @@
       g.setColor(BLACK).fillRect(0,48,W-1,H-1);
       g.setColor(BLUE).fillRect(cellX1[5],48,cellX2[5],H-1);
       g.setColor(RED).fillRect(cellX1[6],48,cellX2[6],H-1);
+      for(i=0;i<35;i++)if(holidayFlags[i]&&i!==todayIndex&&(i%7)!==6){
+        c=i%7;r=(i/7)|0;
+        g.setColor(RED).fillRect(cellX1[c],cellY1[r],cellX2[c],cellY2[r]);
+      }
       if(todayIndex>=0){
         c=todayIndex%7;r=(todayIndex/7)|0;
         g.setColor(GREEN).fillRect(cellX1[c],cellY1[r],cellX2[c],cellY2[r]);
@@ -413,7 +567,7 @@
       g.setFont("6x8",2).setFontAlign(0,0);
       for(i=0;i<35;i++){
         c=i%7;r=(i/7)|0;
-        bg=c===5?BLUE:(c===6?RED:BLACK);fg=WHITE;
+        bg=c===5?BLUE:((c===6||holidayFlags[i])?RED:BLACK);fg=WHITE;
         if(i===todayIndex){bg=GREEN;fg=BLACK;}
         g.setColor(fg).setBgColor(bg)
           .drawString(""+dayNums[i],(cellX1[c]+cellX2[c])>>1,(cellY1[r]+cellY2[r])>>1);
@@ -580,13 +734,14 @@
       pageStart=addDays(pageStart,ud<0?35:-35);
 
       var cMs=buildBasicCellData();
+      var cacheState=applyCachedPageHolidays();
       var t0=Math.round(getTime()*1000);
       drawCalendar(false);
       var dMs=Math.round(getTime()*1000)-t0;
 
-      report({calCellMs:cMs,calDrawMs:dMs,holidayDeferred:1});
+      report({calCellMs:cMs,calDrawMs:dMs,holidayDeferred:cacheState.years.length?1:0});
       diagPerf(dMs,dMs,cMs);
-      startHolidayBatch(dMs,dMs,cMs);
+      startHolidayBatch(dMs,dMs,cMs,cacheState);
     }
     function start(opts){
       opts=opts||{};stop();cfg=readConfig();active=true;
@@ -599,6 +754,7 @@
       /* Stage 1: build only cheap day-number/today data and paint immediately.
          Holiday flags intentionally remain zero in this first visible frame. */
       var cellMs=buildBasicCellData();
+      var cacheState=applyCachedPageHolidays();
       var drawStartMs=Math.round(getTime()*1000);
       drawCalendar(true);
       var doneMs=Math.round(getTime()*1000);
@@ -609,7 +765,7 @@
       report({
         calStartMs:startMs,calDrawStartMs:drawStartMs,calDoneMs:doneMs,
         calTotalMs:total,calDrawMs:drawMs,calStartDelayMs:preMs,
-        calCellMs:cellMs,holidayDeferred:1,calReady:1
+        calCellMs:cellMs,holidayDeferred:cacheState.years.length?1:0,calReady:1
       });
       diagPerf(total,drawMs,cellMs);
 
@@ -617,7 +773,7 @@
          holiday results cooperatively (one date per event-loop turn), while
          keeping the display unchanged. When all 35 are ready, update holiday
          cells together in one batch. */
-      startHolidayBatch(total,drawMs,cellMs);
+      startHolidayBatch(total,drawMs,cellMs,cacheState);
       armAuto();
     }
     function isActive(){return active;}
