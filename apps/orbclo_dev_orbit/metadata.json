@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.78",
+  "version": "0.79",
   "author": "onisY",
-  "description": "Refine yearly holiday-cache retention. The active calendar region keeps only the real current year and next year as persistent 46-byte bitsets. Pages scrolled outside that two-year window still calculate only the visible 35 days transiently and do not save a yearly cache. Crucially, switching country/region no longer deletes the previous region's files: inactive Japan/England-Wales/Scotland/Northern-Ireland caches remain in Storage. Add a Holiday cache settings submenu showing per-region file counts and confirmed manual deletion for each region or all caches. RAM remains a separate two-entry decoded working cache.",
+  "description": "Holiday bit-cache lifecycle now matches the requested policy. For the selected Japan/England-Wales/Scotland/Northern-Ireland setting, prewarm only the real current year and next year after Orbit has already drawn. If calendar scrolling later reaches any other year, generate that whole 366-bit/46-byte year table on first need and persist it too. Never auto-delete old years or inactive-region caches. Keep the existing Holiday cache settings submenu so the user can manually delete Japan, England/Wales, Scotland, Northern Ireland, or all stored caches. Japanese year generation is also made direct/rule-based rather than scanning every date.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,11 +15,11 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app78.js"
+      "url": "app79.js"
     },
     {
       "name": "orbclo_dev_orbit.cal.js",
-      "url": "calendar78.js"
+      "url": "calendar79.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
