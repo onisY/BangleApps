@@ -1,4 +1,4 @@
-/* Orbclo Dev Orbit 0.69 - RAM-only selection and prepared calendar */
+/* Orbclo Dev Orbit 0.70 - rollback calendar renderer with readable diagnostics */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
@@ -733,13 +733,17 @@
         });
         return;
       }catch(calStartErr){
-        try{Storage.write("orbclo_dev_orbit.err","calendar start: "+calStartErr);}catch(x){}
         mode="orbit";
         busy=false;
+        diag.calErr=String(calStartErr);
         try{
           g.reset().setBgColor(BLACK).setColor(RED).clear();
           g.setFont("6x8",2).setFontAlign(0,0);
-          g.drawString("CAL ERR",W/2,H/2);
+          g.drawString("CAL ERR",W/2,H/2-18);
+          g.setFont("6x8").setFontAlign(0,0);
+          var es=String(calStartErr);
+          g.drawString(es.substr(0,24),W/2,H/2+4);
+          g.drawString(es.substr(24,24),W/2,H/2+14);
           armMinute();
           armSecond();
         }catch(drawErr){}
@@ -903,7 +907,6 @@
   buildLightingCache();
   buildEarthMapCache();
   buildMoonCache();
-  try{if(calendar&&calendar.prepare)calendar.prepare(new Date());}catch(e){diag.prepErr=String(e);}
   try{Bangle.setUI({mode:"custom",touch:onTouch,swipe:onSwipe,btn:onButton});}catch(e){}
   Bangle.on("faceUp",onFaceUp);
   Bangle.on("lcdPower",onLCD);
