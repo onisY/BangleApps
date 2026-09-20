@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.72",
+  "version": "0.73",
   "author": "onisY",
-  "description": "Apply the V0.71 benchmark result. Keep the built-in 6x8 font because it was faster than 1-bit drawImage (F=287 ms vs I=445 ms, with only 50 raw bitmap bytes). Attack the real bottleneck instead: replace Date-heavy Japanese holiday/day-number calculations with allocation-free civil-date arithmetic, precompute each page's 35 holiday flags and day numbers into two 35-byte Uint8Arrays before LCD drawing, and remove Date.UTC from both calendar and Orbit date handoff. Restore the requested 400 ms double-tap window. Diagnostics show T total, D LCD draw, C page-data/holiday calculation, P pre-start.",
+  "description": "Two-stage 5wCal rendering. First show the full 35-day calendar immediately with dates, weekends, today, grid, header and widgets but without holiday calculations. After that first frame is visible, calculate all 35 holiday flags together in one deferred batch; only after all 35 checks finish, redraw every affected holiday cell together and flip once. Keep V0.72 arithmetic day-number/OFFSET fix and the 400 ms double-tap window. Diagnostics show initial T/D/C, then holiday calculation H and one-batch update U.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,11 +15,11 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app72.js"
+      "url": "app73.js"
     },
     {
       "name": "orbclo_dev_orbit.cal.js",
-      "url": "calendar72.js"
+      "url": "calendar73.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
