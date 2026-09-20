@@ -31,6 +31,9 @@
     var blinkTimer,blinkWhite=true,autoTimer;
     var holidayFlags=new Uint8Array(35),dayNums=new Uint8Array(35),todayIndex=-1,lastCellPrepMs=0;
     var holidayTimer,holidayToken=0,lastHolidayCalcMs=0,lastHolidayDrawMs=0;
+    var cellX1=new Int16Array(7),cellX2=new Int16Array(7),cellY1=new Int16Array(5),cellY2=new Int16Array(5);
+    var weekdayImgs,weekdayPal;
+    var lastWidgetMs=0,lastWeekdayMs=0,lastBodyMs=0,lastTopMs=0;
 
     function midnight(d){return new Date(d.getFullYear(),d.getMonth(),d.getDate());}
     function copyDate(d){return d?new Date(d.getFullYear(),d.getMonth(),d.getDate()):undefined;}
@@ -220,16 +223,64 @@
       else if(c===5){line2(x,y-8,x,y+7);line2(x-5,y-4,x+5,y-4);line2(x-7,y+7,x+7,y+7);}
       else{line2(x-6,y-8,x+5,y-8);line2(x-6,y+8,x+5,y+8);line2(x-6,y-8,x-6,y+8);line2(x+5,y-8,x+5,y+8);line2(x-6,y,x+5,y);}
     }
-    function drawWeekday(c){var x1=Math.floor(c*W/7),x2=Math.floor((c+1)*W/7)-1,bg=BLACK;if(c===5)bg=BLUE;else if(c===6)bg=RED;g.setColor(bg).fillRect(x1,24,x2,47);if(cfg.lang==="en")g.setColor(WHITE).setFont("6x8",2).setFontAlign(0,0).drawString(["M","T","W","T","F","S","S"][c],(x1+x2)>>1,35);else weekdayGlyph(c,(x1+x2)>>1,35);}
-    function cellGeometry(index){var c=index%7,r=(index/7)|0,top=48,gh=H-48;return {x1:Math.floor(c*W/7),x2:Math.floor((c+1)*W/7)-1,y1:top+Math.floor(r*gh/5),y2:top+Math.floor((r+1)*gh/5)-1,c:c};}
+    function buildWeekdayImages(){
+      if(weekdayImgs)return;
+      weekdayImgs=[];weekdayPal=new Uint16Array([0,WHITE]);
+      function l2(q,x1,y1,x2,y2){q.drawLine(x1,y1,x2,y2);q.drawLine(x1+1,y1,x2+1,y2);}
+      for(var c=0;c<7;c++){
+        var q=Graphics.createArrayBuffer(16,18,1,{msb:true}),x=8,y=9;
+        q.setColor(1).clear();
+        if(c===0){l2(q,x-6,y-8,x-6,y+8);l2(q,x+5,y-8,x+5,y+8);l2(q,x-6,y-8,x+5,y-8);l2(q,x-6,y-2,x+5,y-2);l2(q,x-6,y+4,x+5,y+4);}
+        else if(c===1){l2(q,x,y-8,x,y+2);l2(q,x-2,y-1,x-7,y-6);l2(q,x+2,y-1,x+7,y-6);l2(q,x,y+1,x-6,y+8);l2(q,x,y+1,x+7,y+8);}
+        else if(c===2){l2(q,x,y-8,x,y+8);l2(q,x-2,y-1,x-7,y-4);l2(q,x-2,y-1,x-7,y+6);l2(q,x+2,y-2,x+7,y-5);l2(q,x+1,y,x+7,y+6);l2(q,x-1,y-7,x+2,y-4);}
+        else if(c===3){l2(q,x,y-8,x,y+8);l2(q,x-7,y-2,x+7,y-2);l2(q,x,y-1,x-7,y+7);l2(q,x,y-1,x+7,y+7);}
+        else if(c===4){l2(q,x,y-8,x-7,y-2);l2(q,x,y-8,x+7,y-2);l2(q,x-5,y-2,x+5,y-2);l2(q,x-6,y+3,x+6,y+3);l2(q,x,y-2,x,y+7);l2(q,x-7,y+8,x+7,y+8);l2(q,x-5,y+5,x-7,y+2);l2(q,x+5,y+5,x+7,y+2);}
+        else if(c===5){l2(q,x,y-8,x,y+7);l2(q,x-5,y-4,x+5,y-4);l2(q,x-7,y+7,x+7,y+7);}
+        else{l2(q,x-6,y-8,x+5,y-8);l2(q,x-6,y+8,x+5,y+8);l2(q,x-6,y-8,x-6,y+8);l2(q,x+5,y-8,x+5,y+8);l2(q,x-6,y,x+5,y);}
+        weekdayImgs.push({width:16,height:18,bpp:1,buffer:q.buffer,transparent:0,palette:weekdayPal});
+      }
+    }
+    function drawWeekdayLabel(c){
+      var x1=cellX1[c],x2=cellX2[c],cx=(x1+x2)>>1;
+      if(cfg.lang==="en"){
+        g.setColor(WHITE).setFont("6x8",2).setFontAlign(0,0)
+          .drawString(["M","T","W","T","F","S","S"][c],cx,35);
+      }else{
+        g.drawImage(weekdayImgs[c],cx-8,26);
+      }
+    }
+    function drawWeekday(c){
+      var x1=cellX1[c],x2=cellX2[c],bg=BLACK;
+      if(c===5)bg=BLUE;else if(c===6)bg=RED;
+      g.setColor(bg).fillRect(x1,24,x2,47);
+      drawWeekdayLabel(c);
+    }
+    function buildGeometry(){
+      var c,r,top=48,gh=H-48;
+      for(c=0;c<7;c++){
+        cellX1[c]=Math.floor(c*W/7);
+        cellX2[c]=Math.floor((c+1)*W/7)-1;
+      }
+      for(r=0;r<5;r++){
+        cellY1[r]=top+Math.floor(r*gh/5);
+        cellY2[r]=top+Math.floor((r+1)*gh/5)-1;
+      }
+    }
+    function cellGeometry(index){
+      var c=index%7,r=(index/7)|0;
+      return {x1:cellX1[c],x2:cellX2[c],y1:cellY1[r],y2:cellY2[r],c:c,r:r};
+    }
     function buildBasicCellData(){
-      var t0=Math.round(getTime()*1000),d=copyDate(pageStart);
-      todayIndex=-1;
+      var t0=Math.round(getTime()*1000);
+      var y=pageStart.getFullYear(),m=pageStart.getMonth()+1,d=pageStart.getDate();
+      var startNo=civilDay(y,m,d),todayNo=dayNumber(today);
+      var ti=todayNo-startNo;
+      todayIndex=(ti>=0&&ti<35)?ti:-1;
       for(var i=0;i<35;i++){
-        dayNums[i]=d.getDate();
+        dayNums[i]=d;
         holidayFlags[i]=0;
-        if(sameDay(d,today))todayIndex=i;
-        d.setDate(d.getDate()+1);
+        d++;
+        if(d>dim(y,m)){d=1;m++;if(m>12){m=1;y++;}}
       }
       lastCellPrepMs=Math.round(getTime()*1000)-t0;
       return lastCellPrepMs;
@@ -305,16 +356,63 @@
       g.setColor(WHITE).drawRect(q.x1,q.y1,q.x2,q.y2);
       try{g.flip();}catch(e){}
     }
-    function drawCalendar(full){
+    function drawCalendarFast(full){
+      var t0,t1,c,r,i,bg,fg,x,y;
       g.setBgColor(BLACK).setColor(BLACK);
+
+      t0=Math.round(getTime()*1000);
       if(full){
         g.clear();
         try{Bangle.drawWidgets();}catch(e){}
       }else g.fillRect(0,24,W-1,H-1);
-      for(var c=0;c<7;c++)drawWeekday(c);
-      for(var i=0;i<35;i++)drawCell(i);
+      lastWidgetMs=Math.round(getTime()*1000)-t0;
+
+      t0=Math.round(getTime()*1000);
+      g.setColor(BLACK).fillRect(0,24,W-1,47);
+      g.setColor(BLUE).fillRect(cellX1[5],24,cellX2[5],47);
+      g.setColor(RED).fillRect(cellX1[6],24,cellX2[6],47);
+      for(c=0;c<7;c++)drawWeekdayLabel(c);
+      lastWeekdayMs=Math.round(getTime()*1000)-t0;
+
+      t0=Math.round(getTime()*1000);
+      /* Fill the body by large regions, not 35 individual cell rectangles. */
+      g.setColor(BLACK).fillRect(0,48,W-1,H-1);
+      g.setColor(BLUE).fillRect(cellX1[5],48,cellX2[5],H-1);
+      g.setColor(RED).fillRect(cellX1[6],48,cellX2[6],H-1);
+      if(todayIndex>=0){
+        c=todayIndex%7;r=(todayIndex/7)|0;
+        g.setColor(GREEN).fillRect(cellX1[c],cellY1[r],cellX2[c],cellY2[r]);
+      }
+
+      /* Draw the grid once as shared lines instead of 35 drawRect calls. */
+      g.setColor(GRAY);
+      for(c=0;c<=7;c++){
+        x=c===7?W-1:Math.floor(c*W/7);
+        g.drawLine(x,48,x,H-1);
+      }
+      for(r=0;r<=5;r++){
+        y=r===5?H-1:48+Math.floor(r*(H-48)/5);
+        g.drawLine(0,y,W-1,y);
+      }
+
+      /* Built-in 6x8x2 remains the fastest digit path from V0.71. */
+      g.setFont("6x8",2).setFontAlign(0,0);
+      for(i=0;i<35;i++){
+        c=i%7;r=(i/7)|0;
+        bg=c===5?BLUE:(c===6?RED:BLACK);fg=WHITE;
+        if(i===todayIndex){bg=GREEN;fg=BLACK;}
+        g.setColor(fg).setBgColor(bg)
+          .drawString(""+dayNums[i],(cellX1[c]+cellX2[c])>>1,(cellY1[r]+cellY2[r])>>1);
+      }
+      lastBodyMs=Math.round(getTime()*1000)-t0;
+
+      t0=Math.round(getTime()*1000);
       drawTop();
       try{g.flip();}catch(e){}
+      lastTopMs=Math.round(getTime()*1000)-t0;
+    }
+    function drawCalendar(full){
+      drawCalendarFast(full);
     }
     function report(x){if(onDiag)try{onDiag(x);}catch(e){}}
     function diagPanel(line1,line2){
@@ -323,6 +421,16 @@
         g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",2).setFontAlign(0,-1);
         g.drawString(line1,W/2,H-33);
         g.drawString(line2||"",W/2,H-17);
+        try{g.flip();}catch(e){}
+      }catch(e){}
+    }
+    function diagPerf(total,draw,cell){
+      try{
+        g.setColor(BLACK).fillRect(0,H-34,W-1,H-1);
+        g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",2).setFontAlign(0,-1)
+          .drawString("T "+total+" D "+draw,W/2,H-33);
+        g.setFont("6x8").setFontAlign(0,-1)
+          .drawString("C"+cell+" W"+lastWidgetMs+" K"+lastWeekdayMs+" G"+lastBodyMs+" R"+lastTopMs,W/2,H-15);
         try{g.flip();}catch(e){}
       }catch(e){}
     }
@@ -447,7 +555,7 @@
       var dMs=Math.round(getTime()*1000)-t0;
 
       report({calCellMs:cMs,calDrawMs:dMs,holidayDeferred:1});
-      diagPanel("T "+dMs+" D "+dMs,"C "+cMs+" H ...");
+      diagPerf(dMs,dMs,cMs);
       startHolidayBatch(dMs,dMs,cMs);
     }
     function start(opts){
@@ -473,7 +581,7 @@
         calTotalMs:total,calDrawMs:drawMs,calStartDelayMs:preMs,
         calCellMs:cellMs,holidayDeferred:1,calReady:1
       });
-      diagPanel("T "+total+" D "+drawMs,"C "+cellMs+" H ...");
+      diagPerf(total,drawMs,cellMs);
 
       /* Stage 2: after the first frame is already visible, compute all 35
          holidays in one batch, then update every holiday cell together. */
@@ -481,6 +589,8 @@
       armAuto();
     }
     function isActive(){return active;}
+    buildGeometry();
+    buildWeekdayImages();
     return {start:start,stop:stop,resetTransient:resetTransient,touch:touch,swipe:swipe,isActive:isActive};
   }
 
