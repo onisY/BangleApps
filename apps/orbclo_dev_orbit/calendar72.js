@@ -1,0 +1,418 @@
+/* Orbclo Dev integrated 5wCal module. Evaluates to an API object. */
+(function(){
+  var Storage=require("Storage");
+  var CFG_FILE="orbclo_orbitdev.cal.json";
+  var DAY=86400000;
+
+  function normalizeConfig(c){
+    c=c||{};
+    if(c.lang!=="ja"&&c.lang!=="en")c.lang="ja";
+    if(c.ukRegion!=="ew"&&c.ukRegion!=="sc")c.ukRegion="ew";
+    if(!(c.timeout>=15&&c.timeout<=120))c.timeout=30;
+    return c;
+  }
+  function readConfig(){
+    var c=Storage.readJSON(CFG_FILE,1);
+    if(!c){
+      var old=Storage.readJSON("fivewcal.json",1)||{};
+      c=normalizeConfig({lang:old.lang,ukRegion:old.ukRegion,timeout:old.timeout});
+      Storage.writeJSON(CFG_FILE,c);
+    }
+    return normalizeConfig(c);
+  }
+  function writeConfig(c){Storage.writeJSON(CFG_FILE,normalizeConfig(c));}
+
+  function create(){
+    var W=g.getWidth(),H=g.getHeight();
+    var BLACK=0x0000,WHITE=0xFFFF,BLUE=0x001F,RED=0xF800,GREEN=0x07E0,GRAY=0x4208;
+    var cfg,today,pageStart,selected;
+    var active=false,onReturn,onSelect,onDiag,startTapMs,firstTapMs;
+    var tapTimer,tapCount=0,lastXY;
+    var blinkTimer,blinkWhite=true,autoTimer;
+    var holidayFlags=new Uint8Array(35),dayNums=new Uint8Array(35),todayIndex=-1,lastCellPrepMs=0;
+
+    function midnight(d){return new Date(d.getFullYear(),d.getMonth(),d.getDate());}
+    function copyDate(d){return d?new Date(d.getFullYear(),d.getMonth(),d.getDate()):undefined;}
+    function addDays(d,n){var x=copyDate(d);x.setDate(x.getDate()+n);return x;}
+    function mondayOf(d){var x=copyDate(d);x.setDate(x.getDate()-((x.getDay()+6)%7));return x;}
+    function sameDay(a,b){return !!a&&!!b&&a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();}
+    function civilDay(y,m,d){
+      y-=m<=2?1:0;
+      var era=Math.floor(y/400),yoe=y-era*400;
+      var mp=m+(m>2?-3:9);
+      var doy=Math.floor((153*mp+2)/5)+d-1;
+      var doe=yoe*365+Math.floor(yoe/4)-Math.floor(yoe/100)+doy;
+      return era*146097+doe-719468;
+    }
+    function dayNumber(d){return civilDay(d.getFullYear(),d.getMonth()+1,d.getDate());}
+    function dowYMD(y,m,d){var q=(civilDay(y,m,d)+4)%7;return q<0?q+7:q;}
+    function leap(y){return (y%4===0&&y%100!==0)||y%400===0;}
+    function dim(y,m){return m===2?(leap(y)?29:28):([31,0,31,30,31,30,31,31,30,31,30,31][m-1]);}
+    function packYMD(y,m,d){return y*10000+m*100+d;}
+    function unpackY(k){
+      return Math.floor(k/10000);
+    }
+    function unpackM(k,y){return Math.floor((k-y*10000)/100);}
+    function unpackD(k,y,m){return k-y*10000-m*100;}
+    function prevKey(y,m,d){
+      d--;
+      if(d<1){m--;if(m<1){m=12;y--;}d=dim(y,m);}
+      return packYMD(y,m,d);
+    }
+    function prevKeyOf(k){
+      var y=unpackY(k),m=unpackM(k,y),d=unpackD(k,y,m);
+      return prevKey(y,m,d);
+    }
+    function nextKey(y,m,d){
+      d++;
+      if(d>dim(y,m)){d=1;m++;if(m>12){m=1;y++;}}
+      return packYMD(y,m,d);
+    }
+    function dowKey(k){
+      var y=unpackY(k),m=unpackM(k,y),d=unpackD(k,y,m);
+      return dowYMD(y,m,d);
+    }
+    function pad2(n){return (n<10?"0":"")+n;}
+    function nthMonday(y,m,n){return 1+((8-dowYMD(y,m,1))%7)+7*(n-1);}
+    function lastMonday(y,m){var n=dim(y,m);return n-((dowYMD(y,m,n)+6)%7);}
+    function vernal(y){return Math.floor(20.8431+0.242194*(y-1980)-Math.floor((y-1980)/4));}
+    function autumn(y){return Math.floor(23.2488+0.242194*(y-1980)-Math.floor((y-1980)/4));}
+
+    function baseHolidayYMD(y,m,n){
+      if(m===1&&n===1)return true;
+      if(m===1&&((y>=2000&&n===nthMonday(y,1,2))||(y>=1949&&y<2000&&n===15)))return true;
+      if(m===2&&n===11&&y>=1967)return true;
+      if(m===2&&n===23&&y>=2020)return true;
+      if(m===3&&y>=1949&&n===vernal(y))return true;
+      if(m===4&&n===29&&y>=1949)return true;
+      if(m===5&&n===3&&y>=1949)return true;
+      if(m===5&&n===4&&y>=2007)return true;
+      if(m===5&&n===5&&y>=1949)return true;
+      if(y===2020&&m===7&&n===23)return true;
+      if(y===2021&&m===7&&n===22)return true;
+      if(y!==2020&&y!==2021&&m===7&&((y>=2003&&n===nthMonday(y,7,3))||(y>=1996&&y<2003&&n===20)))return true;
+      if(y===2020&&m===8&&n===10)return true;
+      if(y===2021&&m===8&&n===8)return true;
+      if(y!==2020&&y!==2021&&y>=2016&&m===8&&n===11)return true;
+      if(m===9&&((y>=2003&&n===nthMonday(y,9,3))||(y>=1966&&y<2003&&n===15)))return true;
+      if(m===9&&y>=1948&&n===autumn(y))return true;
+      if(y===2020&&m===7&&n===24)return true;
+      if(y===2021&&m===7&&n===23)return true;
+      if(y!==2020&&y!==2021&&m===10&&((y>=2000&&n===nthMonday(y,10,2))||(y>=1966&&y<2000&&n===10)))return true;
+      if(m===11&&n===3&&y>=1948)return true;
+      if(m===11&&n===23&&y>=1948)return true;
+      if(m===12&&n===23&&y>=1989&&y<=2018)return true;
+      if(y===2019&&((m===5&&n===1)||(m===10&&n===22)))return true;
+      return false;
+    }
+    function baseHolidayKey(k){
+      var y=unpackY(k),m=unpackM(k,y),n=unpackD(k,y,m);
+      return baseHolidayYMD(y,m,n);
+    }
+    function isJapanHoliday(d){
+      var y=d.getFullYear(),m=d.getMonth()+1,n=d.getDate();
+      if(baseHolidayYMD(y,m,n))return true;
+      if(y>=1986){
+        var pk=prevKey(y,m,n),nk=nextKey(y,m,n);
+        if(baseHolidayKey(pk)&&baseHolidayKey(nk))return true;
+      }
+      if(y>=1973){
+        var p=prevKey(y,m,n);
+        if(y<2007)return dowYMD(y,m,n)===1&&baseHolidayKey(p)&&dowKey(p)===0;
+        while(baseHolidayKey(p)){
+          if(dowKey(p)===0)return true;
+          p=prevKeyOf(p);
+        }
+      }
+      return false;
+    }
+    function easterSunday(y){
+      var a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4;
+      var f=Math.floor((b+8)/25),gg=Math.floor((b-f+1)/3);
+      var h=(19*a+b-d-gg+15)%30,i=Math.floor(c/4),k=c%4;
+      var l=(32+2*e+2*i-h-k)%7,mm=Math.floor((a+11*h+22*l)/451);
+      var q=h+l-7*mm+114,month=Math.floor(q/31),day=(q%31)+1;
+      return new Date(y,month-1,day);
+    }
+    function commonUKSpecial(d){
+      var y=d.getFullYear(),m=d.getMonth()+1,n=d.getDate();
+      if(y===2011&&m===4&&n===29)return true;
+      if(y===2022&&m===9&&n===19)return true;
+      if(y===2023&&m===5&&n===8)return true;
+      return false;
+    }
+    function christmasHoliday(d){
+      var y=d.getFullYear(),m=d.getMonth()+1,n=d.getDate();
+      if(m!==12)return false;
+      var xd=dowYMD(y,12,25),x=(xd===0||xd===6)?27:25;
+      if(n===x)return true;
+      var bd=dowYMD(y,12,26),bb=(bd===0||bd===6)?28:26;
+      return n===bb;
+    }
+    function isEnglandWalesHoliday(d){
+      var y=d.getFullYear(),m=d.getMonth()+1,n=d.getDate();
+      var dow=dowYMD(y,1,1),ny=(dow===6)?3:(dow===0?2:1);
+      if(m===1&&n===ny)return true;
+      var easter=easterSunday(y);
+      if(sameDay(d,addDays(easter,-2))||sameDay(d,addDays(easter,1)))return true;
+      if(y===2020){if(m===5&&n===8)return true;}else if(m===5&&n===nthMonday(y,5,1))return true;
+      if(y===2002){if(m===6&&(n===3||n===4))return true;}
+      else if(y===2012){if(m===6&&(n===4||n===5))return true;}
+      else if(y===2022){if(m===6&&(n===2||n===3))return true;}
+      else if(m===5&&n===lastMonday(y,5))return true;
+      if(commonUKSpecial(d))return true;
+      if(m===8&&n===lastMonday(y,8))return true;
+      return christmasHoliday(d);
+    }
+    function isScotlandHoliday(d){
+      var y=d.getFullYear(),m=d.getMonth()+1,n=d.getDate();
+      var dow=dowYMD(y,1,1),ny1,ny2;
+      if(dow===6){ny1=3;ny2=4;}else if(dow===0){ny1=2;ny2=3;}else if(dow===5){ny1=1;ny2=4;}else{ny1=1;ny2=2;}
+      if(m===1&&(n===ny1||n===ny2))return true;
+      var easter=easterSunday(y);
+      if(sameDay(d,addDays(easter,-2)))return true;
+      if(y===2020){if(m===5&&n===8)return true;}else if(m===5&&n===nthMonday(y,5,1))return true;
+      if(y===2002){if(m===6&&(n===3||n===4))return true;}
+      else if(y===2012){if(m===6&&(n===4||n===5))return true;}
+      else if(y===2022){if(m===6&&(n===2||n===3))return true;}
+      else if(m===5&&n===lastMonday(y,5))return true;
+      if(commonUKSpecial(d))return true;
+      if(y===2026&&m===6&&n===15)return true;
+      if(m===8&&n===nthMonday(y,8,1))return true;
+      var sd=dowYMD(y,11,30),sm=11,sn=30;
+      if(sd===6){sm=12;sn=2;}else if(sd===0){sm=12;sn=1;}
+      if(m===sm&&n===sn)return true;
+      return christmasHoliday(d);
+    }
+    function isEnglishHoliday(d){return cfg.ukRegion==="sc"?isScotlandHoliday(d):isEnglandWalesHoliday(d);}
+
+    function topFreeGap(){
+      var spans=[];
+      if(typeof WIDGETS!=="undefined")Object.keys(WIDGETS).forEach(function(k){var wd=WIDGETS[k];if(!wd||!wd.width||!wd.area||wd.area.charAt(0)!=="t")return;if(typeof wd.x==="number")spans.push([wd.x,wd.x+wd.width-1]);});
+      if(!spans.length&&typeof WIDGETS!=="undefined"){
+        var lw=0,rw=0;Object.keys(WIDGETS).forEach(function(k){var wd=WIDGETS[k];if(!wd||!wd.width)return;if(wd.area==="tl")lw+=wd.width;else if(wd.area==="tr")rw+=wd.width;});
+        if(lw)spans.push([0,lw-1]);if(rw)spans.push([W-rw,W-1]);
+      }
+      spans.sort(function(a,b){return a[0]-b[0];});
+      var merged=[];spans.forEach(function(s){s[0]=Math.max(0,s[0]);s[1]=Math.min(W-1,s[1]);if(!merged.length||s[0]>merged[merged.length-1][1]+1)merged.push([s[0],s[1]]);else if(s[1]>merged[merged.length-1][1])merged[merged.length-1][1]=s[1];});
+      var gaps=[],p=0;merged.forEach(function(s){if(s[0]>p)gaps.push([p,s[0]-1]);p=Math.max(p,s[1]+1);});if(p<W)gaps.push([p,W-1]);if(!gaps.length)return [0,W-1];
+      gaps.sort(function(a,b){var aw=a[1]-a[0]+1,bw=b[1]-b[0]+1;if(aw!==bw)return bw-aw;return Math.abs(((a[0]+a[1])>>1)-(W>>1))-Math.abs(((b[0]+b[1])>>1)-(W>>1));});return gaps[0];
+    }
+    function drawTop(text){
+      var s=text||(pageStart.getFullYear()+"/"+pad2(pageStart.getMonth()+1));
+      var gap=topFreeGap(),x1=gap[0]+2,x2=gap[1]-2;if(x2<x1){x1=gap[0];x2=gap[1];}
+      g.setBgColor(BLACK).setColor(BLACK).fillRect(x1,1,x2,22);
+      g.setColor(WHITE).setFont("6x8",2).setFontAlign(0,0).drawString(s,(x1+x2)>>1,12);
+    }
+    function drawSelectionAck(d){
+      drawTop("SEL "+pad2(d.getMonth()+1)+"/"+pad2(d.getDate()));
+      try{g.flip();}catch(e){}
+    }
+    function line2(x1,y1,x2,y2){g.drawLine(x1,y1,x2,y2);g.drawLine(x1+1,y1,x2+1,y2);}
+    function weekdayGlyph(c,x,y){
+      g.setColor(WHITE);
+      if(c===0){line2(x-6,y-8,x-6,y+8);line2(x+5,y-8,x+5,y+8);line2(x-6,y-8,x+5,y-8);line2(x-6,y-2,x+5,y-2);line2(x-6,y+4,x+5,y+4);}
+      else if(c===1){line2(x,y-8,x,y+2);line2(x-2,y-1,x-7,y-6);line2(x+2,y-1,x+7,y-6);line2(x,y+1,x-6,y+8);line2(x,y+1,x+7,y+8);}
+      else if(c===2){line2(x,y-8,x,y+8);line2(x-2,y-1,x-7,y-4);line2(x-2,y-1,x-7,y+6);line2(x+2,y-2,x+7,y-5);line2(x+1,y,x+7,y+6);line2(x-1,y-7,x+2,y-4);}
+      else if(c===3){line2(x,y-8,x,y+8);line2(x-7,y-2,x+7,y-2);line2(x,y-1,x-7,y+7);line2(x,y-1,x+7,y+7);}
+      else if(c===4){line2(x,y-8,x-7,y-2);line2(x,y-8,x+7,y-2);line2(x-5,y-2,x+5,y-2);line2(x-6,y+3,x+6,y+3);line2(x,y-2,x,y+7);line2(x-7,y+8,x+7,y+8);line2(x-5,y+5,x-7,y+2);line2(x+5,y+5,x+7,y+2);}
+      else if(c===5){line2(x,y-8,x,y+7);line2(x-5,y-4,x+5,y-4);line2(x-7,y+7,x+7,y+7);}
+      else{line2(x-6,y-8,x+5,y-8);line2(x-6,y+8,x+5,y+8);line2(x-6,y-8,x-6,y+8);line2(x+5,y-8,x+5,y+8);line2(x-6,y,x+5,y);}
+    }
+    function drawWeekday(c){var x1=Math.floor(c*W/7),x2=Math.floor((c+1)*W/7)-1,bg=BLACK;if(c===5)bg=BLUE;else if(c===6)bg=RED;g.setColor(bg).fillRect(x1,24,x2,47);if(cfg.lang==="en")g.setColor(WHITE).setFont("6x8",2).setFontAlign(0,0).drawString(["M","T","W","T","F","S","S"][c],(x1+x2)>>1,35);else weekdayGlyph(c,(x1+x2)>>1,35);}
+    function cellGeometry(index){var c=index%7,r=(index/7)|0,top=48,gh=H-48;return {x1:Math.floor(c*W/7),x2:Math.floor((c+1)*W/7)-1,y1:top+Math.floor(r*gh/5),y2:top+Math.floor((r+1)*gh/5)-1,c:c};}
+    function buildCellData(){
+      var t0=Math.round(getTime()*1000),d=copyDate(pageStart);
+      todayIndex=-1;
+      for(var i=0;i<35;i++){
+        dayNums[i]=d.getDate();
+        holidayFlags[i]=(cfg.lang==="en"?isEnglishHoliday(d):isJapanHoliday(d))?1:0;
+        if(sameDay(d,today))todayIndex=i;
+        d.setDate(d.getDate()+1);
+      }
+      lastCellPrepMs=Math.round(getTime()*1000)-t0;
+      return lastCellPrepMs;
+    }
+
+    function drawCell(index){
+      if(index<0||index>=35)return;
+      var q=cellGeometry(index),bg=BLACK,fg=WHITE;
+      if(q.c===5)bg=BLUE;
+      if(q.c===6||holidayFlags[index])bg=RED;
+      if(index===todayIndex){bg=GREEN;fg=BLACK;}
+      g.setColor(bg).fillRect(q.x1,q.y1,q.x2,q.y2);
+      g.setColor(fg).setBgColor(bg).setFont("6x8",2).setFontAlign(0,0)
+        .drawString(""+dayNums[index],(q.x1+q.x2)>>1,(q.y1+q.y2)>>1);
+      g.setColor(GRAY).drawRect(q.x1,q.y1,q.x2,q.y2);
+    }
+    function selectedIndex(){if(!selected)return -1;var n=dayNumber(selected)-dayNumber(pageStart);return n>=0&&n<35?n:-1;}
+    function logCalError(stage,e){try{Storage.write("orbclo_dev_orbit.err","calendar "+stage+": "+e);}catch(x){}}
+    function redrawSelected(){var i=selectedIndex();if(i>=0)drawCell(i);}
+    function drawSelectedCell(on){
+      var i=selectedIndex();if(i<0)return;
+      if(!on){drawCell(i);try{g.flip();}catch(e){};return;}
+
+      var q=cellGeometry(i),d=addDays(pageStart,i);
+      g.setColor(WHITE).fillRect(q.x1+1,q.y1+1,q.x2-1,q.y2-1);
+      g.setColor(BLACK).setBgColor(WHITE).setFont("Vector",20).setFontAlign(0,0)
+        .drawString(""+d.getDate(),(q.x1+q.x2)>>1,(q.y1+q.y2)>>1);
+      g.setColor(WHITE).drawRect(q.x1,q.y1,q.x2,q.y2);
+      try{g.flip();}catch(e){}
+    }
+    function drawCalendar(full){
+      g.setBgColor(BLACK).setColor(BLACK);
+      if(full){
+        g.clear();
+        try{Bangle.drawWidgets();}catch(e){}
+      }else g.fillRect(0,24,W-1,H-1);
+      for(var c=0;c<7;c++)drawWeekday(c);
+      for(var i=0;i<35;i++)drawCell(i);
+      drawTop();
+      try{g.flip();}catch(e){}
+    }
+    function report(x){if(onDiag)try{onDiag(x);}catch(e){}}
+    function diagPanel(line1,line2){
+      try{
+        g.setColor(BLACK).fillRect(0,H-34,W-1,H-1);
+        g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",2).setFontAlign(0,-1);
+        g.drawString(line1,W/2,H-33);
+        g.drawString(line2||"",W/2,H-17);
+        try{g.flip();}catch(e){}
+      }catch(e){}
+    }
+    function clearTimer(t){if(t)clearTimeout(t);}
+    function clearTaps(){clearTimer(tapTimer);tapTimer=undefined;tapCount=0;lastXY=undefined;}
+    function stopBlink(){clearTimer(blinkTimer);blinkTimer=undefined;}
+    function blinkTick(){
+      blinkTimer=undefined;
+      if(!active||!selected)return;
+      try{
+        blinkWhite=!blinkWhite;
+        drawSelectedCell(blinkWhite);
+      }catch(e){
+        logCalError("blink",e);
+        return;
+      }
+      if(active&&selected)blinkTimer=setTimeout(blinkTick,500);
+    }
+    function startBlink(){
+      stopBlink();blinkWhite=true;
+      if(active&&selected){
+        try{drawSelectedCell(true);}catch(e){logCalError("frame",e);return;}
+        blinkTimer=setTimeout(blinkTick,500);
+      }
+    }
+    function stopAuto(){clearTimer(autoTimer);autoTimer=undefined;}
+    function armAuto(){stopAuto();if(!active||!cfg||!(cfg.timeout>=15))return;autoTimer=setTimeout(function(){autoTimer=undefined;returnToOrbit();},cfg.timeout*1000);}
+    function stop(){stopBlink();stopAuto();clearTaps();firstTapMs=undefined;active=false;onReturn=undefined;onSelect=undefined;onDiag=undefined;}
+    function resetTransient(){selected=undefined;clearTaps();stopBlink();stopAuto();today=midnight(new Date());pageStart=mondayOf(today);}
+    function returnToOrbit(){if(!active)return;var cb=onReturn,sel=selected?copyDate(selected):undefined;stop();if(cb)cb(sel);}
+    function copyXY(xy){
+      if(!xy||typeof xy.x!=="number"||typeof xy.y!=="number")return undefined;
+      return {x:Math.round(xy.x),y:Math.round(xy.y)};
+    }
+    function dateIndexAt(xy){
+      if(!xy||typeof xy.x!=="number"||typeof xy.y!=="number")return -1;
+      if(xy.x<0||xy.x>=W||xy.y<48||xy.y>=H)return -1;
+      var c=Math.floor(xy.x*7/W),r=Math.floor((xy.y-48)*5/(H-48));
+      if(c<0||c>6||r<0||r>4)return -1;
+      return r*7+c;
+    }
+    function dateAt(xy){
+      var i=dateIndexAt(xy);
+      return i<0?undefined:addDays(pageStart,i);
+    }
+    function showCoordError(){
+      try{
+        g.setColor(RED).fillRect(48,4,127,20);
+        g.setColor(WHITE).setBgColor(RED).setFont("6x8",2).setFontAlign(0,0);
+        g.drawString("NO XY",87,12);
+        try{g.flip();}catch(e){}
+      }catch(e){}
+      try{Bangle.buzz(500);}catch(e){}
+    }
+    function selectAt(xy,dt){
+      var stage="IDX",idx=-1,offset=0;
+      try{
+        idx=dateIndexAt(xy);
+        if(idx<0){
+          report({selOK:0,selStage:"NOXY",selDtMs:dt,buzzMs:500});
+          diagPanel("ERR NOXY","DT "+dt+" B500");
+          try{Bangle.buzz(500);}catch(be){}
+          return false;
+        }
+        stage="DATE";
+        selected=addDays(pageStart,idx);
+        stage="OFFSET";
+        offset=dayNumber(selected)-dayNumber(today);
+        stage="CALL";
+        if(onSelect)onSelect(copyDate(selected),offset);
+        stage="ACK";
+        report({
+          selOK:1,selStage:"OK",selIdx:idx,selOff:offset,selDtMs:dt,
+          selMonth:selected.getMonth()+1,selDay:selected.getDate(),buzzMs:120
+        });
+        diagPanel("SEL "+(offset>=0?"+":"")+offset,
+          pad2(selected.getMonth()+1)+"/"+pad2(selected.getDate())+" DT "+dt);
+        try{Bangle.buzz(120);}catch(be2){}
+        return true;
+      }catch(e){
+        report({selOK:0,selStage:stage,selIdx:idx,selOff:offset,selDtMs:dt,selErr:String(e),buzzMs:500});
+        diagPanel("ERR "+stage,"DT "+dt+" B500");
+        try{Bangle.buzz(500);}catch(be3){}
+        return false;
+      }
+    }
+    function touch(xy){
+      if(!active)return;
+      try{
+        armAuto();
+        var now=Math.round(getTime()*1000),p=copyXY(xy);
+        if(tapTimer){
+          var dt=firstTapMs===undefined?0:now-firstTapMs;
+          var selectXY=lastXY||p;
+          clearTimer(tapTimer);tapTimer=undefined;tapCount=0;lastXY=undefined;firstTapMs=undefined;
+          report({calTap2Seen:1,calTap2Ms:now,calDoubleDtMs:dt,singleOnly:0});
+          selectAt(selectXY,dt);
+          return;
+        }
+        firstTapMs=now;lastXY=p;tapCount=1;
+        report({calTap1Seen:1,calTap1Ms:now,singleOnly:0});
+        tapTimer=setTimeout(function(){
+          tapTimer=undefined;tapCount=0;lastXY=undefined;
+          var waited=Math.round(getTime()*1000)-firstTapMs;
+          firstTapMs=undefined;
+          report({calTap2Seen:0,calSingleTimeout:1,singleOnly:1,singleWaitMs:waited});
+          if(active)returnToOrbit();
+        },400);
+      }catch(e){
+        report({selOK:0,selStage:"TOUCH",selErr:String(e),buzzMs:0});
+        clearTaps();firstTapMs=undefined;
+      }
+    }
+    function swipe(lr,ud){if(!active||!ud)return;clearTaps();armAuto();pageStart=addDays(pageStart,ud<0?35:-35);buildCellData();drawCalendar(false);}
+    function start(opts){
+      opts=opts||{};stop();cfg=readConfig();active=true;
+      onReturn=opts.onReturn;onSelect=opts.onSelect;onDiag=opts.onDiag;startTapMs=opts.tapMs;
+      var startMs=Math.round(getTime()*1000);
+      today=midnight(new Date());
+      var focus=opts.focusDate?midnight(opts.focusDate):(opts.selectedDate?midnight(opts.selectedDate):today);
+      pageStart=mondayOf(focus);selected=opts.selectedDate?midnight(opts.selectedDate):undefined;blinkWhite=true;
+      var cellMs=buildCellData();
+      var drawStartMs=Math.round(getTime()*1000);
+      drawCalendar(true);
+      var doneMs=Math.round(getTime()*1000);
+      var total=startTapMs===undefined?0:doneMs-startTapMs;
+      var drawMs=doneMs-drawStartMs;
+      var preMs=startTapMs===undefined?0:startMs-startTapMs;
+      report({calStartMs:startMs,calDrawStartMs:drawStartMs,calDoneMs:doneMs,
+        calTotalMs:total,calDrawMs:drawMs,calStartDelayMs:preMs,calCellMs:cellMs,calReady:1});
+      diagPanel("T "+total+" D "+drawMs,"C "+cellMs+" P "+preMs);
+      armAuto();
+    }
+    function isActive(){return active;}
+    return {start:start,stop:stop,resetTransient:resetTransient,touch:touch,swipe:swipe,isActive:isActive};
+  }
+
+  return {create:create,readConfig:readConfig,writeConfig:writeConfig};
+})()
