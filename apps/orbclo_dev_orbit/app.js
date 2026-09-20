@@ -1,8 +1,8 @@
-/* Orbclo Dev Orbit 0.71 - calendar render benchmark */
+/* Orbclo Dev Orbit 0.72 - fast calendar data and date-offset fix */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
-  var diag={v:"0.71"};
+  var diag={v:"0.72"};
   function ms(){return Math.round(getTime()*1000);}
   function diagMerge(x){if(!x)return;for(var k in x)diag[k]=x[k];}
   var cfg=Storage.readJSON(CFGFILE,1)||{};
@@ -611,8 +611,16 @@
     }catch(e){}
   }
 
+  function civilDay(y,m,d){
+    y-=m<=2?1:0;
+    var era=Math.floor(y/400),yoe=y-era*400;
+    var mp=m+(m>2?-3:9);
+    var doy=Math.floor((153*mp+2)/5)+d-1;
+    var doe=yoe*365+Math.floor(yoe/4)-Math.floor(yoe/100)+doy;
+    return era*146097+doe-719468;
+  }
   function dayNumber(d){
-    return Math.floor(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())/86400000);
+    return civilDay(d.getFullYear(),d.getMonth()+1,d.getDate());
   }
 
   function stopOrbitTimers(){
@@ -827,7 +835,7 @@
     if(mode!=="orbit"||busy)return;
     try{if(!Bangle.isLCDOn())return;}catch(e){}
 
-    diag={v:"0.71",orbitTapMs:ms(),orbitTouchSeen:1};
+    diag={v:"0.72",orbitTapMs:ms(),orbitTouchSeen:1};
     clearTaps();
     openCalendar(diag.orbitTapMs);
   }
