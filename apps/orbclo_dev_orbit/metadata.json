@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.73",
+  "version": "0.74",
   "author": "onisY",
-  "description": "Two-stage 5wCal rendering. First show the full 35-day calendar immediately with dates, weekends, today, grid, header and widgets but without holiday calculations. After that first frame is visible, calculate all 35 holiday flags together in one deferred batch; only after all 35 checks finish, redraw every affected holiday cell together and flip once. Keep V0.72 arithmetic day-number/OFFSET fix and the 400 ms double-tap window. Diagnostics show initial T/D/C, then holiday calculation H and one-batch update U.",
+  "description": "Speed the first visible 5wCal frame after V0.73 measured T=826 ms, D=629 ms, C=156 ms. Keep the deferred 35-day holiday batch, but make the initial frame cheaper: generate day numbers/today index with integer calendar arithmetic, cache cell geometry, fill weekday/body backgrounds by large regions, draw the grid as shared lines instead of 35 rectangles, keep the proven built-in 6x8 digits, and prebuild the seven Japanese weekday glyphs as tiny 1-bit images at app startup. Add component timing C/W/K/G/R for page data, clear+widgets, weekday row, body, and top header.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,11 +15,11 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app73.js"
+      "url": "app74.js"
     },
     {
       "name": "orbclo_dev_orbit.cal.js",
-      "url": "calendar73.js"
+      "url": "calendar74.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
