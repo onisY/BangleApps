@@ -28,7 +28,6 @@
     var cfg,today,pageStart,selected;
     var active=false,onReturn,onSelect,onDiag,startTapMs,firstTapMs;
     var tapTimer,tapCount=0,lastXY;
-    var preparedStartNo=-999999,preparedCells;
     var blinkTimer,blinkWhite=true,autoTimer;
 
     function midnight(d){return new Date(d.getFullYear(),d.getMonth(),d.getDate());}
@@ -178,22 +177,9 @@
     function drawWeekday(c){var x1=Math.floor(c*W/7),x2=Math.floor((c+1)*W/7)-1,bg=BLACK;if(c===5)bg=BLUE;else if(c===6)bg=RED;g.setColor(bg).fillRect(x1,24,x2,47);if(cfg.lang==="en")g.setColor(WHITE).setFont("6x8",2).setFontAlign(0,0).drawString(["M","T","W","T","F","S","S"][c],(x1+x2)>>1,35);else weekdayGlyph(c,(x1+x2)>>1,35);}
     function cellGeometry(index){var c=index%7,r=(index/7)|0,top=48,gh=H-48;return {x1:Math.floor(c*W/7),x2:Math.floor((c+1)*W/7)-1,y1:top+Math.floor(r*gh/5),y2:top+Math.floor((r+1)*gh/5)-1,c:c};}
     function drawCell(index){
-      if(index<0||index>=35)return;
-      var q=cellGeometry(index),d=addDays(pageStart,index),bg=BLACK,fg=WHITE;
-      var pc=(preparedCells&&preparedStartNo===dayNumber(pageStart))?preparedCells[index]:undefined;
-      if(pc){
-        if(pc.sat)bg=BLUE;
-        if(pc.sun||pc.holiday)bg=RED;
-        if(pc.today){bg=GREEN;fg=BLACK;}
-      }else{
-        if(q.c===5)bg=BLUE;
-        if(q.c===6||(cfg.lang==="en"?isEnglishHoliday(d):isJapanHoliday(d)))bg=RED;
-        if(sameDay(d,today)){bg=GREEN;fg=BLACK;}
-      }
-      g.setColor(bg).fillRect(q.x1,q.y1,q.x2,q.y2);
-      g.setColor(fg).setBgColor(bg).setFont("6x8",2).setFontAlign(0,0)
-        .drawString(""+d.getDate(),(q.x1+q.x2)>>1,(q.y1+q.y2)>>1);
-      g.setColor(GRAY).drawRect(q.x1,q.y1,q.x2,q.y2);
+      if(index<0||index>=35)return;var q=cellGeometry(index),d=addDays(pageStart,index),bg=BLACK,fg=WHITE;
+      if(q.c===5)bg=BLUE;if(q.c===6||(cfg.lang==="en"?isEnglishHoliday(d):isJapanHoliday(d)))bg=RED;if(sameDay(d,today)){bg=GREEN;fg=BLACK;}
+      g.setColor(bg).fillRect(q.x1,q.y1,q.x2,q.y2);g.setColor(fg).setBgColor(bg).setFont("6x8",2).setFontAlign(0,0).drawString(""+d.getDate(),(q.x1+q.x2)>>1,(q.y1+q.y2)>>1);g.setColor(GRAY).drawRect(q.x1,q.y1,q.x2,q.y2);
     }
     function selectedIndex(){if(!selected)return -1;var n=dayNumber(selected)-dayNumber(pageStart);return n>=0&&n<35?n:-1;}
     function logCalError(stage,e){try{Storage.write("orbclo_dev_orbit.err","calendar "+stage+": "+e);}catch(x){}}
@@ -209,26 +195,6 @@
       g.setColor(WHITE).drawRect(q.x1,q.y1,q.x2,q.y2);
       try{g.flip();}catch(e){}
     }
-    function prepare(focusDate){
-      cfg=readConfig();
-      today=midnight(new Date());
-      var ps=mondayOf(midnight(focusDate||today));
-      var key=dayNumber(ps);
-      if(preparedCells&&preparedStartNo===key)return 0;
-      var t0=Math.round(getTime()*1000),arr=[];
-      for(var i=0;i<35;i++){
-        var d=addDays(ps,i),c=i%7;
-        arr.push({
-          sat:c===5,
-          sun:c===6,
-          holiday:(cfg.lang==="en"?isEnglishHoliday(d):isJapanHoliday(d)),
-          today:sameDay(d,today)
-        });
-      }
-      preparedStartNo=key;preparedCells=arr;
-      return Math.round(getTime()*1000)-t0;
-    }
-
     function drawCalendar(full){
       g.setBgColor(BLACK).setColor(BLACK);
       if(full){
@@ -324,7 +290,6 @@
         });
         diagPanel("SEL "+(offset>=0?"+":"")+offset,
           pad2(selected.getMonth()+1)+"/"+pad2(selected.getDate())+" DT "+dt);
-        stage="BUZZ";
         try{Bangle.buzz(120);}catch(be2){}
         return true;
       }catch(e){
@@ -361,7 +326,7 @@
         clearTaps();firstTapMs=undefined;
       }
     }
-    function swipe(lr,ud){if(!active||!ud)return;clearTaps();armAuto();pageStart=addDays(pageStart,ud<0?35:-35);prepare(pageStart);drawCalendar(false);}
+    function swipe(lr,ud){if(!active||!ud)return;clearTaps();armAuto();pageStart=addDays(pageStart,ud<0?35:-35);drawCalendar(false);}
     function start(opts){
       opts=opts||{};stop();cfg=readConfig();active=true;
       onReturn=opts.onReturn;onSelect=opts.onSelect;onDiag=opts.onDiag;startTapMs=opts.tapMs;
@@ -369,7 +334,6 @@
       today=midnight(new Date());
       var focus=opts.focusDate?midnight(opts.focusDate):(opts.selectedDate?midnight(opts.selectedDate):today);
       pageStart=mondayOf(focus);selected=opts.selectedDate?midnight(opts.selectedDate):undefined;blinkWhite=true;
-      var prepMs=prepare(focus);
       var drawStartMs=Math.round(getTime()*1000);
       drawCalendar(true);
       var doneMs=Math.round(getTime()*1000);
@@ -377,12 +341,12 @@
       var drawMs=doneMs-drawStartMs;
       var preMs=startTapMs===undefined?0:startMs-startTapMs;
       report({calStartMs:startMs,calDrawStartMs:drawStartMs,calDoneMs:doneMs,
-        calTotalMs:total,calDrawMs:drawMs,calStartDelayMs:preMs,calPrepMs:prepMs,calReady:1});
-      diagPanel("T "+total+" D "+drawMs,"P "+preMs+" C "+prepMs);
+        calTotalMs:total,calDrawMs:drawMs,calStartDelayMs:preMs,calReady:1});
+      diagPanel("T "+total+" D "+drawMs,"P "+preMs);
       armAuto();
     }
     function isActive(){return active;}
-    return {prepare:prepare,start:start,stop:stop,resetTransient:resetTransient,touch:touch,swipe:swipe,isActive:isActive};
+    return {start:start,stop:stop,resetTransient:resetTransient,touch:touch,swipe:swipe,isActive:isActive};
   }
 
   return {create:create,readConfig:readConfig,writeConfig:writeConfig};
