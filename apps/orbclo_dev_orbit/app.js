@@ -1,9 +1,17 @@
-/* Orbclo Dev Orbit 0.67 - setUI input and persisted date handoff */
+/* Orbclo Dev Orbit 0.68 - self-diagnostic interaction timing */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
-  var SELFILE="orbclo_orbitdev.sel.json";
+  var SELFILE="orbclo_orbitdev.sel.json",DIAGFILE="orbclo_orbitdev.diag.json";
   try{Storage.erase(SELFILE);}catch(e){}
+  try{Storage.erase(DIAGFILE);}catch(e){}
+  var diag={v:"0.68"};
+  function diagSave(){try{Storage.writeJSON(DIAGFILE,diag);}catch(e){}}
+  function diagMerge(x){
+    if(!x)return;
+    for(var k in x)diag[k]=x[k];
+    diagSave();
+  }
   var cfg=Storage.readJSON(CFGFILE,1)||{};
   var calModule,calendar;
   try{
@@ -562,8 +570,20 @@
     g.setColor(RED).fillCircle(x,y,2);
   }
 
+  function drawOrbitDiag(){
+    var d=Storage.readJSON(DIAGFILE,1)||diag;
+    var s="";
+    if(d.selOK===1)s="SOK "+(d.selOff>=0?"+":"")+d.selOff+" B"+(d.buzzMs||0);
+    else if(d.selOK===0)s="E:"+String(d.selStage||"?").substr(0,5)+" B"+(d.buzzMs||0);
+    else if(typeof d.calTotalMs==="number")s="C"+d.calTotalMs+" D"+(d.calDrawMs||0);
+    if(d.returnSeen)s+=" R"+(d.appliedOff>=0?"+":"")+d.appliedOff;
+    if(!s)return;
+    g.setColor(BLACK).fillRect(0,H-9,W-1,H-1);
+    g.setColor(WHITE).setBgColor(BLACK).setFont("6x8").setFontAlign(0,-1)
+      .drawString(s,W/2,H-9);
+  }
+
   function drawBase(){
-    /* Clean real-use redraw: no per-stage timers or on-screen diagnostics. */
     g.reset().setBgColor(BLACK).setColor(BLACK).clear();
     drawSun();
     var sol=safeSolar();
@@ -571,6 +591,7 @@
     drawObserver(sol);
     drawMoon();
     drawHeader();
+    drawOrbitDiag();
     try{g.flip();}catch(err){}
     busy=false;
   }
@@ -626,6 +647,9 @@
     mode="orbit";
     busy=false;
     applyStoredSelection();
+    diag.returnSeen=1;
+    diag.returnMs=Date.now();
+    diagSave();
     drawBase();
     armMinute();
     armSecond();
@@ -645,8 +669,10 @@
       selectedDayOffset=s.offset|0;
       hasSelectedDate=true;
       MOON_CACHE_BUCKET=-1;
+      diag.appliedOff=selectedDayOffset;
       return true;
     }
+    diag.appliedOff=0;
     return false;
   }
 
@@ -665,8 +691,10 @@
     MOON_CACHE_BUCKET=-1;
   }
 
-  function openCalendar(){
+  function openCalendar(tapMs){
     if(killed||mode!=="orbit")return;
+    diag.openMs=Date.now();
+    diag.openDelayMs=diag.openMs-(tapMs||diag.orbitTapMs||diag.openMs);
     stopOrbitTimers();
     mode="calendar";
     interactive=false;
@@ -679,8 +707,12 @@
         calendar.start({
           focusDate:focus,
           selectedDate:hasSelectedDate?focus:undefined,
+          tapMs:tapMs||diag.orbitTapMs,
+          onDiag:function(x){diagMerge(x);},
           onSelect:function(d,offset){
             if(killed||!d)return;
+            diag.selectCallback=1;
+            diag.selectCallbackMs=Date.now();
             try{
               if(typeof offset==="number"&&isFinite(offset)){
                 selectedDayOffset=offset|0;
@@ -694,12 +726,16 @@
               Storage.write("orbclo_dev_orbit.handoff",
                 d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate()+
                 " off="+selectedDayOffset);
+              diag.handoffOff=selectedDayOffset;
+              diagSave();
             }catch(e){
               try{Storage.write("orbclo_dev_orbit.err","select handoff: "+e);}catch(x){}
             }
           },
           onReturn:function(d){
             if(killed)return;
+            diag.returnCallback=1;
+            diag.returnCallbackMs=Date.now();
             try{
               if(!applyStoredSelection()&&d)setDateFromCalendar(d);
               startOrbit(true);
@@ -814,10 +850,9 @@
     if(mode!=="orbit"||busy)return;
     try{if(!Bangle.isLCDOn())return;}catch(e){}
 
-    /* V0.66: enter 5wCal immediately on the first Orbit tap.  The earlier
-       400 ms Orbit-side wait made a correct single tap feel sluggish. */
+    diag={v:"0.68",orbitTapMs:Date.now(),orbitTouchSeen:1};
     clearTaps();
-    openCalendar();
+    openCalendar(diag.orbitTapMs);
   }
 
   function onSwipe(lr,ud){
@@ -831,6 +866,10 @@
 
   function onLCD(on){
     if(!on){
+      diag.lcdOffCount=(diag.lcdOffCount||0)+1;
+      diag.lcdOffMode=mode;
+      diag.lcdOffMs=Date.now();
+      diagSave();
       clearTaps();
       clear(idleTimer);idleTimer=undefined;
       interactive=false;
@@ -841,6 +880,8 @@
         selectedDayOffset=0;
         hasSelectedDate=false;
         clearStoredSelection();
+        diag.selectionCleared="lcd:"+mode;
+        diagSave();
         MOON_CACHE_BUCKET=-1;
         resetOnWake=true;
       }
