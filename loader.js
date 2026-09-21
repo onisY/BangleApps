@@ -381,7 +381,7 @@ function onAppJSONLoaded() {
       id:"orbit",
       name:"orbit",
       shortName:"orbit",
-      version:"0.03",
+      version:"0.031",
       author:"onisY",
       description:"Sun-Earth-Moon clock with North/South view, calendar, municipality-aware Place selection, and on-demand GPS settings.",
       icon:"app.png",
