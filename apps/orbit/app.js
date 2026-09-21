@@ -1,4 +1,4 @@
-/* orbit 0.031 */
+/* orbit 0.032 */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbit.json";
@@ -71,6 +71,12 @@
   var TESTLAT=Math.max(-90,Math.min(90,+cfg.manualLat));
   var TESTLON=Math.max(-180,Math.min(180,+cfg.manualLon));
   var VIEW_SOUTH=!!cfg.viewSide;
+  /* Keep only tiny display metadata; location databases are never loaded here. */
+  var LOCMODE=(cfg.locationMode===0?0:(cfg.locationMode===2?2:1));
+  var LOCNAME=(LOCMODE===0?(cfg.locName||cfg.locPref||"Place"):"");
+  if(LOCNAME.length>18)LOCNAME=LOCNAME.substr(0,17)+"~";
+  var LOCLAT=Math.abs(TESTLAT).toFixed(3)+(TESTLAT<0?"S":"N");
+  var LOCLON=Math.abs(TESTLON).toFixed(3)+(TESTLON<0?"W":"E");
   /* Runtime has copied everything it needs; release the configuration object. */
   cfg=undefined;
   var LIGHTSPAN=[],LIGHTBX=[],LIGHTBY=[],LIGHTLIMB=[],LIGHTSTEPS=6,LUX=0,LUY=0,LVX=0,LVY=0;
@@ -618,6 +624,32 @@
   }
 
 
+  function drawSatelliteIcon(x,y){
+    g.drawRect(x,y+2,x+3,y+5);
+    g.fillRect(x+5,y+2,x+7,y+5);
+    g.drawRect(x+9,y+2,x+12,y+5);
+    g.drawLine(x+6,y+1,x+6,y);
+    g.setPixel(x+6,y);
+  }
+
+  function drawLocationStatus(){
+    g.setBgColor(BLACK).setColor(WHITE).setFont("6x8").setFontAlign(1,-1);
+    if(LOCMODE===0){
+      var w=Math.min(108,g.stringWidth(LOCNAME))+3;
+      g.setColor(BLACK).fillRect(W-w,H-10,W-1,H-1);
+      g.setBgColor(BLACK).setColor(WHITE).drawString(LOCNAME,W-2,H-9);
+      return;
+    }
+    g.setColor(BLACK).fillRect(W-61,H-19,W-1,H-1);
+    g.setBgColor(BLACK).setColor(WHITE).setFont("6x8").setFontAlign(1,-1);
+    g.drawString(LOCLAT,W-2,H-18);
+    g.drawString(LOCLON,W-2,H-9);
+    if(LOCMODE===2){
+      g.setColor(CYAN);
+      drawSatelliteIcon(W-60,H-17);
+    }
+  }
+
   function drawBase(){
     g.reset().setBgColor(BLACK).setColor(BLACK).clear();
     drawSun();
@@ -625,6 +657,7 @@
     drawEarth(sol);
     drawObserver(sol);
     drawMoon();
+    drawLocationStatus();
     drawHeader();
     try{g.flip();}catch(err){}
     busy=false;
