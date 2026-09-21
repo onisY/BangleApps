@@ -4,7 +4,7 @@
   "shortName": "orbit",
   "version": "0.03",
   "author": "onisY",
-  "description": "Sun-Earth-Moon clock with balanced large-body layout, selectable North/South polar view, integrated five-week calendar with robust single-date yellow blinking, Place/Manual/on-demand GPS location settings, Japan/UK holiday caches and editable personal events.",
+  "description": "Sun-Earth-Moon clock with balanced North/South view, integrated calendar, Place/Manual/on-demand GPS settings; Japan Place selection includes prefecture then municipality, while wide multi-time-zone countries include representative cities.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,science,astronomy,calendar,moon",
@@ -29,6 +29,10 @@
     {
       "name": "orbitloc",
       "url": "locations.js"
+    },
+    {
+      "name": "orbitjp.dat",
+      "url": "japan-municipalities.dat"
     },
     {
       "name": "orbit.img",
