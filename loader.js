@@ -383,7 +383,7 @@ function onAppJSONLoaded() {
       shortName:"orbit",
       version:"0.03",
       author:"onisY",
-      description:"Sun-Earth-Moon clock with North/South view, calendar, and Place/Manual/on-demand GPS settings.",
+      description:"Sun-Earth-Moon clock with North/South view, calendar, municipality-aware Place selection, and on-demand GPS settings.",
       icon:"app.png",
       type:"clock",
       tags:"clock,science,astronomy,calendar,moon",
@@ -395,6 +395,7 @@ function onAppJSONLoaded() {
         {name:"orbit.cal.js",url:"calendar.js"},
         {name:"orbit.settings.js",url:"settings.js"},
         {name:"orbitloc",url:"locations.js"},
+        {name:"orbitjp.dat",url:"japan-municipalities.dat"},
         {name:"orbit.img",url:"app-icon.js",evaluate:true}
       ],
       data:[
