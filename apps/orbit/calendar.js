@@ -830,7 +830,17 @@
     function armAuto(){stopAuto();if(!active||!cfg||!(cfg.timeout>=15))return;autoTimer=setTimeout(function(){autoTimer=undefined;returnToOrbit();},cfg.timeout*1000);}
     function stop(){cancelHolidayBatch();stopEventBlink();stopBlink();stopAuto();clearTaps();firstTapMs=undefined;active=false;onReturn=undefined;onSelect=undefined;onDiag=undefined;}
     function resetTransient(){cancelHolidayBatch();stopEventBlink();selected=undefined;clearTaps();stopBlink();stopAuto();today=midnight(new Date());pageStart=mondayOf(today);}
-    function returnToOrbit(){if(!active)return;var cb=onReturn,sel=selected?copyDate(selected):undefined;stop();if(cb)cb(sel);}
+    function returnToOrbit(){
+      if(!active)return;
+      var cb=onReturn,sel=selected?copyDate(selected):undefined;
+      /* Remove the visible yellow selection before leaving the calendar.
+         The selected date itself is still handed to Orbit and will resume
+         blinking if the calendar is opened again. */
+      stopBlink();
+      if(selectedIndex()>=0){redrawSelected();try{g.flip();}catch(e){}}
+      stop();
+      if(cb)setTimeout(function(){cb(sel);},0);
+    }
     function copyXY(xy){
       if(!xy||typeof xy.x!=="number"||typeof xy.y!=="number")return undefined;
       return {x:Math.round(xy.x),y:Math.round(xy.y)};
