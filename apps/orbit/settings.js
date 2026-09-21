@@ -17,8 +17,14 @@
   function appCfg(){
     var s=readJSON(CFG,{});
     if(!isFinite(s.lat))s.lat=35.694;if(!isFinite(s.lon))s.lon=139.754;
-    if(!isFinite(s.sunSize))s.sunSize=6;if(!isFinite(s.earthSize))s.earthSize=30;
-    if(!isFinite(s.moonSize))s.moonSize=7;if(!isFinite(s.moonOrbit))s.moonOrbit=44;
+    if(!isFinite(s.sunSize))s.sunSize=8;if(!isFinite(s.earthSize))s.earthSize=42;
+    if(!isFinite(s.moonSize))s.moonSize=15;if(!isFinite(s.moonOrbit))s.moonOrbit=62;
+    s.sunSize=Math.max(6,Math.min(15,s.sunSize|0));
+    s.earthSize=Math.max(40,Math.min(45,s.earthSize|0));
+    s.moonSize=Math.max(14,Math.min(16,s.moonSize|0));
+    var minOrbit=s.earthSize+s.moonSize+4;
+    s.moonOrbit=Math.max(minOrbit,Math.min(70,s.moonOrbit|0));
+    s.layoutVersion=2;
 
     // Preserve pre-location-mode coordinates from the consolidated orbit build.
     if(s.locationMode===undefined){
@@ -299,17 +305,31 @@
     try{E.removeListener("kill",onKill);}catch(e){}
     back();
   }
+  function exitToOrbit(){
+    stopGPS();
+    try{E.removeListener("kill",onKill);}catch(e){}
+    load("orbit.app.js");
+  }
   function onKill(){stopGPS();}
 
   function main(){
     stopGPS();
     var s=appCfg(),c=calCfg();
+    var minOrbit=s.earthSize+s.moonSize+4;
+    if(s.moonOrbit<minOrbit){s.moonOrbit=minOrbit;write(CFG,s);}
     var m={"":{title:"orbit"},"< Back":leave,
+      "Exit to orbit":exitToOrbit,
       "Location":locationMenu,
-      "Sun size":{value:s.sunSize,min:4,max:15,step:1,onchange:function(v){s.sunSize=v;write(CFG,s);}},
-      "Earth size":{value:s.earthSize,min:25,max:50,step:1,onchange:function(v){s.earthSize=v;write(CFG,s);}},
-      "Moon size":{value:s.moonSize,min:4,max:15,step:1,onchange:function(v){s.moonSize=v;write(CFG,s);}},
-      "Moon orbit":{value:s.moonOrbit,min:40,max:80,step:1,onchange:function(v){s.moonOrbit=v;write(CFG,s);}},
+      "Sun size":{value:s.sunSize,min:6,max:15,step:1,onchange:function(v){s.sunSize=v;write(CFG,s);}},
+      "Earth size":{value:s.earthSize,min:40,max:45,step:1,onchange:function(v){
+        s.earthSize=v;var mn=s.earthSize+s.moonSize+4;if(s.moonOrbit<mn)s.moonOrbit=mn;
+        write(CFG,s);setTimeout(main,10);
+      }},
+      "Moon size":{value:s.moonSize,min:14,max:16,step:1,onchange:function(v){
+        s.moonSize=v;var mn=s.earthSize+s.moonSize+4;if(s.moonOrbit<mn)s.moonOrbit=mn;
+        write(CFG,s);setTimeout(main,10);
+      }},
+      "Moon orbit":{value:s.moonOrbit,min:minOrbit,max:70,step:1,onchange:function(v){s.moonOrbit=v;write(CFG,s);}},
       "Calendar region":{value:calRegion(c),min:0,max:3,step:1,format:function(v){return ["Japan","England/Wales","Scotland","N. Ireland"][v];},onchange:function(v){setCalRegion(c,v);}},
       "Auto return":{value:c.timeout,min:15,max:120,step:15,format:function(v){return v+" s";},onchange:function(v){c.timeout=v;write(CAL,c);}},
       "Events":eventsMenu,
