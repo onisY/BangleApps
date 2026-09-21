@@ -1,6 +1,7 @@
 (function(back){
   var Storage=require("Storage");
-  var D=require("orbitloc"),C=D.countries,P=D.prefs;
+  var D=require("orbitloc"),C=D.countries,P=D.prefs,JPI=D.jpidx||[];
+  var JPFILE="orbitjp.dat",jpPrefCache=-1,jpMunicipalities=[];
   var CFG="orbit.json",CAL="orbit.cal.json",EVENTS="orbit.events.json";
   var GPS_ID="orbitsettings";
   var COLORS=["red","yellow","green","blue","cyan","magenta","orange","white","gray","black"];
@@ -14,6 +15,17 @@
   function readJSON(name,def){return Storage.readJSON(name,1)||def;}
   function countryIndex(name){for(var i=0;i<C.length;i++)if(C[i][0]===name)return i;return -1;}
   function prefIndex(name){for(var i=0;i<P.length;i++)if(P[i][0]===name)return i;return -1;}
+  function loadMunicipalities(pi){
+    pi=Math.max(0,Math.min(P.length-1,pi|0));
+    if(jpPrefCache===pi)return jpMunicipalities;
+    jpPrefCache=pi;jpMunicipalities=[];
+    try{
+      var q=JPI[pi];
+      if(q)jpMunicipalities=JSON.parse(Storage.read(JPFILE,q[0],q[1])||"[]");
+    }catch(e){jpMunicipalities=[];}
+    if(!jpMunicipalities.length)jpMunicipalities=P[pi][1]||[];
+    return jpMunicipalities;
+  }
   function appCfg(){
     var s=readJSON(CFG,{});
     if(!isFinite(s.lat))s.lat=35.694;if(!isFinite(s.lon))s.lon=139.754;
@@ -38,11 +50,18 @@
     if(!s.countryName)s.countryName="Japan";
     if(!isFinite(s.pref))s.pref=12;
     s.pref=Math.max(0,Math.min(P.length-1,s.pref|0));
+    if(!isFinite(s.municipality))s.municipality=0;
 
     // Migrate settings from the older Orbit location scheme when present.
     var pi=prefIndex(s.locPref);
     if(pi>=0){s.countryName="Japan";s.pref=pi;}
     if(countryIndex(s.countryName)<0)s.countryName="Japan";
+    if(s.countryName==="Japan"){
+      var ml=loadMunicipalities(s.pref),mf=-1;
+      if(s.locName)for(var mi=0;mi<ml.length;mi++)if(ml[mi][0]===s.locName){mf=mi;break;}
+      if(mf>=0)s.municipality=mf;
+      s.municipality=Math.max(0,Math.min(Math.max(0,ml.length-1),s.municipality|0));
+    }
     if(!isFinite(s.place))s.place=0;
     if(s.countryName!=="Japan"){
       var ci=countryIndex(s.countryName),list=C[ci][1]||[],found=-1;
@@ -86,7 +105,9 @@
     if(ci<0){s.countryName="Japan";ci=countryIndex("Japan");}
     if(s.countryName==="Japan"){
       s.pref=Math.max(0,Math.min(P.length-1,s.pref|0));
-      return {group:P[s.pref][0],place:P[s.pref][1][0]};
+      var list=loadMunicipalities(s.pref);
+      s.municipality=Math.max(0,Math.min(Math.max(0,list.length-1),isFinite(s.municipality)?(s.municipality|0):0));
+      return {group:P[s.pref][0],place:list[s.municipality]};
     }
     var list=C[ci][1]||[];
     s.place=Math.max(0,Math.min(Math.max(0,list.length-1),isFinite(s.place)?(s.place|0):0));
@@ -188,14 +209,22 @@
     if(s.locationMode===0){
       m["Country"]={value:ci,min:0,max:C.length-1,step:1,
         format:function(v){return C[v][0];},
-        onchange:function(v){s.countryName=C[v][0];s.place=0;applyPlace(s);setTimeout(locationMenu,10);}
+        onchange:function(v){s.countryName=C[v][0];s.place=0;s.municipality=0;applyPlace(s);setTimeout(locationMenu,10);}
       };
       if(s.countryName==="Japan"){
         m["Prefecture"]={value:s.pref,min:0,max:P.length-1,step:1,
           format:function(v){return P[v][0];},
-          onchange:function(v){s.pref=v;applyPlace(s);}
+          onchange:function(v){
+            s.pref=v;s.municipality=0;jpPrefCache=-1;applyPlace(s);
+            setTimeout(locationMenu,10);
+          }
         };
-        m["Capital"]={value:0,min:0,max:0,format:function(){return P[s.pref][1][0][0];}};
+        var ml=loadMunicipalities(s.pref);
+        s.municipality=Math.max(0,Math.min(ml.length-1,s.municipality|0));
+        m["Municipality"]={value:s.municipality,min:0,max:ml.length-1,step:1,
+          format:function(v){return ml[v][0];},
+          onchange:function(v){s.municipality=v;applyPlace(s);}
+        };
       }else{
         var list=C[ci][1]||[];
         if(list.length>1){
