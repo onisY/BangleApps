@@ -7,7 +7,7 @@ A Bangle.js 2 Sun-Earth-Moon clock with an integrated five-week calendar.
 - Single-tap the orbit face to open the integrated calendar.
 - Double-tap the orbit face to open orbit settings.
 - In the calendar, double-tap a date to select it. Only the current selected date blinks yellow; changing selection repaints the calendar body first so an older selection cannot remain highlighted.
-- Single-tap the calendar to return to orbit using the selected date.
+- Single-tap the calendar to return to orbit using the selected date. The visible yellow selection highlight is cleared before the screen changes to orbit; the selected date itself remains active in Orbit.
 - Reopen the calendar and the selected date continues blinking.
 - Double-tap outside the date grid to clear the selected date.
 - Swipe vertically in the calendar to move by five weeks.
@@ -18,7 +18,7 @@ A Bangle.js 2 Sun-Earth-Moon clock with an integrated five-week calendar.
 Open **Settings > Apps > orbit**, or double-tap the orbit face. The settings menu includes **Exit to orbit** so it can return directly to the clock. The standard app settings screen controls:
 
 - location mode: Place, Manual, or GPS
-- Place: all 47 Japanese prefectural capitals and world national capitals; wide countries using multiple civil-time standards also offer representative cities for their major time zones
+- Place: Japan selects prefecture then municipality; other countries use national capitals, with representative cities added for wide countries using multiple civil-time standards
 - Manual: latitude/longitude
 - GPS: on-demand fix only while this Settings screen is acquiring; GPS is immediately switched off after a fix, cancel, or leaving Settings
 - selectable **View side: North / South** polar viewpoint
