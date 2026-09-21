@@ -34,6 +34,7 @@
     if(s.locationMode<0||s.locationMode>2)s.locationMode=1;
     if(!isFinite(s.manualLat))s.manualLat=s.lat;
     if(!isFinite(s.manualLon))s.manualLon=s.lon;
+    if(s.viewSide!==0&&s.viewSide!==1)s.viewSide=0;
     if(!s.countryName)s.countryName="Japan";
     if(!isFinite(s.pref))s.pref=12;
     s.pref=Math.max(0,Math.min(P.length-1,s.pref|0));
@@ -320,6 +321,10 @@
     var m={"":{title:"orbit"},"< Back":leave,
       "Exit to orbit":exitToOrbit,
       "Location":locationMenu,
+      "View side":{value:s.viewSide,min:0,max:1,step:1,
+        format:function(v){return v?"South":"North";},
+        onchange:function(v){s.viewSide=v?1:0;write(CFG,s);}
+      },
       "Sun size":{value:s.sunSize,min:6,max:15,step:1,onchange:function(v){s.sunSize=v;write(CFG,s);}},
       "Earth size":{value:s.earthSize,min:40,max:45,step:1,onchange:function(v){
         s.earthSize=v;var mn=s.earthSize+s.moonSize+4;if(s.moonOrbit<mn)s.moonOrbit=mn;
