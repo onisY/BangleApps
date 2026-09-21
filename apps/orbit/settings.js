@@ -1,7 +1,7 @@
 (function(back){
   var Storage=require("Storage");
-  var D=require("orbitloc"),C=D.countries,P=D.prefs,JPI=D.jpidx||[];
-  var JPFILE="orbitjp.dat",jpPrefCache=-1,jpMunicipalities=[];
+  var C,P,JPI;
+  var JPFILE="orbitjp.dat",jpPrefCache=-1,jpMunicipalities;
   var CFG="orbit.json",CAL="orbit.cal.json",EVENTS="orbit.events.json";
   var GPS_ID="orbitsettings";
   var COLORS=["red","yellow","green","blue","cyan","magenta","orange","white","gray","black"];
@@ -13,24 +13,58 @@
   var gpsHandler,gpsActive=false,gpsStarted=0,gpsLastDraw=0,gpsLastSats=-1,gpsLastHdop=-1,gpsLastFix;
 
   function readJSON(name,def){return Storage.readJSON(name,1)||def;}
-  function countryIndex(name){for(var i=0;i<C.length;i++)if(C[i][0]===name)return i;return -1;}
-  function prefIndex(name){for(var i=0;i<P.length;i++)if(P[i][0]===name)return i;return -1;}
+  function write(name,obj){Storage.writeJSON(name,obj);}
+
+  /* Place tables are loaded only while Place is being edited. */
+  function loadPlaceIndex(){
+    if(C&&P)return;
+    var d=require("orbitloc");
+    C=d.countries;P=d.prefs;JPI=d.jpidx||[];
+    d=undefined;
+  }
+  function releaseMunicipalities(){
+    jpPrefCache=-1;
+    jpMunicipalities=undefined;
+  }
+  function releasePlaceData(){
+    releaseMunicipalities();
+    C=undefined;P=undefined;JPI=undefined;
+    try{
+      if(typeof Modules!=="undefined"&&Modules.getCached&&
+         Modules.getCached().includes("orbitloc"))Modules.removeCached("orbitloc");
+    }catch(e){}
+  }
+  function countryIndex(name){
+    for(var i=0;C&&i<C.length;i++)if(C[i][0]===name)return i;
+    return -1;
+  }
+  function prefIndex(name){
+    for(var i=0;P&&i<P.length;i++)if(P[i][0]===name)return i;
+    return -1;
+  }
   function loadMunicipalities(pi){
+    loadPlaceIndex();
     pi=Math.max(0,Math.min(P.length-1,pi|0));
-    if(jpPrefCache===pi)return jpMunicipalities;
-    jpPrefCache=pi;jpMunicipalities=[];
+    if(jpPrefCache===pi&&jpMunicipalities)return jpMunicipalities;
+    releaseMunicipalities();
+    var list;
     try{
       var q=JPI[pi];
-      if(q)jpMunicipalities=JSON.parse(Storage.read(JPFILE,q[0],q[1])||"[]");
-    }catch(e){jpMunicipalities=[];}
-    if(!jpMunicipalities.length)jpMunicipalities=P[pi][1]||[];
-    return jpMunicipalities;
+      if(q)list=JSON.parse(Storage.read(JPFILE,q[0],q[1])||"[]");
+    }catch(e){list=undefined;}
+    if(!list||!list.length)list=P[pi][1]||[];
+    jpPrefCache=pi;jpMunicipalities=list;
+    return list;
   }
+
   function appCfg(){
-    var s=readJSON(CFG,{});
-    if(!isFinite(s.lat))s.lat=35.694;if(!isFinite(s.lon))s.lon=139.754;
-    if(!isFinite(s.sunSize))s.sunSize=8;if(!isFinite(s.earthSize))s.earthSize=42;
-    if(!isFinite(s.moonSize))s.moonSize=15;if(!isFinite(s.moonOrbit))s.moonOrbit=62;
+    var s=readJSON(CFG,{}),changed=false;
+    function set(k,v){if(s[k]!==v){s[k]=v;changed=true;}}
+
+    if(!isFinite(s.sunSize))s.sunSize=8;
+    if(!isFinite(s.earthSize))s.earthSize=42;
+    if(!isFinite(s.moonSize))s.moonSize=15;
+    if(!isFinite(s.moonOrbit))s.moonOrbit=62;
     s.sunSize=Math.max(6,Math.min(15,s.sunSize|0));
     s.earthSize=Math.max(40,Math.min(45,s.earthSize|0));
     s.moonSize=Math.max(14,Math.min(16,s.moonSize|0));
@@ -38,39 +72,55 @@
     s.moonOrbit=Math.max(minOrbit,Math.min(70,s.moonOrbit|0));
     s.layoutVersion=2;
 
-    // Preserve pre-location-mode coordinates from the consolidated orbit build.
-    if(s.locationMode===undefined){
-      s.locationMode=1;
-      s.manualLat=s.lat;s.manualLon=s.lon;
+    var lat,lon;
+    if(s.coordVersion!==2){
+      lat=isFinite(s.lat)?+s.lat:(isFinite(s.manualLat)?+s.manualLat:35.694);
+      lon=isFinite(s.lon)?+s.lon:(isFinite(s.manualLon)?+s.manualLon:139.754);
+      set("coordVersion",2);
+    }else{
+      lat=isFinite(s.manualLat)?+s.manualLat:35.694;
+      lon=isFinite(s.manualLon)?+s.manualLon:139.754;
     }
-    if(s.locationMode<0||s.locationMode>2)s.locationMode=1;
-    if(!isFinite(s.manualLat))s.manualLat=s.lat;
-    if(!isFinite(s.manualLon))s.manualLon=s.lon;
+    set("manualLat",Math.max(-90,Math.min(90,lat)));
+    set("manualLon",Math.max(-180,Math.min(180,lon)));
+    if(s.lat!==undefined){delete s.lat;changed=true;}
+    if(s.lon!==undefined){delete s.lon;changed=true;}
+
+    if(s.locationMode<0||s.locationMode>2||s.locationMode===undefined)s.locationMode=1;
     if(s.viewSide!==0&&s.viewSide!==1)s.viewSide=0;
     if(!s.countryName)s.countryName="Japan";
     if(!isFinite(s.pref))s.pref=12;
-    s.pref=Math.max(0,Math.min(P.length-1,s.pref|0));
+    s.pref=Math.max(0,Math.min(46,s.pref|0));
     if(!isFinite(s.municipality))s.municipality=0;
-
-    // Migrate settings from the older Orbit location scheme when present.
-    var pi=prefIndex(s.locPref);
-    if(pi>=0){s.countryName="Japan";s.pref=pi;}
-    if(countryIndex(s.countryName)<0)s.countryName="Japan";
-    if(s.countryName==="Japan"){
-      var ml=loadMunicipalities(s.pref),mf=-1;
-      if(s.locName)for(var mi=0;mi<ml.length;mi++)if(ml[mi][0]===s.locName){mf=mi;break;}
-      if(mf>=0)s.municipality=mf;
-      s.municipality=Math.max(0,Math.min(Math.max(0,ml.length-1),s.municipality|0));
-    }
     if(!isFinite(s.place))s.place=0;
-    if(s.countryName!=="Japan"){
-      var ci=countryIndex(s.countryName),list=C[ci][1]||[],found=-1;
-      if(s.locName)for(var li=0;li<list.length;li++)if(list[li][0]===s.locName){found=li;break;}
-      if(found>=0)s.place=found;
-      s.place=Math.max(0,Math.min(Math.max(0,list.length-1),s.place|0));
-    }
+
+    if(changed)write(CFG,s);
     return s;
   }
+
+  function normalizePlaceState(s){
+    loadPlaceIndex();
+    if(countryIndex(s.countryName)<0)s.countryName="Japan";
+    var pi=prefIndex(s.locPref);
+    if(pi>=0&&s.countryName==="Japan")s.pref=pi;
+    s.pref=Math.max(0,Math.min(P.length-1,s.pref|0));
+
+    if(s.countryName==="Japan"){
+      var ml=loadMunicipalities(s.pref),found=-1;
+      if(s.placeStateVersion!==1&&s.locName)
+        for(var i=0;i<ml.length;i++)if(ml[i][0]===s.locName){found=i;break;}
+      if(found>=0)s.municipality=found;
+      s.municipality=Math.max(0,Math.min(Math.max(0,ml.length-1),s.municipality|0));
+    }else{
+      var ci=countryIndex(s.countryName),list=C[ci][1]||[],f=-1;
+      if(s.placeStateVersion!==1&&s.locName)
+        for(var j=0;j<list.length;j++)if(list[j][0]===s.locName){f=j;break;}
+      if(f>=0)s.place=f;
+      s.place=Math.max(0,Math.min(Math.max(0,list.length-1),s.place|0));
+    }
+    s.placeStateVersion=1;
+  }
+
   function calCfg(){
     var c=readJSON(CAL,{});
     if(c.lang!=="ja"&&c.lang!=="en")c.lang="ja";
@@ -83,7 +133,6 @@
     if(!Array.isArray(d.events))d={version:1,events:[]};
     return d;
   }
-  function write(name,obj){Storage.writeJSON(name,obj);}
   function pad2(n){return (n<10?"0":"")+n;}
   function dim(y,m){return m===2?(((y%4===0&&y%100!==0)||y%400===0)?29:28):[31,0,31,30,31,30,31,31,30,31,30,31][m-1];}
   function clampDay(y,m,d){return Math.max(1,Math.min(dim(y,m),d|0));}
@@ -100,30 +149,35 @@
   function defaultColor(type){return type==="holiday"?"red":type==="birthday"?"magenta":type==="family"?"yellow":"yellow";}
 
   // ---------- Location ----------
-  function placeFor(s){
+  function selectedPlace(s){
+    normalizePlaceState(s);
     var ci=countryIndex(s.countryName);
-    if(ci<0){s.countryName="Japan";ci=countryIndex("Japan");}
     if(s.countryName==="Japan"){
-      s.pref=Math.max(0,Math.min(P.length-1,s.pref|0));
-      var list=loadMunicipalities(s.pref);
-      s.municipality=Math.max(0,Math.min(Math.max(0,list.length-1),isFinite(s.municipality)?(s.municipality|0):0));
-      return {group:P[s.pref][0],place:list[s.municipality]};
+      var jl=loadMunicipalities(s.pref);
+      return {group:P[s.pref][0],place:jl[s.municipality]};
     }
     var list=C[ci][1]||[];
-    s.place=Math.max(0,Math.min(Math.max(0,list.length-1),isFinite(s.place)?(s.place|0):0));
     return {group:C[ci][0],place:list[s.place]};
   }
-  function applyPlace(s){
-    var q=placeFor(s),p=q.place;if(!p)return;
-    s.locationMode=0;s.locPref=q.group;s.locName=p[0];s.lat=p[1];s.lon=p[2];write(CFG,s);
+  function commitPlace(s){
+    var q=selectedPlace(s),p=q.place;
+    if(!p)return;
+    s.locationMode=0;s.locPref=q.group;s.locName=p[0];
+    s.manualLat=p[1];s.manualLon=p[2];
+    write(CFG,s);
+    var msg=q.group+" / "+p[0]+"\nLat "+Number(s.manualLat).toFixed(3)+"\nLon "+Number(s.manualLon).toFixed(3);
+    releasePlaceData();
+    E.showAlert(msg,"Location saved").then(main);
   }
   function applyManual(s){
     s.locationMode=1;s.locPref="Manual";s.locName="Custom";
-    s.lat=s.manualLat;s.lon=s.manualLon;write(CFG,s);
+    write(CFG,s);
   }
   function applyGPS(s,fix){
     s.locationMode=2;s.locPref="GPS";s.locName="GPS";
-    s.lat=fix.lat;s.lon=fix.lon;write(CFG,s);
+    s.manualLat=Math.max(-90,Math.min(90,+fix.lat));
+    s.manualLon=Math.max(-180,Math.min(180,+fix.lon));
+    write(CFG,s);
   }
   function stopGPS(){
     if(gpsHandler){try{Bangle.removeListener("GPS",gpsHandler);}catch(e){}gpsHandler=undefined;}
@@ -147,7 +201,9 @@
     var sec=Math.max(0,Math.round((Date.now()-gpsStarted)/1000)),m=Math.floor(sec/60),ss=sec%60;
     return (m<10?"0":"")+m+":"+(ss<10?"0":"")+ss;
   }
-  function gpsLocationText(s){return "Lat "+Number(s.lat).toFixed(4)+"\nLon "+Number(s.lon).toFixed(4);}
+  function gpsLocationText(s){
+    return "Lat "+Number(s.manualLat).toFixed(4)+"\nLon "+Number(s.manualLon).toFixed(4);
+  }
   function showGPSProgress(s,force){
     if(!gpsActive)return;
     var fix=gpsLastFix||{},sats=isFinite(fix.satellites)?fix.satellites|0:0;
@@ -157,16 +213,15 @@
     gpsLastSats=sats;gpsLastHdop=hdop;gpsLastDraw=now;
     E.showMenu({
       "":{title:"GPS input"},
-      "< Cancel":function(){stopGPS();locationMenu();},
+      "< Cancel":function(){stopGPS();locationMenu(s);},
       "State":{value:0,min:0,max:0,format:function(){return gpsStateText(fix);}},
       "Satellites":{value:0,min:0,max:0,format:function(){return sats+" "+gpsBar(sats);}},
       "HDOP":{value:0,min:0,max:0,format:function(){return hdop?hdop.toFixed(1):"--";}},
       "Elapsed":{value:0,min:0,max:0,format:function(){return gpsElapsed();}}
     });
   }
-  function startGPS(){
-    var s=appCfg();
-    stopGPS();
+  function startGPS(s){
+    stopGPS();releasePlaceData();
     s.locationMode=2;write(CFG,s);
     gpsStarted=Date.now();gpsLastDraw=0;gpsLastSats=-1;gpsLastHdop=-1;gpsLastFix={};
     gpsHandler=function(fix){
@@ -175,55 +230,66 @@
       if(fix.fix&&isFinite(fix.lat)&&isFinite(fix.lon)){
         applyGPS(s,fix);stopGPS();
         try{Bangle.buzz(300);}catch(e){}
-        E.showAlert("GPS location saved\n"+gpsLocationText(s),"orbit GPS").then(locationMenu);
+        E.showAlert("GPS location saved\n"+gpsLocationText(s),"orbit GPS").then(main);
         return;
       }
       showGPSProgress(s,false);
     };
     Bangle.on("GPS",gpsHandler);gpsActive=true;
     try{Bangle.setGPSPower(1,GPS_ID);}
-    catch(e){stopGPS();E.showAlert("Could not start GPS","orbit GPS").then(locationMenu);return;}
+    catch(e){
+      stopGPS();
+      E.showAlert("Could not start GPS","orbit GPS").then(function(){locationMenu(s);});
+      return;
+    }
     showGPSProgress(s,true);
   }
   function locationInfo(s){
-    var prefix=s.locationMode===0?(s.countryName==="Japan"?"Japan / "+s.locPref:s.locPref):(s.locationMode===2?"GPS":"Manual");
+    var prefix=s.locationMode===0?(s.locPref||"Place"):(s.locationMode===2?"GPS":"Manual");
     E.showAlert(prefix+" / "+(s.locName||"")+
-      "\nLat "+Number(s.lat).toFixed(3)+"\nLon "+Number(s.lon).toFixed(3),"orbit location").then(locationMenu);
+      "\nLat "+Number(s.manualLat).toFixed(3)+"\nLon "+Number(s.manualLon).toFixed(3),"orbit location")
+      .then(function(){locationMenu(s);});
   }
-  function locationMenu(){
-    stopGPS(); // Merely viewing/changing non-GPS settings never leaves GPS powered.
-    var s=appCfg(),ci=countryIndex(s.countryName);if(ci<0)ci=countryIndex("Japan");
-    var m={"":{title:"Location"},"< Back":main,
+  function locationMenu(s){
+    stopGPS();
+    if(!s)s=appCfg();
+    if(s.locationMode!==0)releasePlaceData();
+    else normalizePlaceState(s);
+
+    var m={"":{title:"Location"},"< Back":function(){releasePlaceData();main();},
       "Location mode":{
         value:s.locationMode,min:0,max:2,step:1,
         format:function(v){return LOCATION_MODES[v];},
         onchange:function(v){
-          stopGPS();
-          if(v===0){s.locationMode=0;applyPlace(s);}
-          else if(v===1){s.locationMode=1;s.manualLat=s.lat;s.manualLon=s.lon;applyManual(s);}
-          else{s.locationMode=2;write(CFG,s);} // GPS stays OFF until Get GPS fix is pressed.
-          setTimeout(locationMenu,10);
+          stopGPS();s.locationMode=v;write(CFG,s);
+          if(v!==0)releasePlaceData();
+          setTimeout(function(){locationMenu(s);},10);
         }
       }
     };
     if(s.locationMode===0){
+      var ci=countryIndex(s.countryName);
       m["Country"]={value:ci,min:0,max:C.length-1,step:1,
         format:function(v){return C[v][0];},
-        onchange:function(v){s.countryName=C[v][0];s.place=0;s.municipality=0;applyPlace(s);setTimeout(locationMenu,10);}
+        onchange:function(v){
+          s.countryName=C[v][0];s.place=0;s.municipality=0;
+          releaseMunicipalities();
+          setTimeout(function(){locationMenu(s);},10);
+        }
       };
       if(s.countryName==="Japan"){
         m["Prefecture"]={value:s.pref,min:0,max:P.length-1,step:1,
           format:function(v){return P[v][0];},
           onchange:function(v){
-            s.pref=v;s.municipality=0;jpPrefCache=-1;applyPlace(s);
-            setTimeout(locationMenu,10);
+            s.pref=v;s.municipality=0;releaseMunicipalities();
+            setTimeout(function(){locationMenu(s);},10);
           }
         };
         var ml=loadMunicipalities(s.pref);
         s.municipality=Math.max(0,Math.min(ml.length-1,s.municipality|0));
         m["Municipality"]={value:s.municipality,min:0,max:ml.length-1,step:1,
           format:function(v){return ml[v][0];},
-          onchange:function(v){s.municipality=v;applyPlace(s);}
+          onchange:function(v){s.municipality=v;}
         };
       }else{
         var list=C[ci][1]||[];
@@ -231,20 +297,22 @@
           s.place=Math.max(0,Math.min(list.length-1,s.place|0));
           m["City"]={value:s.place,min:0,max:list.length-1,step:1,
             format:function(v){return list[v][0];},
-            onchange:function(v){s.place=v;applyPlace(s);}
+            onchange:function(v){s.place=v;}
           };
         }else{
+          s.place=0;
           m["Capital"]={value:0,min:0,max:0,format:function(){return list[0][0];}};
         }
       }
-      m["Location info"]=function(){applyPlace(s);locationInfo(s);};
+      m["Use place"]=function(){commitPlace(s);};
+      m["Current coords"]=function(){locationInfo(s);};
     }else if(s.locationMode===1){
       m["Latitude"]={value:s.manualLat,min:-90,max:90,step:0.001,format:function(v){return v.toFixed(3);},onchange:function(v){s.manualLat=v;applyManual(s);}};
       m["Longitude"]={value:s.manualLon,min:-180,max:180,step:0.001,format:function(v){return v.toFixed(3);},onchange:function(v){s.manualLon=v;applyManual(s);}};
-      m["Location info"]=function(){applyManual(s);locationInfo(s);};
+      m["Current coords"]=function(){locationInfo(s);};
     }else{
-      m["Get GPS fix"]=startGPS;
-      m["Location info"]=function(){locationInfo(s);};
+      m["Get GPS fix"]=function(){startGPS(s);};
+      m["Current coords"]=function(){locationInfo(s);};
       m["GPS power"]={value:0,min:0,max:0,format:function(){return "Off";}};
     }
     E.showMenu(m);
@@ -349,19 +417,19 @@
   }
 
   function leave(){
-    stopGPS();
+    stopGPS();releasePlaceData();
     try{E.removeListener("kill",onKill);}catch(e){}
     back();
   }
   function exitToOrbit(){
-    stopGPS();
+    stopGPS();releasePlaceData();
     try{E.removeListener("kill",onKill);}catch(e){}
     load("orbit.app.js");
   }
-  function onKill(){stopGPS();}
+  function onKill(){stopGPS();releasePlaceData();}
 
   function main(){
-    stopGPS();
+    stopGPS();releasePlaceData();
     var s=appCfg(),c=calCfg();
     var minOrbit=s.earthSize+s.moonSize+4;
     if(s.moonOrbit<minOrbit){s.moonOrbit=minOrbit;write(CFG,s);}
