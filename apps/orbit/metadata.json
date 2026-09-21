@@ -2,7 +2,7 @@
   "id": "orbit",
   "name": "orbit",
   "shortName": "orbit",
-  "version": "0.03",
+  "version": "0.031",
   "author": "onisY",
   "description": "Sun-Earth-Moon clock with balanced North/South view, integrated calendar, Place/Manual/on-demand GPS settings; Japan Place selection includes prefecture then municipality, while wide multi-time-zone countries include representative cities.",
   "icon": "app.png",
