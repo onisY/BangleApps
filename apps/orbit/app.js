@@ -1,4 +1,4 @@
-/* orbit 0.032 */
+/* orbit 0.033 */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbit.json";
@@ -74,7 +74,7 @@
   /* Keep only tiny display metadata; location databases are never loaded here. */
   var LOCMODE=(cfg.locationMode===0?0:(cfg.locationMode===2?2:1));
   var LOCNAME=(LOCMODE===0?(cfg.locName||cfg.locPref||"Place"):"");
-  if(LOCNAME.length>18)LOCNAME=LOCNAME.substr(0,17)+"~";
+  var LOCCOUNTRY=(LOCMODE===0?(cfg.countryName||"Japan"):"");
   var LOCLAT=Math.abs(TESTLAT).toFixed(3)+(TESTLAT<0?"S":"N");
   var LOCLON=Math.abs(TESTLON).toFixed(3)+(TESTLON<0?"W":"E");
   /* Runtime has copied everything it needs; release the configuration object. */
@@ -632,14 +632,69 @@
     g.setPixel(x+6,y);
   }
 
-  function drawLocationStatus(){
-    g.setBgColor(BLACK).setColor(WHITE).setFont("6x8").setFontAlign(1,-1);
+  function fitLocationLine(text,maxW){
+    var size=14,min=8,t=text||"";
+    maxW=Math.max(12,maxW|0);
+    while(size>min){
+      g.setFont("Vector",size);
+      if(g.stringWidth(t)<=maxW)break;
+      size--;
+    }
+    g.setFont("Vector",size);
+    if(g.stringWidth(t)>maxW){
+      while(t.length>1&&g.stringWidth(t+"~")>maxW)t=t.substr(0,t.length-1);
+      if(t!==text)t+="~";
+    }
+    return {text:t,size:size,width:g.stringWidth(t)};
+  }
+
+  function placeLabelLayout(right,maxW){
+    var country=fitLocationLine(LOCCOUNTRY,maxW);
+    var place=fitLocationLine(LOCNAME,maxW);
+    var yPlace=H-2-place.size;
+    var yCountry=yPlace-1-country.size;
+    return {right:right,country:country,place:place,yCountry:yCountry,yPlace:yPlace};
+  }
+
+  function moonHitsLabel(m,line,y,right){
+    if(!m||!line)return false;
+    var x=right-line.width,r=MOONR+2;
+    var nx=Math.max(x,Math.min(m.x,right));
+    var ny=Math.max(y,Math.min(m.y,y+line.size));
+    var dx=m.x-nx,dy=m.y-ny;
+    return dx*dx+dy*dy<=r*r;
+  }
+
+  function placeLabelHitsMoon(p,m){
+    return moonHitsLabel(m,p.country,p.yCountry,p.right)||
+           moonHitsLabel(m,p.place,p.yPlace,p.right);
+  }
+
+  function drawLocationStatus(moon){
     if(LOCMODE===0){
-      var w=Math.min(108,g.stringWidth(LOCNAME))+3;
-      g.setColor(BLACK).fillRect(W-w,H-10,W-1,H-1);
-      g.setBgColor(BLACK).setColor(WHITE).drawString(LOCNAME,W-2,H-9);
+      /* Bottom two-line label. 14 px is the largest fixed ceiling that stays
+         below the Earth at every allowed Earth/Moon/orbit size. If the Moon
+         enters this area, place the text on the wider side of the Moon. */
+      var right=W-2,p=placeLabelLayout(right,W-4);
+      if(placeLabelHitsMoon(p,moon)){
+        var moonRight=moon.x+MOONR+3;
+        var rightSpace=right-moonRight;
+        var pr=rightSpace>=24?placeLabelLayout(right,rightSpace):undefined;
+        var leftRight=moon.x-MOONR-3;
+        var leftSpace=leftRight-2;
+        var pl=leftSpace>=24?placeLabelLayout(leftRight,leftSpace):undefined;
+        if(pr&&pl)p=(rightSpace>=leftSpace)?pr:pl;
+        else if(pr)p=pr;
+        else if(pl)p=pl;
+      }
+      g.setBgColor(BLACK).setColor(WHITE).setFontAlign(1,-1);
+      g.setFont("Vector",p.country.size);
+      g.drawString(p.country.text,p.right,p.yCountry);
+      g.setFont("Vector",p.place.size);
+      g.drawString(p.place.text,p.right,p.yPlace);
       return;
     }
+
     g.setColor(BLACK).fillRect(W-61,H-19,W-1,H-1);
     g.setBgColor(BLACK).setColor(WHITE).setFont("6x8").setFontAlign(1,-1);
     g.drawString(LOCLAT,W-2,H-18);
@@ -656,8 +711,8 @@
     var sol=safeSolar();
     drawEarth(sol);
     drawObserver(sol);
-    drawMoon();
-    drawLocationStatus();
+    var moon=drawMoon();
+    drawLocationStatus(moon);
     drawHeader();
     try{g.flip();}catch(err){}
     busy=false;
