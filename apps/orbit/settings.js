@@ -43,6 +43,13 @@
     var pi=prefIndex(s.locPref);
     if(pi>=0){s.countryName="Japan";s.pref=pi;}
     if(countryIndex(s.countryName)<0)s.countryName="Japan";
+    if(!isFinite(s.place))s.place=0;
+    if(s.countryName!=="Japan"){
+      var ci=countryIndex(s.countryName),list=C[ci][1]||[],found=-1;
+      if(s.locName)for(var li=0;li<list.length;li++)if(list[li][0]===s.locName){found=li;break;}
+      if(found>=0)s.place=found;
+      s.place=Math.max(0,Math.min(Math.max(0,list.length-1),s.place|0));
+    }
     return s;
   }
   function calCfg(){
@@ -81,7 +88,9 @@
       s.pref=Math.max(0,Math.min(P.length-1,s.pref|0));
       return {group:P[s.pref][0],place:P[s.pref][1][0]};
     }
-    return {group:C[ci][0],place:C[ci][1][0]};
+    var list=C[ci][1]||[];
+    s.place=Math.max(0,Math.min(Math.max(0,list.length-1),isFinite(s.place)?(s.place|0):0));
+    return {group:C[ci][0],place:list[s.place]};
   }
   function applyPlace(s){
     var q=placeFor(s),p=q.place;if(!p)return;
@@ -179,7 +188,7 @@
     if(s.locationMode===0){
       m["Country"]={value:ci,min:0,max:C.length-1,step:1,
         format:function(v){return C[v][0];},
-        onchange:function(v){s.countryName=C[v][0];applyPlace(s);setTimeout(locationMenu,10);}
+        onchange:function(v){s.countryName=C[v][0];s.place=0;applyPlace(s);setTimeout(locationMenu,10);}
       };
       if(s.countryName==="Japan"){
         m["Prefecture"]={value:s.pref,min:0,max:P.length-1,step:1,
@@ -188,7 +197,16 @@
         };
         m["Capital"]={value:0,min:0,max:0,format:function(){return P[s.pref][1][0][0];}};
       }else{
-        m["Capital"]={value:0,min:0,max:0,format:function(){return C[ci][1][0][0];}};
+        var list=C[ci][1]||[];
+        if(list.length>1){
+          s.place=Math.max(0,Math.min(list.length-1,s.place|0));
+          m["City"]={value:s.place,min:0,max:list.length-1,step:1,
+            format:function(v){return list[v][0];},
+            onchange:function(v){s.place=v;applyPlace(s);}
+          };
+        }else{
+          m["Capital"]={value:0,min:0,max:0,format:function(){return list[0][0];}};
+        }
       }
       m["Location info"]=function(){applyPlace(s);locationInfo(s);};
     }else if(s.locationMode===1){
