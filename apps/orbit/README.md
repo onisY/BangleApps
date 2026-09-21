@@ -1,75 +1,238 @@
 # orbit
 
-A Bangle.js 2 Sun-Earth-Moon clock with an integrated five-week calendar.
+**orbit 0.04 stable**
 
-**Version 0.04 is the stable release of the current feature set.**
+Bangle.js 2 用の、太陽・地球・月と5週間カレンダーを一つの画面体験にまとめた時計アプリです。
 
-## Controls
+## 1. このアプリが何をするものか。何が楽しめるのか
 
-- Single-tap the orbit face to open the integrated calendar.
-- Double-tap the orbit face to open orbit settings.
-- In the calendar, double-tap a date to select it. Only the current selected date blinks yellow; changing selection repaints the calendar body first so an older selection cannot remain highlighted.
-- Single-tap the calendar to return to orbit using the selected date. The visible yellow selection highlight is cleared before the screen changes to orbit; the selected date itself remains active in Orbit.
-- Reopen the calendar and the selected date continues blinking.
-- Double-tap outside the date grid to clear the selected date.
-- Swipe vertically in the calendar to move by five weeks.
-- BTN opens the launcher.
+orbit は、現在時刻だけでなく、**「今、太陽・地球・月がどのような関係にあるか」**を腕時計の小さな画面で眺めるための時計です。
 
-## Settings
+時計画面には、太陽、地球、月、地球の昼側・夜側、設定地点、日の出・日の入り方向、月の満ち欠け、日付・時刻、バッテリー残量、設定した国名・地名などを表示します。地球は簡略化した地図として描かれ、時刻と設定地点に応じて回転します。
 
-Open **Settings > Apps > orbit**, or double-tap the orbit face. The settings menu includes **Exit to orbit** so it can return directly to the clock. The standard app settings screen controls:
+月は平均朔望月を使った簡略モデルで地球の周囲に表示します。満月・新月のころの太陽との位置関係や、日付を進めたときの月の動きを、天体模型のように楽しめます。
 
-- location selection has three explicit entries: **Place name**, **Manual**, and **GPS**
-- Place: Japan selects prefecture then municipality; other countries use national capitals, with representative cities added for wide countries using multiple civil-time standards
-- Manual: latitude/longitude
-- GPS: on-demand fix only while this Settings screen is acquiring; GPS is immediately switched off after a fix, cancel, or leaving Settings
-- selectable **View side: North / South** polar viewpoint
-- balanced body sizes: Sun 6-15 px, Earth 40-45 px, Moon 14-16 px
-- lunar-orbit radius with a dynamic minimum of Earth radius + Moon radius + 4 px, so the displayed value matches the actual drawing
-- calendar/holiday region: Japan, England/Wales, Scotland, Northern Ireland
-- calendar auto-return timeout
-- holiday cache deletion
-- anniversaries and exceptional holidays
+内蔵の5週間カレンダーで別の日を選ぶと、その日を基準に orbit 画面を表示できます。現在だけでなく、数日後・数週間後の昼夜や月相を眺めることができます。
 
-Calendar display language and holiday region remain coupled: Japan uses Japanese weekday labels; the three UK regions use English labels.
+> orbit は教育・表示・趣味用途を目的とした簡略モデルです。天文観測、航法、測量など、高精度な天体暦や位置計算を必要とする用途には使用しないでください。
 
-On the orbit face, the bottom-right shows the active location source: Place name shows the country on the upper line and the saved municipality/city below it, using the largest practical text size and shifting around the Moon when necessary; Manual shows latitude and longitude; GPS shows a small satellite mark plus latitude and longitude.
+## 2. このアプリの使い方
 
-Location storage is intentionally simple: `manualLat/manualLon` are the single canonical coordinate pair used by the orbit clock. Manual editing changes them directly; GPS overwrites them only after a valid fix; Place selection copies the chosen place coordinates into them. Place tables are loaded only while Place is being edited, and Japan municipality data is read only for the selected prefecture.
+### orbit 画面
 
-The orbit clock itself never enables GPS. A saved GPS fix is just stored latitude/longitude and costs no GPS power during normal clock use.
+- **1回タップ**: 5週間カレンダーを開きます。
+- **2回タップ**: orbit の設定画面を開きます。
+- **BTN**: Bangle.js のランチャーを開きます。
 
-## Holidays
+画面右下の位置表示は設定方法によって変わります。
 
-Normal statutory holidays are generated into compact yearly 366-bit (46-byte) tables and persisted on demand. The current and following year are warmed automatically; scrolling to another year generates that year's table once.
+- **Place name**: 上段に国名、下段に市区町村名または都市名を表示します。文字は可能な範囲で大きくし、月が近い場合は重なりを避けるように移動します。
+- **Manual**: 緯度・経度を表示します。
+- **GPS**: 衛星マークと緯度・経度を表示します。
 
-Exceptional holidays and personal dates are stored separately in `orbit.events.json`. Settings can add, edit and delete ordinary date events. The JSON format also supports ranges.
+### 5週間カレンダー
 
-Example:
+- 月曜日から日曜日まで、5週間分の35日を表示します。
+- 土曜日は青、日曜日・祝日は赤、今日は緑で表示します。
+- 日付を**2回タップ**すると、その日を選択し、黄色で点滅します。
+- カレンダーを**1回タップ**すると、選択した日を保持したまま orbit へ戻ります。
+- 日付欄以外を**2回タップ**すると、選択日を解除します。
+- **上下スワイプ**で5週間単位に前後へ移動します。
 
-```json
-{
-  "version": 1,
-  "events": [
-    {
-      "date": "10-15",
-      "repeat": "yearly",
-      "type": "family",
-      "label": "Anniversary",
-      "region": "all",
-      "color": "yellow",
-      "blink": true
-    },
-    {
-      "date": "2030-05-02",
-      "type": "holiday",
-      "label": "Extra holiday",
-      "region": "jp",
-      "color": "red",
-      "blink": false
-    }
-  ]
-}
-```
+### Location 設定
 
-Supported named colors are red, yellow, green, blue, cyan, magenta, orange, white, gray and black.
+位置設定は3方式です。
+
+**Place name**
+- 日本: 都道府県 → 市区町村の順に選択します。
+- 日本以外: 原則として国 → 首都を選択します。複数の標準時を持つ広い国の一部には代表都市も収録しています。
+
+**Manual**
+- 緯度・経度を直接設定します。
+
+**GPS**
+- 設定画面で **Get GPS fix** を実行したときだけ GPS を使用します。
+- 有効な測位結果を得た後、キャンセルしたとき、または設定画面を離れたときには GPS をOFFにします。
+- 通常の時計表示中に GPS は使用しません。保存済みの測位結果は単なる緯度・経度として使うため、通常表示時のGPS電力消費はありません。
+
+### その他の設定
+
+- **View side**: North / South
+- 太陽・地球・月の表示サイズ
+- 月の公転半径
+- 祝日地域: Japan / England & Wales / Scotland / Northern Ireland
+- カレンダーの自動復帰時間
+- 記念日・独自休日
+- 祝日キャッシュの削除
+
+## 3. 後で改造する人のためのプログラム構造
+
+### `app.js`
+
+時計本体です。主に以下を担当します。
+
+- 日付・時刻・バッテリー表示
+- 太陽位置の概算
+- 地球・昼夜境界・簡略地図の描画
+- 観測地点と日の出・日の入り方向
+- 月の位置・月相表示
+- 国名・地名または座標表示
+- タップ判定
+- カレンダーとの画面切替
+- LCD OFF/ON 時の状態管理
+
+Bangle.js 内では `orbit.app.js` として保存されます。
+
+### `calendar.js`
+
+内蔵5週間カレンダーです。
+
+- 35日分の日付生成
+- 曜日・今日・土日表示
+- 日本および英国3地域の祝日計算
+- 記念日・独自休日
+- 日付選択と点滅
+- 5週間単位のページ移動
+- 年ごとの小さな祝日キャッシュ
+
+Bangle.js 内では `orbit.cal.js` として保存されます。
+
+### `settings.js`
+
+設定画面を担当します。
+
+- Place name / Manual / GPS
+- GPS のオンデマンド測位と確実な電源OFF
+- North / South
+- 天体サイズと月軌道サイズ
+- カレンダー地域
+- 記念日・独自休日
+- 祝日キャッシュ管理
+
+Bangle.js 内では `orbit.settings.js` として保存されます。
+
+### `locations.js`
+
+国・首都・一部代表都市、日本の都道府県索引を持ちます。日本の市区町村本体は大きいため別ファイルにし、都道府県ごとの `[offset, length]` を `exports.jpidx` に保持します。
+
+### `japan-municipalities.dat`
+
+日本全国の市区町村について、orbit の表示名と代表地点の緯度・経度を都道府県別JSON配列として連結したデータです。
+
+通常時には全件をRAMへ展開しません。Place name 設定で都道府県を選んだときに、`locations.js` の `jpidx` を使って該当部分だけを `Storage.read()` します。
+
+### ユーザーデータ
+
+- `orbit.json`: 位置・表示方向・天体サイズなど
+- `orbit.cal.json`: カレンダー地域・自動復帰時間など
+- `orbit.events.json`: 記念日・独自休日
+
+位置座標は `manualLat` / `manualLon` を共通の基準値として使います。Place name、Manual、GPS のどの方式でも、最終的にこの座標へ反映されます。
+
+### Bangle.js 2 向けの軽量化
+
+- 地図の海岸線を簡略化
+- 太陽や地図の固定形状を事前計算
+- 描画配列を再利用してGC負荷を低減
+- 月形状を一定時間キャッシュ
+- 地名表を必要時だけ読み込む
+- 日本の市区町村は都道府県単位で部分読み込み
+- 祝日は年単位のコンパクトなビット表でキャッシュ
+- GPS は位置設定時だけ使用
+
+改造時も、常時ロードや毎秒の重い計算を増やすより、**必要時読み込み・キャッシュ・部分描画**を優先すると安定しやすくなります。
+
+## 4. 使用した文献・サイト、データ出典、ライセンス
+
+### 太陽位置
+
+太陽位置の概算式は NOAA の **General Solar Position Calculations** を参考にしています。
+
+- NOAA Global Monitoring Laboratory, *General Solar Position Calculations*  
+  https://gml.noaa.gov/grad/solcalc/solareqns.PDF
+
+`solarPosition()` では fractional year、equation of time、solar declination、true solar time、hour angle、solar elevation / azimuth を求めています。
+
+### 月相
+
+月相表示では平均朔望月を用いています。
+
+- Fred Espenak, NASA/GSFC, *Six Millennium Catalog of Phases of the Moon*  
+  https://eclipse.gsfc.nasa.gov/phase/phasecat.html
+- 2000年1月6日 18:14 UTC の新月表  
+  https://eclipse.gsfc.nasa.gov/phase/phases1901.html
+
+NASA/GSFC の資料では2000年の平均朔望月を約29.530588日としています。orbit はこれを基礎にした簡略周期モデルであり、個々の朔望月の変動は再現しません。
+
+### 祝日
+
+日本:
+- 内閣府「国民の祝日について」  
+  https://www8.cao.go.jp/chosei/shukujitsu/gaiyou.html
+
+英国:
+- GOV.UK “UK bank holidays”  
+  https://www.gov.uk/bank-holidays
+
+### 日本の市区町村代表地点 — `japan-municipalities.dat`
+
+**主出典**
+
+- 国土交通省「国土数値情報（市町村役場等及び公的集会施設データ）P05、2022年（令和4年）版」  
+  https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-P05-2022.html
+- ライセンス: **CC BY 4.0**  
+  https://creativecommons.org/licenses/by/4.0/
+
+P05の施設分類 `P05_002=1`（本庁: 市役所・区役所・町役場・村役場）の位置を、市区町村の代表地点として利用しています。
+
+orbit 0.04 のデータ更新では、P05-22から生成されたオープンソースの変換表 **jp-address-search** の市区町村コード対応と代表地点表を用いて、orbit の既存の市区町村表示名・都道府県順を維持したまま座標を再生成しました。
+
+- uiuifree / jp-address-search  
+  https://github.com/uiuifree/rust-jp-address-search
+- 同プロジェクトのライセンス: **MIT License**  
+  https://github.com/uiuifree/rust-jp-address-search/blob/main/LICENSE
+- P05から代表地点を生成する処理  
+  https://github.com/uiuifree/rust-jp-address-search/blob/main/src/bin/update_city_location.rs
+
+同変換処理でP05の本庁記録をそのまま利用できない3地点（潟上市、浪江町、飯舘村）は、国土地理院の住所検索による役場所在地代表点で補正されています。国土地理院ウェブコンテンツは、特段の記載がない限り公共データ利用規約（PDL1.0）に基づき利用できます。
+
+- 国土地理院コンテンツ利用規約  
+  https://www.gsi.go.jp/kikakuchousei/kikakuchousei40182.html
+
+**orbit側で行った加工**
+- 市区町村コードと既存のorbit表示名を対応付け
+- 政令指定都市は市レベルを採用し、orbitが従来扱っていた市区町村の粒度を維持
+- 北方領土のうち実在する本庁舎位置を持たない6村は従来どおり収録対象外
+- 緯度・経度を小数点以下4桁に丸める
+- 都道府県ごとのランダムアクセス用オフセット表 `jpidx` を再生成
+
+表示用のローマ字地名は既存orbitの表記を保持しており、国土交通省が作成した表記ではありません。
+
+**出典表示**  
+「国土数値情報（市町村役場等及び公的集会施設データ）」（国土交通省、2022年版、CC BY 4.0）をもとに、jp-address-search の公開変換処理を参考として orbit 用に加工・再構成。
+
+### 世界の国・首都
+
+世界の国名・首都座標は、開発時に REST Countries の旧オープンソース版を参考に作成した静的な地点表です。旧オープンソース版は MPL 2.0 で公開されています。
+
+- REST Countries legacy open-source repository  
+  https://github.com/restcountries/restcountries
+- Mozilla Public License 2.0  
+  https://www.mozilla.org/MPL/2.0/
+
+現在の hosted REST Countries API を orbit が実行時に呼び出すことはありません。複数標準時を持つ一部の国について後から追加した代表都市は、orbit用に手動で追加したものです。
+
+### Bangle.js / Espruino
+
+- Bangle.js App Loader / BangleApps  
+  https://github.com/espruino/BangleApps
+- Espruino Bangle.js documentation  
+  https://www.espruino.com/Bangle.js
+- Espruino Reference  
+  https://www.espruino.com/Reference
+
+### orbit のソフトウェアライセンス
+
+orbit は BangleApps リポジトリのライセンス方針に従い、**MIT License** で扱います。詳細はリポジトリ直下の `LICENSE` を参照してください。
+
+第三者データには上記それぞれの利用条件・ライセンスが適用されます。
