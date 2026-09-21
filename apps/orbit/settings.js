@@ -221,7 +221,7 @@
   }
   function startGPS(s){
     stopGPS();releasePlaceData();
-    s.locationMode=2;write(CFG,s);
+    /* Keep the previous source until GPS has a valid fix. */
     gpsStarted=Date.now();gpsLastDraw=0;gpsLastSats=-1;gpsLastHdop=-1;gpsLastFix={};
     gpsHandler=function(fix){
       if(!gpsActive||!fix)return;
