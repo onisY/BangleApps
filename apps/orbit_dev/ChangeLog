@@ -1,9 +1,0 @@
-0.60: Orbit Dev settings now includes an explicit Exit settings item at the bottom of the main menu. It uses the same safe leave path as < Back and returns directly to the Orbit display.
-0.59: Header behaviour is now integrated into the actual core rendering path instead of relying on a post-draw overlay. Blue and yellow headers use the same NN% battery format, 1 s colon blink, charging-synchronised battery blink, 5 min battery sampling, and red battery text at 20% or below.
-0.58: Header rendering is unified across blue, yellow, and white background modes. Core header text now uses NN% instead of the legacy dot-battery format; faceUp/LCD repaints re-apply the same colon blink, charging blink, and <=20% red-battery rules in every background mode.
-0.57: In the yellow/unlocked operation state, single tap opens 5wCal (falling back to Calendar), while double tap within 450 ms opens Orbit Dev settings. A confirmed single side-button press now exits Orbit and opens the global Settings app; the existing double side-button BLE reset remains unchanged.
-0.56: While Orbit is in the yellow/unlocked operation state, double-tap within 450 ms opens Orbit Dev settings. A single tap remains a no-op. Leaving settings with < Back reloads orbit_dev.app.js and returns to the Orbit display.
-0.55: Colon blink repaint now copies the actual displayed header background so the colon background always matches the surrounding header colour.
-0.54: Stable LCD-only colon blink using a dedicated 1 s timeout chain; battery sampling decoupled to 5 min; charging starts/stops battery blink immediately and in phase with the colon; battery text remains red at 20% or below; all blink timers stop with LCD off.
-0.53: LCD-only 1 s colon blink; battery shown as NN%, blinks while charging, red at 20% or below; pole centre dot removed.
-0.51: Development snapshot split from Orbit before the first public release.
