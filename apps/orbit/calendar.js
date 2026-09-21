@@ -1,17 +1,18 @@
-/* Orbclo Dev integrated 5wCal module. Evaluates to an API object. */
+/* orbit integrated calendar module. Evaluates to an API object. */
 (function(){
   var Storage=require("Storage");
-  var CFG_FILE="orbclo_orbitdev.cal.json";
+  var CFG_FILE="orbit.cal.json";
+  var EVENT_FILE="orbit.events.json";
   var DAY=86400000;
   var HOL_CACHE_VER=1,HOL_BYTES=46,HOL_RAM_MAX=2;
   function cacheFileParts(f){
-    var m=/^och([0-9]+)(jp|ew|sc|ni)([0-9][0-9][0-9][0-9])$/.exec(f);
+    var m=/^orh([0-9]+)(jp|ew|sc|ni)([0-9][0-9][0-9][0-9])$/.exec(f);
     return m?{ver:parseInt(m[1],10),region:m[2],year:parseInt(m[3],10)}:undefined;
   }
   function listHolidayCaches(){
     var out={jp:0,ew:0,sc:0,ni:0,total:0};
     try{
-      Storage.list(/^och[0-9]+(jp|ew|sc|ni)[0-9][0-9][0-9][0-9]$/).forEach(function(f){
+      Storage.list(/^orh[0-9]+(jp|ew|sc|ni)[0-9][0-9][0-9][0-9]$/).forEach(function(f){
         var p=cacheFileParts(f);if(!p)return;
         out[p.region]++;out.total++;
       });
@@ -21,7 +22,7 @@
   function clearHolidayCaches(region){
     var n=0;
     try{
-      Storage.list(/^och[0-9]+(jp|ew|sc|ni)[0-9][0-9][0-9][0-9]$/).forEach(function(f){
+      Storage.list(/^orh[0-9]+(jp|ew|sc|ni)[0-9][0-9][0-9][0-9]$/).forEach(function(f){
         var p=cacheFileParts(f);if(!p)return;
         if(region===undefined||p.region===region){Storage.erase(f);n++;}
       });
@@ -47,16 +48,30 @@
     return normalizeConfig(c);
   }
   function writeConfig(c){Storage.writeJSON(CFG_FILE,normalizeConfig(c));}
+  function readExtraEventDoc(){
+    var d=Storage.readJSON(EVENT_FILE,1);
+    if(!d||!Array.isArray(d.events)){
+      d={version:1,events:[]};
+      try{Storage.writeJSON(EVENT_FILE,d);}catch(e){}
+    }
+    return d;
+  }
+  function extraEventCount(){
+    var d=readExtraEventDoc();
+    return d.events.length;
+  }
 
   function create(){
     var W=g.getWidth(),H=g.getHeight();
-    var BLACK=0x0000,WHITE=0xFFFF,BLUE=0x001F,RED=0xF800,GREEN=0x07E0,GRAY=0x4208;
+    var BLACK=0x0000,WHITE=0xFFFF,BLUE=0x001F,RED=0xF800,GREEN=0x07E0,YELLOW=0xFFE0,CYAN=0x07FF,MAGENTA=0xF81F,ORANGE=0xFD20,GRAY=0x4208;
     var cfg,today,pageStart,selected;
     var active=false,onReturn,onSelect,onDiag,startTapMs,firstTapMs;
     var tapTimer,tapCount=0,lastXY;
     var TAP_WINDOW=400;
     var blinkTimer,blinkWhite=true,autoTimer;
-    var holidayFlags=new Uint8Array(35),dayNums=new Uint8Array(35),yearNums=new Uint16Array(35),doyNums=new Uint16Array(35),todayIndex=-1,lastCellPrepMs=0;
+    var holidayFlags=new Uint8Array(35),dayNums=new Uint8Array(35),monthNums=new Uint8Array(35),yearNums=new Uint16Array(35),doyNums=new Uint16Array(35),todayIndex=-1,lastCellPrepMs=0;
+    var eventFlags=new Uint8Array(35),eventBlinkFlags=new Uint8Array(35),eventColors=new Uint16Array(35);
+    var extraEvents=[],eventBlinkTimer,eventBlinkPhase=true;
     var holidayTimer,holidayToken=0,lastHolidayCalcMs=0,lastHolidayDrawMs=0,lastHolidayElapsedMs=0;
     var holRam=[],primeTimer,primeQueue,primePos=0;
     var cellX1=new Int16Array(7),cellX2=new Int16Array(7),cellY1=new Int16Array(5),cellY2=new Int16Array(5);
@@ -131,8 +146,10 @@
       if(w25===6||w25===0)setYMD(bits,y,12,27);else setYMD(bits,y,12,25);
       if(w26===6||w26===0)setYMD(bits,y,12,28);else setYMD(bits,y,12,26);
     }
+    /* Intentional coupling: Japanese display -> Japan holidays.
+       English display -> selected UK region (EW/Scotland/Northern Ireland). */
     function holRegion(){return cfg.lang==="ja"?"jp":cfg.ukRegion;}
-    function holFile(region,year){return "och"+HOL_CACHE_VER+region+year;}
+    function holFile(region,year){return "orh"+HOL_CACHE_VER+region+year;}
     function bitsToString(bits){
       var s="";for(var i=0;i<HOL_BYTES;i++)s+=String.fromCharCode(bits[i]);return s;
     }
@@ -520,12 +537,111 @@
       var ti=todayNo-startNo;
       todayIndex=(ti>=0&&ti<35)?ti:-1;
       for(var i=0;i<35;i++){
-        dayNums[i]=d;yearNums[i]=y;doyNums[i]=doyYMD(y,m,d);holidayFlags[i]=0;
+        dayNums[i]=d;monthNums[i]=m;yearNums[i]=y;doyNums[i]=doyYMD(y,m,d);holidayFlags[i]=0;
         d++;
         if(d>dim(y,m)){d=1;m++;if(m>12){m=1;y++;}}
       }
       lastCellPrepMs=Math.round(getTime()*1000)-t0;
       return lastCellPrepMs;
+    }
+
+    function parseDateToken(s){
+      if(typeof s!=="string")return undefined;
+      var p=s.split("-"),y,m,d;
+      if(p.length===3){
+        y=parseInt(p[0],10);m=parseInt(p[1],10);d=parseInt(p[2],10);
+        if(y>=1900&&m>=1&&m<=12&&d>=1&&d<=31)return {full:1,ymd:y*10000+m*100+d,md:m*100+d};
+      }else if(p.length===2){
+        m=parseInt(p[0],10);d=parseInt(p[1],10);
+        if(m>=1&&m<=12&&d>=1&&d<=31)return {full:0,md:m*100+d};
+      }
+    }
+    function eventColorValue(color,type){
+      if(typeof color==="number")return color&65535;
+      var s=(color||"").toLowerCase();
+      if(s==="red")return RED;if(s==="yellow")return YELLOW;if(s==="green")return GREEN;
+      if(s==="blue")return BLUE;if(s==="cyan")return CYAN;if(s==="magenta")return MAGENTA;
+      if(s==="orange")return ORANGE;if(s==="white")return WHITE;if(s==="gray"||s==="grey")return GRAY;
+      if(s==="black")return BLACK;
+      type=(type||"").toLowerCase();
+      if(type==="holiday")return RED;
+      if(type==="family")return YELLOW;
+      if(type==="birthday")return MAGENTA;
+      if(type==="work")return CYAN;
+      return YELLOW;
+    }
+    function eventTextColor(bg){
+      return (bg===YELLOW||bg===GREEN||bg===CYAN||bg===WHITE||bg===ORANGE)?BLACK:WHITE;
+    }
+    function loadExtraEvents(){
+      var d=readExtraEventDoc(),src=d.events||[];
+      extraEvents=[];
+      for(var i=0;i<src.length;i++){
+        var e=src[i]||{},a,b,kind;
+        if(e.date){
+          a=parseDateToken(e.date);
+          if(!a)continue;
+          if(e.repeat==="yearly"||!a.full)kind="yearly";
+          else kind="date";
+        }else if(e.from&&e.to){
+          a=parseDateToken(e.from);b=parseDateToken(e.to);
+          if(!a||!b)continue;
+          if(e.repeat==="yearly"||(!a.full&&!b.full))kind="yearlyRange";
+          else if(a.full&&b.full)kind="range";
+          else continue;
+        }else continue;
+        extraEvents.push({
+          kind:kind,a:a,b:b,type:e.type||"custom",label:e.label||"",
+          region:e.region||"all",
+          color:eventColorValue(e.color,e.type),blink:!!e.blink
+        });
+      }
+    }
+    function eventMatchesCell(e,i){
+      var md=monthNums[i]*100+dayNums[i],ymd=yearNums[i]*10000+md;
+      if(e.kind==="date")return ymd===e.a.ymd;
+      if(e.kind==="yearly")return md===e.a.md;
+      if(e.kind==="range")return ymd>=e.a.ymd&&ymd<=e.b.ymd;
+      if(e.kind==="yearlyRange"){
+        if(e.a.md<=e.b.md)return md>=e.a.md&&md<=e.b.md;
+        return md>=e.a.md||md<=e.b.md; /* range crossing New Year */
+      }
+      return false;
+    }
+    function buildEventPage(){
+      for(var i=0;i<35;i++){eventFlags[i]=0;eventBlinkFlags[i]=0;eventColors[i]=0;}
+      var region=holRegion();
+      for(var e=0;e<extraEvents.length;e++){
+        var x=extraEvents[e];
+        if(x.region!=="all"&&x.region!==region)continue;
+        for(var j=0;j<35;j++)if(eventMatchesCell(x,j)){
+          /* Later JSON entries intentionally override earlier entries. */
+          eventFlags[j]=1;eventColors[j]=x.color;eventBlinkFlags[j]=x.blink?1:0;
+        }
+      }
+      eventBlinkPhase=true;
+    }
+    function hasBlinkEvents(){
+      for(var i=0;i<35;i++)if(eventFlags[i]&&eventBlinkFlags[i])return true;
+      return false;
+    }
+    function stopEventBlink(){
+      if(eventBlinkTimer)clearTimeout(eventBlinkTimer);
+      eventBlinkTimer=undefined;
+    }
+    function eventBlinkTick(){
+      eventBlinkTimer=undefined;
+      if(!active)return;
+      eventBlinkPhase=!eventBlinkPhase;
+      var si=selectedIndex();
+      for(var i=0;i<35;i++)if(eventFlags[i]&&eventBlinkFlags[i]&&i!==si)drawCell(i);
+      try{g.flip();}catch(e){}
+      if(active&&hasBlinkEvents())eventBlinkTimer=setTimeout(eventBlinkTick,500);
+    }
+    function startEventBlink(){
+      stopEventBlink();
+      eventBlinkPhase=true;
+      if(active&&hasBlinkEvents())eventBlinkTimer=setTimeout(eventBlinkTick,500);
     }
 
     function preparePageHolidayState(){
@@ -576,9 +692,9 @@
 
         preparePageHolidayState();
 
-        var t1=Math.round(getTime()*1000),changed=0;
+        var t1=Math.round(getTime()*1000),changed=0,si=selectedIndex();
         for(var i=0;i<35;i++){
-          if(holidayFlags[i]&&i!==todayIndex&&(i%7)!==6){drawCell(i);changed++;}
+          if(holidayFlags[i]&&i!==todayIndex&&(i%7)!==6&&i!==si){drawCell(i);changed++;}
         }
         try{g.flip();}catch(e){}
         lastHolidayDrawMs=Math.round(getTime()*1000)-t1;
@@ -588,10 +704,6 @@
           holidayCalcMs:lastHolidayCalcMs,holidayDrawMs:lastHolidayDrawMs,
           holidayCount:changed
         });
-        if(!selected)diagPanel(
-          "T "+baseTotal+" D "+baseDraw,
-          "C "+basePrep+" H "+lastHolidayCalcMs+" U "+lastHolidayDrawMs
-        );
       },0);
     }
 
@@ -601,23 +713,26 @@
       if(q.c===5)bg=BLUE;
       if(q.c===6||holidayFlags[index])bg=RED;
       if(index===todayIndex){bg=GREEN;fg=BLACK;}
+      if(eventFlags[index]&&(!eventBlinkFlags[index]||eventBlinkPhase)){
+        bg=eventColors[index];fg=eventTextColor(bg);
+      }
       g.setColor(bg).fillRect(q.x1,q.y1,q.x2,q.y2);
       g.setColor(fg).setBgColor(bg).setFont("6x8",2).setFontAlign(0,0)
         .drawString(""+dayNums[index],(q.x1+q.x2)>>1,(q.y1+q.y2)>>1);
       g.setColor(GRAY).drawRect(q.x1,q.y1,q.x2,q.y2);
     }
     function selectedIndex(){if(!selected)return -1;var n=dayNumber(selected)-dayNumber(pageStart);return n>=0&&n<35?n:-1;}
-    function logCalError(stage,e){try{Storage.write("orbclo_dev_orbit.err","calendar "+stage+": "+e);}catch(x){}}
+    function logCalError(stage,e){try{Storage.write("orbit.err","calendar "+stage+": "+e);}catch(x){}}
     function redrawSelected(){var i=selectedIndex();if(i>=0)drawCell(i);}
     function drawSelectedCell(on){
       var i=selectedIndex();if(i<0)return;
       if(!on){drawCell(i);try{g.flip();}catch(e){};return;}
 
-      var q=cellGeometry(i),d=addDays(pageStart,i);
-      g.setColor(WHITE).fillRect(q.x1+1,q.y1+1,q.x2-1,q.y2-1);
-      g.setColor(BLACK).setBgColor(WHITE).setFont("Vector",20).setFontAlign(0,0)
-        .drawString(""+d.getDate(),(q.x1+q.x2)>>1,(q.y1+q.y2)>>1);
-      g.setColor(WHITE).drawRect(q.x1,q.y1,q.x2,q.y2);
+      var q=cellGeometry(i);
+      g.setColor(YELLOW).fillRect(q.x1,q.y1,q.x2,q.y2);
+      g.setColor(BLACK).setBgColor(YELLOW).setFont("6x8",2).setFontAlign(0,0)
+        .drawString(""+dayNums[i],(q.x1+q.x2)>>1,(q.y1+q.y2)>>1);
+      g.setColor(GRAY).drawRect(q.x1,q.y1,q.x2,q.y2);
       try{g.flip();}catch(e){}
     }
     function drawCalendarFast(full){
@@ -651,6 +766,10 @@
         c=todayIndex%7;r=(todayIndex/7)|0;
         g.setColor(GREEN).fillRect(cellX1[c],cellY1[r],cellX2[c],cellY2[r]);
       }
+      for(i=0;i<35;i++)if(eventFlags[i]&&(!eventBlinkFlags[i]||eventBlinkPhase)){
+        c=i%7;r=(i/7)|0;
+        g.setColor(eventColors[i]).fillRect(cellX1[c],cellY1[r],cellX2[c],cellY2[r]);
+      }
 
       /* Draw the grid once as shared lines instead of 35 drawRect calls. */
       g.setColor(GRAY);
@@ -669,6 +788,7 @@
         c=i%7;r=(i/7)|0;
         bg=c===5?BLUE:((c===6||holidayFlags[i])?RED:BLACK);fg=WHITE;
         if(i===todayIndex){bg=GREEN;fg=BLACK;}
+        if(eventFlags[i]&&(!eventBlinkFlags[i]||eventBlinkPhase)){bg=eventColors[i];fg=eventTextColor(bg);}
         g.setColor(fg).setBgColor(bg)
           .drawString(""+dayNums[i],(cellX1[c]+cellX2[c])>>1,(cellY1[r]+cellY2[r])>>1);
       }
@@ -682,32 +802,14 @@
     function drawCalendar(full){
       drawCalendarFast(full);
     }
-    function report(x){if(onDiag)try{onDiag(x);}catch(e){}}
-    function diagPanel(line1,line2){
-      try{
-        g.setColor(BLACK).fillRect(0,H-34,W-1,H-1);
-        g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",2).setFontAlign(0,-1);
-        g.drawString(line1,W/2,H-33);
-        g.drawString(line2||"",W/2,H-17);
-        try{g.flip();}catch(e){}
-      }catch(e){}
-    }
-    function diagPerf(total,draw,cell){
-      try{
-        g.setColor(BLACK).fillRect(0,H-34,W-1,H-1);
-        g.setColor(WHITE).setBgColor(BLACK).setFont("6x8",2).setFontAlign(0,-1)
-          .drawString("T "+total+" D "+draw,W/2,H-33);
-        g.setFont("6x8").setFontAlign(0,-1)
-          .drawString("C"+cell+" W"+lastWidgetMs+" K"+lastWeekdayMs+" G"+lastBodyMs+" R"+lastTopMs,W/2,H-15);
-        try{g.flip();}catch(e){}
-      }catch(e){}
-    }
+    function report(x){}
+
     function clearTimer(t){if(t)clearTimeout(t);}
     function clearTaps(){clearTimer(tapTimer);tapTimer=undefined;tapCount=0;lastXY=undefined;firstTapMs=undefined;}
     function stopBlink(){clearTimer(blinkTimer);blinkTimer=undefined;}
     function blinkTick(){
       blinkTimer=undefined;
-      if(!active||!selected)return;
+      if(!active||!selected||selectedIndex()<0)return;
       try{
         blinkWhite=!blinkWhite;
         drawSelectedCell(blinkWhite);
@@ -715,19 +817,19 @@
         logCalError("blink",e);
         return;
       }
-      if(active&&selected)blinkTimer=setTimeout(blinkTick,500);
+      if(active&&selected&&selectedIndex()>=0)blinkTimer=setTimeout(blinkTick,500);
     }
     function startBlink(){
       stopBlink();blinkWhite=true;
-      if(active&&selected){
+      if(active&&selected&&selectedIndex()>=0){
         try{drawSelectedCell(true);}catch(e){logCalError("frame",e);return;}
         blinkTimer=setTimeout(blinkTick,500);
       }
     }
     function stopAuto(){clearTimer(autoTimer);autoTimer=undefined;}
     function armAuto(){stopAuto();if(!active||!cfg||!(cfg.timeout>=15))return;autoTimer=setTimeout(function(){autoTimer=undefined;returnToOrbit();},cfg.timeout*1000);}
-    function stop(){cancelHolidayBatch();stopBlink();stopAuto();clearTaps();firstTapMs=undefined;active=false;onReturn=undefined;onSelect=undefined;onDiag=undefined;}
-    function resetTransient(){cancelHolidayBatch();selected=undefined;clearTaps();stopBlink();stopAuto();today=midnight(new Date());pageStart=mondayOf(today);}
+    function stop(){cancelHolidayBatch();stopEventBlink();stopBlink();stopAuto();clearTaps();firstTapMs=undefined;active=false;onReturn=undefined;onSelect=undefined;onDiag=undefined;}
+    function resetTransient(){cancelHolidayBatch();stopEventBlink();selected=undefined;clearTaps();stopBlink();stopAuto();today=midnight(new Date());pageStart=mondayOf(today);}
     function returnToOrbit(){if(!active)return;var cb=onReturn,sel=selected?copyDate(selected):undefined;stop();if(cb)cb(sel);}
     function copyXY(xy){
       if(!xy||typeof xy.x!=="number"||typeof xy.y!=="number")return undefined;
@@ -757,13 +859,26 @@
       var stage="IDX",idx=-1,offset=0;
       try{
         idx=dateIndexAt(xy);
+
+        /* A deliberate double tap in the non-date area clears the current
+           selection. This is not an input error. */
         if(idx<0){
-          report({selOK:0,selStage:"NOXY",selDtMs:dt,buzzMs:500});
-          diagPanel("ERR NOXY","DT "+dt+" B500");
-          try{Bangle.buzz(500);}catch(be){}
-          return false;
+          var oldIdx=selectedIndex();
+          stopBlink();
+          selected=undefined;
+          if(oldIdx>=0)drawCell(oldIdx);
+          if(onSelect)onSelect(undefined,0);
+          report({selOK:1,selStage:"CLEAR",selIdx:-1,selOff:0,selDtMs:dt,buzzMs:80});
+          drawTop("SEL CLEAR");
+          try{g.flip();}catch(fe){}
+          try{Bangle.buzz(80);}catch(be){}
+          return true;
         }
+
         stage="DATE";
+        var oldIdx=selectedIndex();
+        stopBlink();
+        if(oldIdx>=0&&oldIdx!==idx)drawCell(oldIdx);
         selected=addDays(pageStart,idx);
         stage="OFFSET";
         offset=dayNumber(selected)-dayNumber(today);
@@ -774,13 +889,14 @@
           selOK:1,selStage:"OK",selIdx:idx,selOff:offset,selDtMs:dt,
           selMonth:selected.getMonth()+1,selDay:selected.getDate(),buzzMs:120
         });
-        diagPanel("SEL "+(offset>=0?"+":"")+offset,
-          pad2(selected.getMonth()+1)+"/"+pad2(selected.getDate())+" DT "+dt);
+        drawSelectionAck(selected);
+        startBlink();
         try{Bangle.buzz(120);}catch(be2){}
         return true;
       }catch(e){
         report({selOK:0,selStage:stage,selIdx:idx,selOff:offset,selDtMs:dt,selErr:String(e),buzzMs:500});
-        diagPanel("ERR "+stage,"DT "+dt+" B500");
+        drawTop("SELECT ERR");
+        try{g.flip();}catch(fe){}
         try{Bangle.buzz(500);}catch(be3){}
         return false;
       }
@@ -830,18 +946,21 @@
     }
     function swipe(lr,ud){
       if(!active||!ud)return;
-      clearTaps();armAuto();cancelHolidayBatch();
+      clearTaps();armAuto();cancelHolidayBatch();stopBlink();
       pageStart=addDays(pageStart,ud<0?35:-35);
 
+      stopEventBlink();
       var cMs=buildBasicCellData();
       var holidayState=preparePageHolidayState();
+      buildEventPage();
       var t0=Math.round(getTime()*1000);
       drawCalendar(false);
       var dMs=Math.round(getTime()*1000)-t0;
 
       report({calCellMs:cMs,calDrawMs:dMs,holidayDeferred:holidayState.years.length?1:0});
-      diagPerf(dMs,dMs,cMs);
       startHolidayBatch(dMs,dMs,cMs,holidayState);
+      startEventBlink();
+      startBlink();
     }
     function start(opts){
       opts=opts||{};stop();cfg=readConfig();active=true;
@@ -850,11 +969,13 @@
       today=midnight(new Date());
       var focus=opts.focusDate?midnight(opts.focusDate):(opts.selectedDate?midnight(opts.selectedDate):today);
       pageStart=mondayOf(focus);selected=opts.selectedDate?midnight(opts.selectedDate):undefined;blinkWhite=true;
+      loadExtraEvents();
 
       /* Stage 1: build only cheap day-number/today data and paint immediately.
          Holiday flags intentionally remain zero in this first visible frame. */
       var cellMs=buildBasicCellData();
       var holidayState=preparePageHolidayState();
+      buildEventPage();
       var drawStartMs=Math.round(getTime()*1000);
       drawCalendar(true);
       var doneMs=Math.round(getTime()*1000);
@@ -867,13 +988,14 @@
         calTotalMs:total,calDrawMs:drawMs,calStartDelayMs:preMs,
         calCellMs:cellMs,holidayDeferred:holidayState.mode==="cache"?holidayState.years.length:1?1:0,calReady:1
       });
-      diagPerf(total,drawMs,cellMs);
 
       /* Stage 2: after the first frame is already visible, calculate all 35
          holiday results cooperatively (one date per event-loop turn), while
          keeping the display unchanged. When all 35 are ready, update holiday
          cells together in one batch. */
       startHolidayBatch(total,drawMs,cellMs,holidayState);
+      startEventBlink();
+      startBlink();
       armAuto();
     }
     function isActive(){return active;}
@@ -885,6 +1007,7 @@
 
   return {
     create:create,readConfig:readConfig,writeConfig:writeConfig,
-    listHolidayCaches:listHolidayCaches,clearHolidayCaches:clearHolidayCaches
+    listHolidayCaches:listHolidayCaches,clearHolidayCaches:clearHolidayCaches,
+    extraEventCount:extraEventCount
   };
 })()

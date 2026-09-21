@@ -1,17 +1,20 @@
-/* Orbclo Dev Orbit 0.62 - robust calendar coordinate selection */
+/* orbit 0.01 */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
-  var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
+  var Storage=require("Storage"),CFGFILE="orbit.json";
   var cfg=Storage.readJSON(CFGFILE,1)||{};
   var calModule,calendar;
   try{
-    var calSource=Storage.read("orbclo_dev_orbit.cal.js");
+    var calSource=Storage.read("orbit.cal.js");
     if(calSource){calModule=eval(calSource);calendar=calModule.create();}
     calSource=undefined;
   }catch(calErr){calModule=undefined;calendar=undefined;}
+  /* Preload widgets during app startup so opening 5wCal does not pay the
+     widget loading cost on the user's first calendar tap. */
+  try{if(typeof WIDGETS==="undefined")Bangle.loadWidgets();}catch(e){}
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800,GREEN=0x07E0;
   var busy=false,killed=false,minuteTimer,secondTimer,idleTimer,tapTimer,unlockTimer;
-  var mode="orbit",interactive=true,tapCount=0,resetOnWake=false,buttonWatch;
+  var mode="orbit",interactive=true,tapCount=0,resetOnWake=false;
   var selectedDayOffset=0,hasSelectedDate=false;
   var colonX=0,colonVisible=true,batteryCharging=false;
   var BATLEFT=138;
@@ -557,8 +560,8 @@
     g.setColor(RED).fillCircle(x,y,2);
   }
 
+
   function drawBase(){
-    /* Clean real-use redraw: no per-stage timers or on-screen diagnostics. */
     g.reset().setBgColor(BLACK).setColor(BLACK).clear();
     drawSun();
     var sol=safeSolar();
@@ -574,16 +577,17 @@
     clear(tapTimer);tapTimer=undefined;tapCount=0;
   }
 
-  function showTransition(){
-    if(!Bangle.isLCDOn())return;
-    try{
-      g.reset().setBgColor(NAVY).setColor(NAVY).clear();
-      g.flip();
-    }catch(e){}
-  }
 
+  function civilDay(y,m,d){
+    y-=m<=2?1:0;
+    var era=Math.floor(y/400),yoe=y-era*400;
+    var mp=m+(m>2?-3:9);
+    var doy=Math.floor((153*mp+2)/5)+d-1;
+    var doe=yoe*365+Math.floor(yoe/4)-Math.floor(yoe/100)+doy;
+    return era*146097+doe-719468;
+  }
   function dayNumber(d){
-    return Math.floor(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())/86400000);
+    return civilDay(d.getFullYear(),d.getMonth()+1,d.getDate());
   }
 
   function stopOrbitTimers(){
@@ -644,119 +648,48 @@
     MOON_CACHE_BUCKET=-1;
   }
 
+
   function openCalendar(){
     if(killed||mode!=="orbit")return;
-    showTransition();
     stopOrbitTimers();
     mode="calendar";
     interactive=false;
     try{Bangle.setLocked(false);}catch(e){}
     try{Bangle.setBacklight(true);}catch(e){}
 
-    if(calendar){
-      var focus=hasSelectedDate?virtualDate():new Date();
-      calendar.start({
-        focusDate:focus,
-        selectedDate:hasSelectedDate?focus:undefined,
-        onReturn:function(d){
-          if(killed)return;
-          try{
-            setDateFromCalendar(d);
-            startOrbit(true);
-          }catch(e){
-            try{Storage.write("orbclo_dev_orbit.err","return: "+e);}catch(x){}
-            selectedDayOffset=0;
-            hasSelectedDate=false;
-            MOON_CACHE_BUCKET=-1;
-            mode="orbit";
-            busy=false;
-            try{
-              drawBase();
-              armMinute();
-              armSecond();
-              interactive=true;
-              Bangle.setLocked(false);
-              Bangle.setBacklight(true);
-              armIdle();
-            }catch(e2){
-              try{Storage.write("orbclo_dev_orbit.err","fallback: "+e2);}catch(x2){}
-              try{
-                g.reset().setBgColor(BLACK).setColor(RED).clear();
-                g.setFont("6x8",2).setFontAlign(0,0);
-                g.drawString("Orbit return error",W/2,H/2);
-              }catch(x3){}
-            }
-          }
-        }
-      });
+    if(!calendar){
+      startOrbit(true);
       return;
     }
 
-    var info=Storage.readJSON("fivewcal.info",1);
-    var src=(info&&info.src&&Storage.read(info.src)!==undefined)?info.src:
-      (Storage.read("fivewcal.app.js")!==undefined?"fivewcal.app.js":undefined);
-    if(src){load(src);return;}
-    Bangle.showLauncher();
-  }
-
-  function saveCfg(){Storage.writeJSON(CFGFILE,cfg);}
-
-  function openSettings(){
-    if(killed||mode!=="orbit")return;
-    showTransition();
-    stopOrbitTimers();
-    mode="settings";
-    interactive=false;
-    try{Bangle.setLocked(false);}catch(e){}
-    try{Bangle.setBacklight(true);}catch(e){}
-
-    var cc=calModule?calModule.readConfig():{lang:"ja",ukRegion:"ew",timeout:30};
-    function saveCal(){if(calModule)calModule.writeConfig(cc);}
-    E.showMenu({
-      "":{title:"Orbit / 5wCal"},
-      "< Back":function(){load("orbclo_dev_orbit.app.js");},
-      "Latitude":{
-        value:TESTLAT,min:-90,max:90,step:0.001,
-        format:function(v){return v.toFixed(3);},
-        onchange:function(v){cfg.lat=v;saveCfg();}
-      },
-      "Longitude":{
-        value:TESTLON,min:-180,max:180,step:0.001,
-        format:function(v){return v.toFixed(3);},
-        onchange:function(v){cfg.lon=v;saveCfg();}
-      },
-      "Sun size":{
-        value:SUNR,min:4,max:15,step:1,
-        onchange:function(v){cfg.sunSize=v;saveCfg();}
-      },
-      "Earth size":{
-        value:EARTHR,min:25,max:50,step:1,
-        onchange:function(v){cfg.earthSize=v;saveCfg();}
-      },
-      "Moon size":{
-        value:MOONR,min:4,max:15,step:1,
-        onchange:function(v){cfg.moonSize=v;saveCfg();}
-      },
-      "Moon orbit":{
-        value:MOONORBIT,min:40,max:80,step:1,
-        onchange:function(v){cfg.moonOrbit=v;saveCfg();}
-      },
-      "Cal language":{
-        value:cc.lang==="en"?1:0,min:0,max:1,step:1,
-        format:function(v){return v?"English":"Japanese";},
-        onchange:function(v){cc.lang=v?"en":"ja";saveCal();}
-      },
-      "Cal holidays":{
-        value:cc.ukRegion==="sc"?1:0,min:0,max:1,step:1,
-        format:function(v){return v?"Scotland":"England/Wales";},
-        onchange:function(v){cc.ukRegion=v?"sc":"ew";saveCal();}
-      },
-      "Cal auto return":{
-        value:cc.timeout,min:15,max:120,step:15,
-        format:function(v){return v+" s";},
-        onchange:function(v){cc.timeout=v;saveCal();}
-      }
-    });
+    var focus=hasSelectedDate?virtualDate():new Date();
+    try{
+      calendar.start({
+        focusDate:focus,
+        selectedDate:hasSelectedDate?focus:undefined,
+        onSelect:function(d,offset){
+          if(killed)return;
+          if(!d){
+            setDateFromCalendar(undefined);
+            return;
+          }
+          if(typeof offset==="number"&&isFinite(offset)){
+            selectedDayOffset=offset|0;
+            hasSelectedDate=true;
+            MOON_CACHE_BUCKET=-1;
+          }else setDateFromCalendar(d);
+        },
+        onReturn:function(d){
+          if(killed)return;
+          setDateFromCalendar(d);
+          startOrbit(true);
+        }
+      });
+    }catch(e){
+      mode="orbit";
+      busy=false;
+      startOrbit(true);
+    }
   }
 
   function onTouch(button,xy){
@@ -768,17 +701,8 @@
     if(mode!=="orbit"||busy)return;
     try{if(!Bangle.isLCDOn())return;}catch(e){}
 
-    if(tapTimer){
-      clear(tapTimer);tapTimer=undefined;tapCount=0;
-      openSettings();
-      return;
-    }
-
-    tapCount=1;
-    tapTimer=setTimeout(function(){
-      tapTimer=undefined;tapCount=0;
-      if(!killed&&mode==="orbit")openCalendar();
-    },400);
+    clearTaps();
+    openCalendar();
   }
 
   function onSwipe(lr,ud){
@@ -798,10 +722,9 @@
       try{Bangle.setLocked(false);}catch(e){}
 
       if(mode==="calendar"&&calendar)calendar.stop();
-      if(mode!=="orbit"||selectedDayOffset!==0){
-        selectedDayOffset=0;
-        hasSelectedDate=false;
-        MOON_CACHE_BUCKET=-1;
+      if(mode!=="orbit"){
+        /* Keep a selected day in RAM across LCD power events.  V0.68 could
+           erase a valid choice here before Orbit had a chance to redraw it. */
         resetOnWake=true;
       }
       return;
@@ -828,11 +751,6 @@
     Bangle.showLauncher();
   }
 
-  function installButtonWatch(){
-    if(buttonWatch)clearWatch(buttonWatch);
-    buttonWatch=setWatch(onButton,BTN1,{repeat:true,edge:"rising",debounce:30});
-  }
-
   function armMinute(){
     clear(minuteTimer);
     minuteTimer=setTimeout(function(){
@@ -847,9 +765,7 @@
     stopOrbitTimers();
     clear(unlockTimer);unlockTimer=undefined;
     if(calendar)calendar.stop();
-    if(buttonWatch){clearWatch(buttonWatch);buttonWatch=undefined;}
-    try{Bangle.removeListener("touch",onTouch);}catch(e){}
-    try{Bangle.removeListener("swipe",onSwipe);}catch(e){}
+    try{Bangle.setUI();}catch(e){}
     try{Bangle.removeListener("faceUp",onFaceUp);}catch(e){}
     try{Bangle.removeListener("lcdPower",onLCD);}catch(e){}
     try{Bangle.removeListener("lock",onLock);}catch(e){}
@@ -861,14 +777,11 @@
   buildLightingCache();
   buildEarthMapCache();
   buildMoonCache();
-  try{Bangle.setUI({mode:"custom"});}catch(e){}
-  Bangle.on("touch",onTouch);
-  Bangle.on("swipe",onSwipe);
+  try{Bangle.setUI({mode:"custom",touch:onTouch,swipe:onSwipe,btn:onButton});}catch(e){}
   Bangle.on("faceUp",onFaceUp);
   Bangle.on("lcdPower",onLCD);
   Bangle.on("lock",onLock);
   E.on("kill",cleanup);
-  installButtonWatch();
   try{Bangle.setBacklight(false);}catch(e){}
   try{Bangle.setLocked(false);}catch(e){}
   drawBase();
