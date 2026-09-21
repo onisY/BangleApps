@@ -3,7 +3,7 @@
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbit.json";
   var cfg=Storage.readJSON(CFGFILE,1)||{};
-  /* V0.02 balanced layout. Normalize stored values so settings and rendering agree. */
+  /* One canonical coordinate pair. Old lat/lon is migrated once. */
   (function(){
     var changed=false;
     function set(k,v){if(cfg[k]!==v){cfg[k]=v;changed=true;}}
@@ -18,6 +18,21 @@
     orb=Math.max(mn,Math.min(70,orb));
     set("sunSize",sun);set("earthSize",earth);set("moonSize",moon);set("moonOrbit",orb);
     set("layoutVersion",2);
+
+    var lat,lon;
+    if(cfg.coordVersion!==2){
+      lat=isFinite(cfg.lat)?+cfg.lat:(isFinite(cfg.manualLat)?+cfg.manualLat:35.694);
+      lon=isFinite(cfg.lon)?+cfg.lon:(isFinite(cfg.manualLon)?+cfg.manualLon:139.754);
+      set("coordVersion",2);
+    }else{
+      lat=isFinite(cfg.manualLat)?+cfg.manualLat:35.694;
+      lon=isFinite(cfg.manualLon)?+cfg.manualLon:139.754;
+    }
+    lat=Math.max(-90,Math.min(90,lat));
+    lon=Math.max(-180,Math.min(180,lon));
+    set("manualLat",lat);set("manualLon",lon);
+    if(cfg.lat!==undefined){delete cfg.lat;changed=true;}
+    if(cfg.lon!==undefined){delete cfg.lon;changed=true;}
     if(changed)try{Storage.writeJSON(CFGFILE,cfg);}catch(e){}
   })();
   /* GPS is used only by orbit.settings.js while acquiring a location.
@@ -53,8 +68,8 @@
   var MOON_NATIVE=(typeof g.transformVertices==="function"),SUNANG=0;
   var MOON_CACHE_MS=1800000,MOON_CACHE_BUCKET=-1,MOON_CACHE_DATA;
   var MOON_CACHE_LIT,MOON_CACHE_FAR,MOON_CACHE_NEAR;
-  var TESTLAT=(cfg.lat===undefined?35.694:Math.max(-90,Math.min(90,+cfg.lat)));
-  var TESTLON=(cfg.lon===undefined?139.754:Math.max(-180,Math.min(180,+cfg.lon)));
+  var TESTLAT=Math.max(-90,Math.min(90,+cfg.manualLat));
+  var TESTLON=Math.max(-180,Math.min(180,+cfg.manualLon));
   var VIEW_SOUTH=!!cfg.viewSide;
   var LIGHTSPAN=[],LIGHTBX=[],LIGHTBY=[],LIGHTLIMB=[],LIGHTSTEPS=6,LUX=0,LUY=0,LVX=0,LVY=0;
   var LIGHTTERM=[],LIGHTNIGHT=[];
