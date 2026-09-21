@@ -3,6 +3,10 @@
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbit.json";
   var cfg=Storage.readJSON(CFGFILE,1)||{};
+  /* GPS is used only by orbit.settings.js while acquiring a location.
+     The clock never requests GPS power. Clear only our settings-owner request
+     in case a settings session was interrupted. */
+  try{Bangle.setGPSPower(0,"orbitsettings");}catch(e){}
   var calModule,calendar;
   try{
     var calSource=Storage.read("orbit.cal.js");
