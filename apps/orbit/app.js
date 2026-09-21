@@ -3,6 +3,23 @@
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbit.json";
   var cfg=Storage.readJSON(CFGFILE,1)||{};
+  /* V0.02 balanced layout. Normalize stored values so settings and rendering agree. */
+  (function(){
+    var changed=false;
+    function set(k,v){if(cfg[k]!==v){cfg[k]=v;changed=true;}}
+    var sun=isFinite(cfg.sunSize)?(cfg.sunSize|0):8;
+    var earth=isFinite(cfg.earthSize)?(cfg.earthSize|0):42;
+    var moon=isFinite(cfg.moonSize)?(cfg.moonSize|0):15;
+    sun=Math.max(6,Math.min(15,sun));
+    earth=Math.max(40,Math.min(45,earth));
+    moon=Math.max(14,Math.min(16,moon));
+    var mn=earth+moon+4;
+    var orb=isFinite(cfg.moonOrbit)?(cfg.moonOrbit|0):62;
+    orb=Math.max(mn,Math.min(70,orb));
+    set("sunSize",sun);set("earthSize",earth);set("moonSize",moon);set("moonOrbit",orb);
+    set("layoutVersion",2);
+    if(changed)try{Storage.writeJSON(CFGFILE,cfg);}catch(e){}
+  })();
   /* GPS is used only by orbit.settings.js while acquiring a location.
      The clock never requests GPS power. Clear only our settings-owner request
      in case a settings session was interrupted. */
@@ -22,14 +39,12 @@
   var selectedDayOffset=0,hasSelectedDate=false;
   var colonX=0,colonVisible=true,batteryCharging=false;
   var BATLEFT=138;
-  var SUNR=(cfg.sunSize===undefined?6:Math.max(4,Math.min(15,cfg.sunSize|0)));
-  var EARTHR=(cfg.earthSize===undefined?30:Math.max(25,Math.min(50,cfg.earthSize|0)));
-  var MOONR=(cfg.moonSize===undefined?7:Math.max(4,Math.min(15,cfg.moonSize|0)));
-  var MOONORBIT=(cfg.moonOrbit===undefined?44:Math.max(40,Math.min(80,cfg.moonOrbit|0)));
-  /* Keep at least one full lunar diameter between the Earth and Moon surfaces.
-     Center-to-center minimum = Earth radius + Moon diameter + Moon radius. */
-  var minOrbit=EARTHR+3*MOONR;
-  if(MOONORBIT<minOrbit)MOONORBIT=minOrbit;
+  var SUNR=Math.max(6,Math.min(15,cfg.sunSize|0));
+  var EARTHR=Math.max(40,Math.min(45,cfg.earthSize|0));
+  var MOONR=Math.max(14,Math.min(16,cfg.moonSize|0));
+  /* A small visible surface gap fits the large Earth/Moon design on 176x176. */
+  var minOrbit=EARTHR+MOONR+4;
+  var MOONORBIT=Math.max(minOrbit,Math.min(70,cfg.moonOrbit|0));
   var SUNRAY=4,SUNX=0,SUNY=0,EARTHX=0,EARTHY=0;
   var SUN_RAYS=[],SUN_TEX_ORANGE=[],SUN_SPOT_X=0,SUN_SPOT_Y=0;
   var SYNODIC=29.530588853,NEWMOON=947182440000;
@@ -696,6 +711,21 @@
     }
   }
 
+  function openSettings(){
+    if(killed||mode!=="orbit")return;
+    stopOrbitTimers();
+    var src=Storage.read("orbit.settings.js");
+    if(!src){startOrbit(true);return;}
+    cleanup();
+    try{
+      var fn=eval(src);
+      if(typeof fn==="function")fn(function(){load("orbit.app.js");});
+      else load("orbit.app.js");
+    }catch(e){
+      load("orbit.app.js");
+    }
+  }
+
   function onTouch(button,xy){
     if(killed)return;
     if(mode==="calendar"){
@@ -705,8 +735,21 @@
     if(mode!=="orbit"||busy)return;
     try{if(!Bangle.isLCDOn())return;}catch(e){}
 
-    clearTaps();
-    openCalendar();
+    tapCount++;
+    if(tapCount===1){
+      clear(tapTimer);
+      tapTimer=setTimeout(function(){
+        tapTimer=undefined;
+        if(killed||mode!=="orbit")return;
+        tapCount=0;
+        openCalendar();
+      },400);
+      return;
+    }
+    if(tapCount>=2){
+      clear(tapTimer);tapTimer=undefined;tapCount=0;
+      openSettings();
+    }
   }
 
   function onSwipe(lr,ud){
