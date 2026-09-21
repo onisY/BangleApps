@@ -18,7 +18,7 @@ A Bangle.js 2 Sun-Earth-Moon clock with an integrated five-week calendar.
 Open **Settings > Apps > orbit**, or double-tap the orbit face. The settings menu includes **Exit to orbit** so it can return directly to the clock. The standard app settings screen controls:
 
 - location mode: Place, Manual, or GPS
-- Place: all 47 Japanese prefectural capitals and world national capitals
+- Place: all 47 Japanese prefectural capitals and world national capitals; wide countries using multiple civil-time standards also offer representative cities for their major time zones
 - Manual: latitude/longitude
 - GPS: on-demand fix only while this Settings screen is acquiring; GPS is immediately switched off after a fix, cancel, or leaving Settings
 - selectable **View side: North / South** polar viewpoint
