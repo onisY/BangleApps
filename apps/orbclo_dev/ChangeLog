@@ -1,3 +1,0 @@
-0.03: Replace the fragile runtime patch/eval harness with a standalone Orbclo Dev app. Remove core.js dependency, keep Dev storage/GPS/screenshot names isolated, accept taps while locked, show immediate navy acknowledgement on the first Orbit tap, and discard input received while a transition or redraw is in progress.
-0.02: Fix touch handling so Orbclo accepts taps even while the watch is locked, and add an input-busy gate so taps/swipes/button presses received during screen transitions or heavy redraws are discarded instead of being replayed afterward.
-0.01: Initial Orbclo Dev channel created from the public Orbclo 0.01 baseline. Development state, GPS tag and screenshots are isolated from the public app.

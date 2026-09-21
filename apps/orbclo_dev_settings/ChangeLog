@@ -1,4 +1,0 @@
-0.04: Extend Moon orbit setting from 40–70 px to 40–80 px so the maximum Earth/Moon sizes can maintain a one-Moon-radius surface gap.
-0.03: Add Moon orbit 40–70 px and align body-size ranges with Orbit 0.33: Sun 4–15 px, Earth 25–50 px, Moon 4–15 px.
-0.02: Share orbclo_orbitdev.json with the isolated Orbit test and set Moon size range to 3–15 px with default 7 px.
-0.01: Isolated settings-menu test based on the old Orbit settings structure. GPS and full location database are intentionally deferred until menu/storage behavior is verified.
