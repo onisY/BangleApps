@@ -863,10 +863,10 @@
         /* A deliberate double tap in the non-date area clears the current
            selection. This is not an input error. */
         if(idx<0){
-          var oldIdx=selectedIndex();
           stopBlink();
           selected=undefined;
-          if(oldIdx>=0)drawCell(oldIdx);
+          /* Full repaint also clears any stale selection frame. */
+          drawCalendar(false);
           if(onSelect)onSelect(undefined,0);
           report({selOK:1,selStage:"CLEAR",selIdx:-1,selOff:0,selDtMs:dt,buzzMs:80});
           drawTop("SEL CLEAR");
@@ -876,10 +876,12 @@
         }
 
         stage="DATE";
-        var oldIdx=selectedIndex();
         stopBlink();
-        if(oldIdx>=0&&oldIdx!==idx)drawCell(oldIdx);
         selected=addDays(pageStart,idx);
+        /* Repaint the whole calendar body before starting the new selection
+           blink. This guarantees that a previously selected yellow cell is
+           cleared even if an earlier partial redraw was delayed. */
+        drawCalendar(false);
         stage="OFFSET";
         offset=dayNumber(selected)-dayNumber(today);
         stage="CALL";
