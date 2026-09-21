@@ -383,7 +383,7 @@ function onAppJSONLoaded() {
       shortName:"orbit",
       version:"0.01",
       author:"onisY",
-      description:"Sun-Earth-Moon clock with integrated five-week calendar, Japan/UK holiday bit caches, selectable dates, and editable anniversaries/exceptional holidays.",
+      description:"Sun-Earth-Moon clock with integrated calendar and Place/Manual/on-demand GPS location settings.",
       icon:"app.png",
       type:"clock",
       tags:"clock,science,astronomy,calendar,moon",
@@ -394,6 +394,7 @@ function onAppJSONLoaded() {
         {name:"orbit.app.js",url:"app.js"},
         {name:"orbit.cal.js",url:"calendar.js"},
         {name:"orbit.settings.js",url:"settings.js"},
+        {name:"orbitloc",url:"locations.js"},
         {name:"orbit.img",url:"app-icon.js",evaluate:true}
       ],
       data:[
