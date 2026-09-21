@@ -1,8 +1,8 @@
-/* Orbclo Dev Orbit 0.80 - yellow selected-date blink and region verification */
+/* Orbclo Dev Orbit 0.81 - extra event JSON overlay */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
-  var diag={v:"0.80"};
+  var diag={v:"0.81"};
   function ms(){return Math.round(getTime()*1000);}
   function diagMerge(x){if(!x)return;for(var k in x)diag[k]=x[k];}
   var cfg=Storage.readJSON(CFGFILE,1)||{};
@@ -843,6 +843,11 @@
           onchange:function(v){cc.ukRegion=v===1?"sc":(v===2?"ni":"ew");saveCal();}
         },
         "Holiday cache":showCacheMenu,
+        "Extra events":function(){
+          var n=calModule&&calModule.extraEventCount?calModule.extraEventCount():0;
+          E.showMessage(n+" event"+(n===1?"":"s")+"\nEdit:\norbclo_orbitdev.events.json","Extra events");
+          setTimeout(showMainMenu,1800);
+        },
         "Cal auto return":{
           value:cc.timeout,min:15,max:120,step:15,
           format:function(v){return v+" s";},
@@ -861,7 +866,7 @@
     if(mode!=="orbit"||busy)return;
     try{if(!Bangle.isLCDOn())return;}catch(e){}
 
-    diag={v:"0.80",orbitTapMs:ms(),orbitTouchSeen:1};
+    diag={v:"0.81",orbitTapMs:ms(),orbitTouchSeen:1};
     clearTaps();
     openCalendar(diag.orbitTapMs);
   }
