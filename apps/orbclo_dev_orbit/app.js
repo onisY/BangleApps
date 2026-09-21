@@ -1,8 +1,8 @@
-/* Orbclo Dev Orbit 0.81 - extra event JSON overlay */
+/* Orbclo Dev Orbit 0.82 - persistent selected-date blink and clear gesture */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbclo_orbitdev.json";
-  var diag={v:"0.81"};
+  var diag={v:"0.82"};
   function ms(){return Math.round(getTime()*1000);}
   function diagMerge(x){if(!x)return;for(var k in x)diag[k]=x[k];}
   var cfg=Storage.readJSON(CFGFILE,1)||{};
@@ -703,9 +703,15 @@
           tapMs:tapMs||diag.orbitTapMs,
           onDiag:function(x){diagMerge(x);},
           onSelect:function(d,offset){
-            if(killed||!d)return;
+            if(killed)return;
             diag.selectCallback=1;
             diag.selectCallbackMs=ms();
+            if(!d){
+              setDateFromCalendar(undefined);
+              diag.selectionCleared=1;
+              diag.handoffOff=0;
+              return;
+            }
             if(typeof offset==="number"&&isFinite(offset)){
               selectedDayOffset=offset|0;
               hasSelectedDate=true;
@@ -718,7 +724,7 @@
             diag.returnCallback=1;
             diag.returnCallbackMs=ms();
             try{
-              if(d)setDateFromCalendar(d);
+              setDateFromCalendar(d);
               startOrbit(true);
             }catch(e){
               try{Storage.write("orbclo_dev_orbit.err","return: "+e);}catch(x){}
@@ -866,7 +872,7 @@
     if(mode!=="orbit"||busy)return;
     try{if(!Bangle.isLCDOn())return;}catch(e){}
 
-    diag={v:"0.81",orbitTapMs:ms(),orbitTouchSeen:1};
+    diag={v:"0.82",orbitTapMs:ms(),orbitTouchSeen:1};
     clearTaps();
     openCalendar(diag.orbitTapMs);
   }
