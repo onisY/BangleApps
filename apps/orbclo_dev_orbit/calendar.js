@@ -689,9 +689,9 @@
 
         preparePageHolidayState();
 
-        var t1=Math.round(getTime()*1000),changed=0;
+        var t1=Math.round(getTime()*1000),changed=0,si=selectedIndex();
         for(var i=0;i<35;i++){
-          if(holidayFlags[i]&&i!==todayIndex&&(i%7)!==6){drawCell(i);changed++;}
+          if(holidayFlags[i]&&i!==todayIndex&&(i%7)!==6&&i!==si){drawCell(i);changed++;}
         }
         try{g.flip();}catch(e){}
         lastHolidayDrawMs=Math.round(getTime()*1000)-t1;
@@ -828,7 +828,7 @@
     function stopBlink(){clearTimer(blinkTimer);blinkTimer=undefined;}
     function blinkTick(){
       blinkTimer=undefined;
-      if(!active||!selected)return;
+      if(!active||!selected||selectedIndex()<0)return;
       try{
         blinkWhite=!blinkWhite;
         drawSelectedCell(blinkWhite);
@@ -836,11 +836,11 @@
         logCalError("blink",e);
         return;
       }
-      if(active&&selected)blinkTimer=setTimeout(blinkTick,500);
+      if(active&&selected&&selectedIndex()>=0)blinkTimer=setTimeout(blinkTick,500);
     }
     function startBlink(){
       stopBlink();blinkWhite=true;
-      if(active&&selected){
+      if(active&&selected&&selectedIndex()>=0){
         try{drawSelectedCell(true);}catch(e){logCalError("frame",e);return;}
         blinkTimer=setTimeout(blinkTick,500);
       }
@@ -878,12 +878,22 @@
       var stage="IDX",idx=-1,offset=0;
       try{
         idx=dateIndexAt(xy);
+
+        /* A deliberate double tap in the non-date area clears the current
+           selection. This is not an input error. */
         if(idx<0){
-          report({selOK:0,selStage:"NOXY",selDtMs:dt,buzzMs:500});
-          diagPanel("ERR NOXY","DT "+dt+" B500");
-          try{Bangle.buzz(500);}catch(be){}
-          return false;
+          var oldIdx=selectedIndex();
+          stopBlink();
+          selected=undefined;
+          if(oldIdx>=0)drawCell(oldIdx);
+          if(onSelect)onSelect(undefined,0);
+          report({selOK:1,selStage:"CLEAR",selIdx:-1,selOff:0,selDtMs:dt,buzzMs:80});
+          drawTop("SEL CLEAR");
+          try{g.flip();}catch(fe){}
+          try{Bangle.buzz(80);}catch(be){}
+          return true;
         }
+
         stage="DATE";
         var oldIdx=selectedIndex();
         stopBlink();
@@ -955,7 +965,7 @@
     }
     function swipe(lr,ud){
       if(!active||!ud)return;
-      clearTaps();armAuto();cancelHolidayBatch();
+      clearTaps();armAuto();cancelHolidayBatch();stopBlink();
       pageStart=addDays(pageStart,ud<0?35:-35);
 
       stopEventBlink();
@@ -970,6 +980,7 @@
       diagPerf(dMs,dMs,cMs);
       startHolidayBatch(dMs,dMs,cMs,holidayState);
       startEventBlink();
+      startBlink();
     }
     function start(opts){
       opts=opts||{};stop();cfg=readConfig();active=true;
@@ -1005,6 +1016,7 @@
          cells together in one batch. */
       startHolidayBatch(total,drawMs,cellMs,holidayState);
       startEventBlink();
+      startBlink();
       armAuto();
     }
     function isActive(){return active;}
