@@ -244,6 +244,9 @@ orbit follows the BangleApps repository licensing policy and is provided under t
 
 Third-party data remains subject to the respective terms and licences listed above.
 
+### creater
+
+onisY
 
 ---
 
@@ -493,3 +496,7 @@ orbit 0.04 のデータ更新では、P05-22から作成されたオープンソ
 orbit は BangleApps リポジトリのライセンス方針に従い、**MIT License** で扱います。詳細はリポジトリ直下の `LICENSE` を参照してください。
 
 第三者データには上記それぞれの利用条件・ライセンスが適用されます。
+
+### 作者
+
+onishi(R8/9/21)
