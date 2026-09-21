@@ -55,13 +55,14 @@
   var MOON_CACHE_LIT,MOON_CACHE_FAR,MOON_CACHE_NEAR;
   var TESTLAT=(cfg.lat===undefined?35.694:Math.max(-90,Math.min(90,+cfg.lat)));
   var TESTLON=(cfg.lon===undefined?139.754:Math.max(-180,Math.min(180,+cfg.lon)));
+  var VIEW_SOUTH=!!cfg.viewSide;
   var LIGHTSPAN=[],LIGHTBX=[],LIGHTBY=[],LIGHTLIMB=[],LIGHTSTEPS=6,LUX=0,LUY=0,LVX=0,LVY=0;
   var LIGHTTERM=[],LIGHTNIGHT=[];
 
   /* Lightweight Hemisphere map.  The full Orbit map used many more coastline
      vertices.  At a 25-50 px Earth radius these coarser polygons preserve the
      recognizable continents while keeping redraw cost measurable and modest. */
-  var HEMI_LAND=[
+  var HEMI_LAND_N=[
     /* North America incl. Alaska and Mexico.  Mexico is intentionally
        exaggerated slightly so the peninsula/waist remains visible at ~30 px radius. */
     [72,-168,65,-154,58,-143,55,-136,49,-127,39,-123,32,-117,
@@ -83,16 +84,36 @@
     [50,-5,53,-4,57,-4.5,58,-1,54,-1,50.5,-1]
   ];
 
+  var HEMI_LAND_S=[
+    /* South America */
+    [-2,-80,-8,-79,-15,-76,-22,-71,-30,-72,-38,-73,-46,-75,
+     -53,-70,-56,-66,-52,-60,-45,-55,-36,-52,-28,-49,-20,-44,
+     -12,-38,-5,-35,0,-45],
+    /* Southern Africa */
+    [0,9,-7,12,-15,13,-23,16,-30,18,-35,20,-34,27,-29,32,
+     -22,35,-15,39,-8,40,-2,35,0,29],
+    /* Australia */
+    [-12,113,-16,121,-20,129,-18,137,-22,145,-28,153,-35,151,
+     -39,145,-38,136,-34,128,-31,116,-24,113],
+    /* Madagascar */
+    [-12,49,-16,50,-21,48,-26,45,-23,43,-17,44],
+    /* New Zealand */
+    [-34,172,-39,176,-44,170,-47,168,-43,166,-38,169]
+  ];
+
   /* Hudson Bay is a sea cutout inside the North America polygon. */
-  var HEMI_WATER=[
+  var HEMI_WATER_N=[
     [64,-95,62,-88,58,-80,53,-79,51,-85,54,-94,59,-97]
   ];
 
+  var HEMI_WATER_S=[];
+  var HEMI_LAND=VIEW_SOUTH?HEMI_LAND_S:HEMI_LAND_N;
+  var HEMI_WATER=VIEW_SOUTH?HEMI_WATER_S:HEMI_WATER_N;
   var HEMI_XY=[],HEMI_WATER_XY=[],HEMI_SCREEN=[],HEMI_WATER_SCREEN=[],HEMI_ICE_R=0;
   /* Post-night white coastline redraw is the expensive part on Bangle.js 2.
      Keep only the large/diagnostic shapes that materially aid recognition:
      North America, Greenland, Eurasia and Japan. */
-  var HEMI_COAST=[0,1,2,4];
+  var HEMI_COAST=VIEW_SOUTH?[0,1,2,3,4]:[0,1,2,4];
   var HEMI_MAT=[1,0,0,1,0,0];
   var HEMI_NATIVE=(typeof g.transformVertices==="function");
 
@@ -238,7 +259,7 @@
         var src=srcSet[k],dst=[],scr=new Array(src.length);
         for(var i=0;i<src.length;i+=2){
           var rr=EARTHR*Math.cos(rad(src[i]));
-          var da=-rad(src[i+1]-TESTLON); /* north-side view: east is clockwise-negative */
+          var da=(VIEW_SOUTH?1:-1)*rad(src[i+1]-TESTLON);
           dst.push(rr*Math.cos(da),rr*Math.sin(da));
         }
         dstSet.push(dst);
@@ -248,7 +269,7 @@
 
     cacheSet(HEMI_LAND,HEMI_XY,HEMI_SCREEN);
     cacheSet(HEMI_WATER,HEMI_WATER_XY,HEMI_WATER_SCREEN);
-    HEMI_ICE_R=Math.max(2,Math.round(EARTHR*Math.cos(rad(78))));
+    HEMI_ICE_R=Math.max(2,Math.round(EARTHR*Math.cos(rad(VIEW_SOUTH?65:78))));
   }
 
   function mapPolyInto(src,p,ca,sa,cx,cy){
@@ -261,7 +282,7 @@
 
   function buildLightingInto(dec,cx,cy){
     /* Reuse fixed arrays instead of allocating term/night polygons each redraw. */
-    var sd=Math.sin(dec),i,u,x,y,j=0;
+    var sd=Math.sin(dec)*(VIEW_SOUTH?-1:1),i,u,x,y,j=0;
     for(i=0;i<=LIGHTSTEPS;i++){
       u=-sd*LIGHTSPAN[i];
       x=Math.round(cx+(LIGHTBX[i]-EARTHX)+LUX*u);
@@ -404,7 +425,7 @@
     buildLightingInto(sol.dec,EARTHX,EARTHY);
 
     var sunAng=Math.atan2(SUNY-EARTHY,SUNX-EARTHX);
-    var baseA=sunAng-sol.ha;
+    var baseA=sunAng+(VIEW_SOUTH?sol.ha:-sol.ha);
     var ca=Math.cos(baseA),sa=Math.sin(baseA);
     var i;
 
@@ -441,7 +462,7 @@
     g.setColor(WHITE);
     for(i=0;i<HEMI_COAST.length;i++)
       g.drawPoly(HEMI_SCREEN[HEMI_COAST[i]],true);
-    g.drawPoly(HEMI_WATER_SCREEN[0],true);
+    if(HEMI_WATER_SCREEN.length)g.drawPoly(HEMI_WATER_SCREEN[0],true);
 
     g.fillCircle(EARTHX,EARTHY,HEMI_ICE_R);
     g.drawPoly(LIGHTTERM,false);
@@ -456,7 +477,7 @@
     var phase=age/SYNODIC;
 
     /* North-side view: new Moon lies toward the Sun; phase increases CCW visually. */
-    var a=SUNANG-phase*2*Math.PI;
+    var a=SUNANG+(VIEW_SOUTH?1:-1)*phase*2*Math.PI;
     var ca=Math.cos(a),sa=Math.sin(a);
     return {
       age:age,
@@ -537,7 +558,7 @@
   function drawObserver(sol){
     var sunAng=Math.atan2(SUNY-EARTHY,SUNX-EARTHX);
     var rr=EARTHR*Math.cos(rad(TESTLAT));
-    var a=sunAng-sol.ha;
+    var a=sunAng+(VIEW_SOUTH?sol.ha:-sol.ha);
     var px=EARTHX+rr*Math.cos(a),py=EARTHY+rr*Math.sin(a);
     var rx=px-EARTHX,ry=py-EARTHY;
     var len=Math.sqrt(rx*rx+ry*ry)||1;
