@@ -16,7 +16,10 @@ A Bangle.js 2 Sun-Earth-Moon clock with an integrated five-week calendar.
 
 Open **Settings > Apps > orbit**. The standard app settings screen controls:
 
-- latitude and longitude
+- location mode: Place, Manual, or GPS
+- Place: all 47 Japanese prefectural capitals and world national capitals
+- Manual: latitude/longitude
+- GPS: on-demand fix only while this Settings screen is acquiring; GPS is immediately switched off after a fix, cancel, or leaving Settings
 - Sun, Earth, Moon and lunar-orbit sizes
 - calendar/holiday region: Japan, England/Wales, Scotland, Northern Ireland
 - calendar auto-return timeout
@@ -24,6 +27,8 @@ Open **Settings > Apps > orbit**. The standard app settings screen controls:
 - anniversaries and exceptional holidays
 
 Calendar display language and holiday region remain coupled: Japan uses Japanese weekday labels; the three UK regions use English labels.
+
+The orbit clock itself never enables GPS. A saved GPS fix is just stored latitude/longitude and costs no GPS power during normal clock use.
 
 ## Holidays
 
