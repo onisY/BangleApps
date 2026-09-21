@@ -4,7 +4,7 @@
   "shortName": "orbit",
   "version": "0.04",
   "author": "onisY",
-  "description": "Sun-Earth-Moon clock with North/South view, integrated calendar, explicit Place name/Manual/GPS location settings, Japan municipality selection, and readable bottom-right country/place or coordinate display.",
+  "description": "Sun-Earth-Moon clock with integrated calendar.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,science,astronomy,calendar,moon",
