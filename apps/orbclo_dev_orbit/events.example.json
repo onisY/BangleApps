@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "events": [
+    {
+      "date": "2030-05-02",
+      "type": "holiday",
+      "label": "臨時祝日",
+      "color": "red",
+      "blink": false
+    },
+    {
+      "date": "10-15",
+      "repeat": "yearly",
+      "type": "family",
+      "label": "我が家の記念日",
+      "color": "yellow",
+      "blink": true
+    },
+    {
+      "date": "03-01",
+      "repeat": "yearly",
+      "type": "birthday",
+      "label": "誕生日",
+      "color": "magenta",
+      "blink": true
+    },
+    {
+      "from": "2027-08-10",
+      "to": "2027-08-15",
+      "type": "family",
+      "label": "夏休み",
+      "color": "cyan",
+      "blink": false
+    },
+    {
+      "from": "12-29",
+      "to": "01-03",
+      "repeat": "yearly",
+      "type": "custom",
+      "label": "年末年始",
+      "color": "orange",
+      "blink": false
+    }
+  ]
+}
