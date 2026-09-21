@@ -1,4 +1,4 @@
-/* orbit integrated calendar module. Evaluates to an API object. */
+/* orbit 0.04 stable: integrated five-week calendar module. */
 (function(){
   var Storage=require("Storage");
   var CFG_FILE="orbit.cal.json";
@@ -782,7 +782,7 @@
         g.drawLine(0,y,W-1,y);
       }
 
-      /* Built-in 6x8x2 remains the fastest digit path from V0.71. */
+      /* Built-in 6x8x2 keeps date rendering compact and fast. */
       g.setFont("6x8",2).setFontAlign(0,0);
       for(i=0;i<35;i++){
         c=i%7;r=(i/7)|0;
@@ -983,8 +983,7 @@
       pageStart=mondayOf(focus);selected=opts.selectedDate?midnight(opts.selectedDate):undefined;blinkWhite=true;
       loadExtraEvents();
 
-      /* Stage 1: build only cheap day-number/today data and paint immediately.
-         Holiday flags intentionally remain zero in this first visible frame. */
+      /* Stage 1: build day cells, apply cached holiday data, and paint immediately. */
       var cellMs=buildBasicCellData();
       var holidayState=preparePageHolidayState();
       buildEventPage();
@@ -1001,10 +1000,8 @@
         calCellMs:cellMs,holidayDeferred:holidayState.mode==="cache"?holidayState.years.length:1?1:0,calReady:1
       });
 
-      /* Stage 2: after the first frame is already visible, calculate all 35
-         holiday results cooperatively (one date per event-loop turn), while
-         keeping the display unchanged. When all 35 are ready, update holiday
-         cells together in one batch. */
+      /* Stage 2: create missing yearly holiday caches after the first frame,
+         then repaint affected holiday cells together. */
       startHolidayBatch(total,drawMs,cellMs,holidayState);
       startEventBlink();
       startBlink();

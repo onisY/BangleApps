@@ -1,9 +1,9 @@
-/* orbit 0.033 */
+/* orbit 0.04 stable */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbit.json";
   var cfg=Storage.readJSON(CFGFILE,1)||{};
-  /* One canonical coordinate pair. Old lat/lon is migrated once. */
+  /* Normalize persisted settings and migrate legacy coordinates once. */
   (function(){
     var changed=false;
     function set(k,v){if(cfg[k]!==v){cfg[k]=v;changed=true;}}
@@ -35,9 +35,7 @@
     if(cfg.lon!==undefined){delete cfg.lon;changed=true;}
     if(changed)try{Storage.writeJSON(CFGFILE,cfg);}catch(e){}
   })();
-  /* GPS is used only by orbit.settings.js while acquiring a location.
-     The clock never requests GPS power. Clear only our settings-owner request
-     in case a settings session was interrupted. */
+  /* GPS is settings-only; release any stale settings-owned request. */
   try{Bangle.setGPSPower(0,"orbitsettings");}catch(e){}
   var calModule,calendar;
   try{
@@ -45,8 +43,7 @@
     if(calSource){calModule=eval(calSource);calendar=calModule.create();}
     calSource=undefined;
   }catch(calErr){calModule=undefined;calendar=undefined;}
-  /* Preload widgets during app startup so opening 5wCal does not pay the
-     widget loading cost on the user's first calendar tap. */
+  /* Load widgets at startup so the first calendar open stays responsive. */
   try{if(typeof WIDGETS==="undefined")Bangle.loadWidgets();}catch(e){}
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800,GREEN=0x07E0;
   var busy=false,killed=false,minuteTimer,secondTimer,idleTimer,tapTimer,unlockTimer;
@@ -57,7 +54,7 @@
   var SUNR=Math.max(6,Math.min(15,cfg.sunSize|0));
   var EARTHR=Math.max(40,Math.min(45,cfg.earthSize|0));
   var MOONR=Math.max(14,Math.min(16,cfg.moonSize|0));
-  /* A small visible surface gap fits the large Earth/Moon design on 176x176. */
+  /* Keep a visible gap between Earth and Moon at every supported size. */
   var minOrbit=EARTHR+MOONR+4;
   var MOONORBIT=Math.max(minOrbit,Math.min(70,cfg.moonOrbit|0));
   var SUNRAY=4,SUNX=0,SUNY=0,EARTHX=0,EARTHY=0;
@@ -71,20 +68,18 @@
   var TESTLAT=Math.max(-90,Math.min(90,+cfg.manualLat));
   var TESTLON=Math.max(-180,Math.min(180,+cfg.manualLon));
   var VIEW_SOUTH=!!cfg.viewSide;
-  /* Keep only tiny display metadata; location databases are never loaded here. */
+  /* Copy only location fields needed by the clock; place tables stay unloaded. */
   var LOCMODE=(cfg.locationMode===0?0:(cfg.locationMode===2?2:1));
   var LOCNAME=(LOCMODE===0?(cfg.locName||cfg.locPref||"Place"):"");
   var LOCCOUNTRY=(LOCMODE===0?(cfg.countryName||"Japan"):"");
   var LOCLAT=Math.abs(TESTLAT).toFixed(3)+(TESTLAT<0?"S":"N");
   var LOCLON=Math.abs(TESTLON).toFixed(3)+(TESTLON<0?"W":"E");
-  /* Runtime has copied everything it needs; release the configuration object. */
+  /* Drop the configuration object after extracting runtime values. */
   cfg=undefined;
   var LIGHTSPAN=[],LIGHTBX=[],LIGHTBY=[],LIGHTLIMB=[],LIGHTSTEPS=6,LUX=0,LUY=0,LVX=0,LVY=0;
   var LIGHTTERM=[],LIGHTNIGHT=[];
 
-  /* Lightweight Hemisphere map.  The full Orbit map used many more coastline
-     vertices.  At a 25-50 px Earth radius these coarser polygons preserve the
-     recognizable continents while keeping redraw cost measurable and modest. */
+  /* Simplified hemisphere geometry balances recognition and redraw cost. */
   var HEMI_LAND_N=[
     /* North America incl. Alaska and Mexico.  Mexico is intentionally
        exaggerated slightly so the peninsula/waist remains visible at ~30 px radius. */
@@ -133,9 +128,7 @@
   var HEMI_LAND=VIEW_SOUTH?HEMI_LAND_S:HEMI_LAND_N;
   var HEMI_WATER=VIEW_SOUTH?HEMI_WATER_S:HEMI_WATER_N;
   var HEMI_XY=[],HEMI_WATER_XY=[],HEMI_SCREEN=[],HEMI_WATER_SCREEN=[],HEMI_ICE_R=0;
-  /* Post-night white coastline redraw is the expensive part on Bangle.js 2.
-     Keep only the large/diagnostic shapes that materially aid recognition:
-     North America, Greenland, Eurasia and Japan. */
+  /* Redraw only coastlines that remain useful at this display scale. */
   var HEMI_COAST=VIEW_SOUTH?[0,1,2,3,4]:[0,1,2,4];
   var HEMI_MAT=[1,0,0,1,0,0];
   var HEMI_NATIVE=(typeof g.transformVertices==="function");
@@ -148,13 +141,12 @@
   function virtualDate(){return new Date(virtualNowMs());}
 
   function layoutBodies(){
-    /* The complete Moon envelope is tangent to the physical left and bottom edges. */
+    /* Place the Moon envelope tangent to the left and bottom screen edges. */
     var env=MOONORBIT+MOONR;
     EARTHX=env;
     EARTHY=H-1-env;
 
-    /* Keep the entire corona visible. Its outer tip, not the solar disk,
-       is tangent to the right edge and the celestial area's top edge. */
+    /* Keep the complete solar corona inside the drawable area. */
     var sunOuter=SUNR+SUNRAY;
     SUNX=W-1-sunOuter;
     SUNY=24+sunOuter;
@@ -213,9 +205,7 @@
   }
 
   function buildSunCache(){
-    /* Sun geometry is static on this clock face, so cache ray endpoints and
-       a tiny deterministic photosphere pattern once instead of recalculating
-       trig or texture positions on every redraw. */
+    /* Cache static Sun geometry to avoid repeated trigonometry on redraw. */
     SUN_RAYS=[];SUN_TEX_ORANGE=[];
     var i,a,ri=SUNR+1,ro=SUNR+SUNRAY;
     for(i=0;i<8;i++){
@@ -228,8 +218,7 @@
       );
     }
 
-    /* Stylized granulation offsets, scaled from the default 6 px radius.
-       Keep them sparse so the small Sun remains legible on Bangle.js 2. */
+    /* Sparse granulation remains visible without cluttering the small Sun. */
     var p=[
       -0.50,-0.17, -0.17,-0.50, 0.33,-0.33, 0.50,0.00,
        0.17,0.50, -0.33,0.33, -0.17,0.00, 0.33,0.17
@@ -237,9 +226,7 @@
     for(i=0;i<p.length;i+=2)
       SUN_TEX_ORANGE.push(Math.round(p[i]*SUNR),Math.round(p[i+1]*SUNR));
 
-    /* Cache one compact active-region center.  At the default 6 px radius
-       a radius-1 red patch is large enough to be visibly red on Bangle.js 2,
-       with a single black core pixel to retain the sunspot cue. */
+    /* Compact active region: red surround with a single dark core pixel. */
     SUN_SPOT_X=Math.round(-0.25*SUNR);
     SUN_SPOT_Y=Math.round(0.17*SUNR);
   }
@@ -272,9 +259,7 @@
   }
 
   function buildEarthMapCache(){
-    /* Precompute latitude/longitude into local polar XY once.  Also allocate
-       fixed screen-coordinate arrays here so redraws do not create polygon
-       arrays and burden Espruino's allocator/GC. */
+    /* Precompute map coordinates and reuse screen buffers to limit allocation/GC. */
     HEMI_XY=[];HEMI_WATER_XY=[];HEMI_SCREEN=[];HEMI_WATER_SCREEN=[];
 
     function cacheSet(srcSet,dstSet,screenSet){
@@ -332,8 +317,7 @@
         Math.round(Math.sin(q)*MOONR)
       );
 
-      /* Cache both the visible-radius arc and the +1 px erase arc.
-         This removes the per-redraw farScale multiplication. */
+      /* Cache visible and erase arcs so redraws avoid per-frame scaling. */
       var t=-Math.PI/2+i*Math.PI/8;
       var ct=Math.cos(t),st=Math.sin(t);
       MOONFAR.push(ct*MOONR,st*MOONR);
@@ -443,8 +427,7 @@
   }
 
   function drawEarth(sol){
-    /* Keep V0.50's native vertex transform, but remove all internal profiling.
-       drawBase() still measures total Earth time E for real-use comparison. */
+    /* Use native vertex transforms when available; otherwise use cached JS transforms. */
     buildLightingInto(sol.dec,EARTHX,EARTHY);
 
     var sunAng=Math.atan2(SUNY-EARTHY,SUNX-EARTHX);
@@ -562,8 +545,7 @@
     var nowMs=virtualNowMs();
     var bucket=Math.floor(nowMs/MOON_CACHE_MS);
 
-    /* The Moon moves only a fraction of a pixel during this cache interval,
-       so normal clock redraws can reuse the already-rasterized geometry. */
+    /* Cache lunar geometry for 30 minutes; motion stays sub-pixel at this scale. */
     if(bucket!==MOON_CACHE_BUCKET || MOON_CACHE_DATA===undefined){
       rebuildMoonGeometry(nowMs);
       MOON_CACHE_BUCKET=bucket;
@@ -589,9 +571,7 @@
     var x=Math.round(px),y=Math.round(py);
     var rs=riseSetHourAngle(TESTLAT,sol.dec);
 
-    /* Sunrise and sunset rays: +/-H0 from the local outward radial direction.
-       At equinox H0 is about 90 degrees, so they appear as the old straight
-       magenta tangent. In polar day/night there is no rise/set crossing. */
+    /* Draw sunrise/sunset rays at +/-H0; omit them in polar day/night. */
     if(!rs.polar){
       var plen=EARTHR+8;
       var ar=a-rs.h0,as=a+rs.h0;
@@ -604,13 +584,12 @@
         Math.round(py+Math.sin(as)*plen));
     }
 
-    /* Zenith length is unchanged from V0.42. */
+    /* Extend the zenith line into the lunar-orbit region. */
     var zenEndR=MOONORBIT+MOONR/2;
     var zen=Math.max(0,Math.round(zenEndR-rr));
     var zx=Math.round(px+ux*zen),zy=Math.round(py+uy*zen);
 
-    /* Match the red observer marker's 5 px diameter (fillCircle radius 2).
-       A single filled quadrilateral is cheaper than five parallel drawLine calls. */
+    /* Draw the 5 px-wide zenith line as one filled quadrilateral. */
     var hw=2;
     var qx=-uy*hw,qy=ux*hw;
     g.setColor(0x07E0).fillPoly([
@@ -672,9 +651,7 @@
 
   function drawLocationStatus(moon){
     if(LOCMODE===0){
-      /* Bottom two-line label. 14 px is the largest fixed ceiling that stays
-         below the Earth at every allowed Earth/Moon/orbit size. If the Moon
-         enters this area, place the text on the wider side of the Moon. */
+      /* Two-line country/place label: fit to width and shift around the Moon. */
       var right=W-2,p=placeLabelLayout(right,W-4);
       if(placeLabelHitsMoon(p,moon)){
         var moonRight=moon.x+MOONR+3;
@@ -896,8 +873,7 @@
 
       if(mode==="calendar"&&calendar)calendar.stop();
       if(mode!=="orbit"){
-        /* Keep a selected day in RAM across LCD power events.  V0.68 could
-           erase a valid choice here before Orbit had a chance to redraw it. */
+        /* Preserve the selected calendar date across LCD power cycles. */
         resetOnWake=true;
       }
       return;

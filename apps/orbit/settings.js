@@ -1,3 +1,4 @@
+/* orbit 0.04 stable: settings and editable event data. */
 (function(back){
   var Storage=require("Storage");
   var C,P,JPI;
@@ -14,7 +15,7 @@
   function readJSON(name,def){return Storage.readJSON(name,1)||def;}
   function write(name,obj){Storage.writeJSON(name,obj);}
 
-  /* Place tables are loaded only while Place is being edited. */
+  /* Load place tables lazily and release them when location editing ends. */
   function loadPlaceIndex(){
     if(C&&P)return;
     var d=require("orbitloc");
@@ -221,7 +222,7 @@
   }
   function startGPS(s){
     stopGPS();releasePlaceData();
-    /* Keep the previous source until GPS has a valid fix. */
+    /* Keep the saved location source unchanged until a valid GPS fix arrives. */
     gpsStarted=Date.now();gpsLastDraw=0;gpsLastSats=-1;gpsLastHdop=-1;gpsLastFix={};
     gpsHandler=function(fix){
       if(!gpsActive||!fix)return;
@@ -477,8 +478,7 @@
     E.showMenu(m);
   }
 
-  // Any stale request owned by a previously interrupted orbit settings
-  // session is explicitly released. The runtime app itself never enables GPS.
+  // Release any stale settings-owned GPS request on entry.
   try{Bangle.setGPSPower(0,GPS_ID);}catch(e){}
   E.on("kill",onKill);
   main();
