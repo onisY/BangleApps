@@ -374,6 +374,36 @@ window.addEventListener('load', (event) => {
 });
 
 function onAppJSONLoaded() {
+  // Personal fork production safeguard.  If a browser somehow receives an
+  // older generated apps.json, keep the new production orbit installable.
+  if (!appJSON.find(a => a.id === "orbit")) {
+    appJSON.push({
+      id:"orbit",
+      name:"orbit",
+      shortName:"orbit",
+      version:"0.01",
+      author:"onisY",
+      description:"Sun-Earth-Moon clock with integrated five-week calendar, Japan/UK holiday bit caches, selectable dates, and editable anniversaries/exceptional holidays.",
+      icon:"app.png",
+      type:"clock",
+      tags:"clock,science,astronomy,calendar,moon",
+      supports:["BANGLEJS2"],
+      readme:"README.md",
+      allow_emulator:true,
+      storage:[
+        {name:"orbit.app.js",url:"app.js"},
+        {name:"orbit.cal.js",url:"calendar.js"},
+        {name:"orbit.settings.js",url:"settings.js"},
+        {name:"orbit.img",url:"app-icon.js",evaluate:true}
+      ],
+      data:[
+        {name:"orbit.json"},
+        {name:"orbit.cal.json"},
+        {name:"orbit.events.json"}
+      ]
+    });
+  }
+
   let deviceId = getSavedDeviceId()
   if (deviceId !== undefined)
     filterAppsForDevice(deviceId);
