@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.80",
+  "version": "0.81",
   "author": "onisY",
-  "description": "Add clear selected-date feedback: a calendar date chosen by double tap now blinks with a yellow background every 500 ms, alternating with its normal holiday/weekend/today color until returning to Orbit. Use the existing low-cost 6x8x2 digit renderer for the blink. Preserve the intentional language/holiday coupling: Japanese display always uses Japan holidays; English display uses the selected England/Wales, Scotland, or Northern Ireland bank-holiday region. Region generators/settings were cross-checked for 2026 and 2027 against official Japan Cabinet Office/NAOJ and GOV.UK bank-holiday dates.",
+  "description": "Add a separate editable JSON overlay for exceptional holidays and personal dates while keeping normal statutory holidays in compact yearly 366-bit caches. orbclo_orbitdev.events.json supports one-off YYYY-MM-DD dates, yearly MM-DD dates, fixed ranges, yearly ranges, type, label, color and blink. Extra events overlay today/holiday/weekend colors; later JSON entries override earlier ones. Double-tap date selection remains the highest visual layer and blinks yellow. The event JSON is preserved as app data and is reloaded whenever 5wCal opens.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,11 +15,11 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app80.js"
+      "url": "app81.js"
     },
     {
       "name": "orbclo_dev_orbit.cal.js",
-      "url": "calendar80.js"
+      "url": "calendar81.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
@@ -39,6 +39,9 @@
     },
     {
       "name": "orbclo_orbitdev.diag.json"
+    },
+    {
+      "name": "orbclo_orbitdev.events.json"
     }
   ]
 }
