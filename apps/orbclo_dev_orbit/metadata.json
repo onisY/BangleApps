@@ -2,9 +2,9 @@
   "id": "orbclo_dev_orbit",
   "name": "Orbclo Dev Orbit",
   "shortName": "OrbOrbit",
-  "version": "0.81",
+  "version": "0.82",
   "author": "onisY",
-  "description": "Add a separate editable JSON overlay for exceptional holidays and personal dates while keeping normal statutory holidays in compact yearly 366-bit caches. orbclo_orbitdev.events.json supports one-off YYYY-MM-DD dates, yearly MM-DD dates, fixed ranges, yearly ranges, type, label, color and blink. Extra events overlay today/holiday/weekend colors; later JSON entries override earlier ones. Double-tap date selection remains the highest visual layer and blinks yellow. The event JSON is preserved as app data and is reloaded whenever 5wCal opens.",
+  "description": "Preserve and visibly resume the selected calendar date when returning from Orbit to 5wCal. If Orbit is displaying a previously selected date, reopening 5wCal now restarts the 500 ms yellow/normal blink on that date. Double tapping outside the 35 date cells (header/weekday/non-date area) clears the selection, immediately clears Orbit's selected-day offset, restores the previous cell, shows SEL CLEAR, and gives a short buzz. Selection blink timers are stopped/restarted safely across page swipes; deferred holiday repaints no longer overwrite a blinking selected cell.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,development,test",
@@ -15,11 +15,11 @@
   "storage": [
     {
       "name": "orbclo_dev_orbit.app.js",
-      "url": "app81.js"
+      "url": "app82.js"
     },
     {
       "name": "orbclo_dev_orbit.cal.js",
-      "url": "calendar81.js"
+      "url": "calendar82.js"
     },
     {
       "name": "orbclo_dev_orbit.img",
