@@ -71,6 +71,8 @@
   var TESTLAT=Math.max(-90,Math.min(90,+cfg.manualLat));
   var TESTLON=Math.max(-180,Math.min(180,+cfg.manualLon));
   var VIEW_SOUTH=!!cfg.viewSide;
+  /* Runtime has copied everything it needs; release the configuration object. */
+  cfg=undefined;
   var LIGHTSPAN=[],LIGHTBX=[],LIGHTBY=[],LIGHTLIMB=[],LIGHTSTEPS=6,LUX=0,LUY=0,LVX=0,LVY=0;
   var LIGHTTERM=[],LIGHTNIGHT=[];
 
