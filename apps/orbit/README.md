@@ -1,3 +1,254 @@
+<!-- English -->
+
+# orbit
+
+**orbit 0.04 stable**
+
+A clock app for Bangle.js 2 that lets you read the time, the phases of the Moon and related information from the relative positions of the Sun, Earth and Moon.
+
+## 1. Purpose of orbit
+
+orbit is an approximate clock that lets you look not only at the current time, but also at **how the Sun, Earth and Moon are positioned relative to one another right now** on the small screen of a wristwatch.
+
+The clock face shows the Sun, Earth, Moon, the day and night sides of the Earth, the selected location, sunrise and sunset directions, the phase of the Moon, date and time, battery level, and the selected country and place name. The Earth is drawn as a simplified map and rotates according to the time and selected location.
+
+The Moon is shown around the Earth using a simplified model based on the mean synodic month. You can enjoy watching, like a small celestial model, how the Moon moves as the date advances and how its position relates to the Sun around full moon and new moon.
+
+Because the display also shows the angle from Earth at which the sunlit portion of the Moon is visible, you can read the Moon's phase from it as well.
+
+The interval from the Moon's upper transit to high tide is also roughly constant for each locality. In Tokyo, for example, high tide is roughly 5 hours 20 minutes after the Moon's upper transit, so the approximate timing can be read from the display. This is not precise, but can be useful for activities such as fishing.
+
+The Earth display can also be used to make a rough reading of the current time for acquaintances in other countries, not only at your own location.
+
+Using the built-in five-week calendar, you can select another date and display the clock for that date. This allows you to view daylight and darkness, and the Moon's phase, not only now but also several days or weeks ahead.
+
+> orbit is a simplified model intended for educational, display and hobby use. Do not use it for astronomical observation, navigation, surveying or any other purpose requiring high-precision ephemerides or position calculations.
+
+## 2. How to use
+
+### orbit screen
+
+- **Single tap**: Open the five-week calendar.
+- **Double tap**: Open orbit settings.
+- **BTN**: Open the Bangle.js launcher.
+
+The location display at the bottom-right changes according to the selected location method.
+
+- **Place name**: Shows the country on the upper line and the municipality or city on the lower line. Text is made as large as practical and moves where necessary to avoid overlapping the Moon.
+- **Manual**: Shows latitude and longitude.
+- **GPS**: Shows a satellite symbol together with latitude and longitude.
+
+### Five-week calendar
+
+- Displays 35 days, Monday to Sunday, across five weeks.
+- Saturdays are blue, Sundays and public holidays are red, and today is green.
+- **Double-tap** a date to select it; the selected date blinks yellow.
+- **Single-tap** the calendar to return to the clock display while retaining the selected date.
+- **Double-tap** outside the date cells to clear the selected date.
+- **Swipe up or down** to move backwards or forwards by five weeks.
+
+### Location settings
+
+There are three ways to set the location.
+
+**Place name**
+- Outside Japan: normally select country → capital. Representative cities are also included for some large countries that use several civil time zones.
+- Japan: select prefecture → municipality.
+
+**Manual**
+- Enter latitude and longitude directly.
+
+**GPS**
+- GPS is used only when **Get GPS fix** is selected in the settings screen.
+- GPS is switched off after a valid fix, after cancelling, or when leaving the settings screen.
+- GPS is not used during normal clock display. A saved GPS fix is used only as stored latitude and longitude, so there is no GPS power consumption during normal display.
+
+### Other settings
+
+- **View side**: North / South
+- Display sizes of the Sun, Earth and Moon
+- Lunar orbit radius
+- Public holiday region: Japan / England & Wales / Scotland / Northern Ireland
+- Calendar auto-return time
+- Anniversaries and exceptional holidays
+- Deletion of holiday cache
+
+## 3. Program structure
+
+### `app.js`
+
+The main clock program. Its principal responsibilities are:
+
+- Date, time and battery display
+- Approximate solar-position calculation
+- Drawing the Earth, day/night boundary and simplified map
+- Observer location and sunrise/sunset directions
+- Moon position and phase display
+- Country/place name or coordinate display
+- Tap detection
+- Switching between the clock and calendar
+- State handling when the LCD turns OFF/ON
+
+On Bangle.js it is stored as `orbit.app.js`.
+
+### `calendar.js`
+
+The built-in five-week calendar.
+
+- Creation of 35 days of calendar data
+- Weekday, today and weekend display
+- Public-holiday calculation for Japan and the three UK regions
+- Anniversaries and exceptional holidays
+- Date selection and blinking
+- Page movement in five-week steps
+- Small yearly holiday caches
+
+On Bangle.js it is stored as `orbit.cal.js`.
+
+### `settings.js`
+
+The settings screen.
+
+- Place name / Manual / GPS
+- On-demand GPS fixing and reliable GPS power-off
+- North / South
+- Celestial-body sizes and lunar-orbit size
+- Calendar region
+- Anniversaries and exceptional holidays
+- Holiday-cache management
+
+On Bangle.js it is stored as `orbit.settings.js`.
+
+### `locations.js`
+
+Contains the country, capital and selected representative-city data, together with the Japanese prefecture index. Because the full list of Japanese municipalities is relatively large, it is kept in a separate file. The `[offset, length]` pair for each prefecture is stored in `exports.jpidx`.
+
+### `japan-municipalities.dat`
+
+Contains the orbit display name and representative latitude/longitude for municipalities throughout Japan, stored as concatenated JSON arrays by prefecture.
+
+The whole data set is not expanded into RAM during normal operation. When a prefecture is selected in Place name settings, only the corresponding section is read with `Storage.read()` using `jpidx` from `locations.js`.
+
+### User data
+
+- `orbit.json`: Location, view direction, celestial-body sizes, etc.
+- `orbit.cal.json`: Calendar region, auto-return time, etc.
+- `orbit.events.json`: Anniversaries and exceptional holidays
+
+The location coordinates `manualLat` / `manualLon` are used as the common reference values. Place name, Manual and GPS all ultimately update these coordinates.
+
+### Optimisation for Bangle.js 2
+
+- Simplified coastlines on the map
+- Precalculation of fixed Sun and map geometry
+- Reuse of drawing arrays to reduce garbage-collection load
+- Caching of Moon geometry for a fixed period
+- Loading place-name tables only when required
+- Loading Japanese municipalities one prefecture at a time
+- Compact yearly bit-table caching for public holidays
+- GPS used only while setting a location
+
+When modifying the app, it is generally more stable on Bangle.js 2 to favour **load-on-demand, caching and partial drawing** rather than increasing permanently loaded data or adding heavy calculations every second.
+
+## 4. Sources, licences and related information
+
+### Solar position
+
+The approximate solar-position formulae are based on NOAA's **General Solar Position Calculations**.
+
+- NOAA Global Monitoring Laboratory, *General Solar Position Calculations*  
+  https://gml.noaa.gov/grad/solcalc/solareqns.PDF
+
+`solarPosition()` calculates the fractional year, equation of time, solar declination, true solar time, hour angle, and solar elevation / azimuth.
+
+### Moon phase
+
+Moon-phase display uses the mean synodic month.
+
+- Fred Espenak, NASA/GSFC, *Six Millennium Catalog of Phases of the Moon*  
+  https://eclipse.gsfc.nasa.gov/phase/phasecat.html
+- New Moon at 18:14 UTC on 6 January 2000  
+  https://eclipse.gsfc.nasa.gov/phase/phases1901.html
+
+NASA/GSFC material gives the mean synodic month around the year 2000 as approximately 29.530588 days. orbit uses a simplified periodic model based on this value and does not reproduce the variation between individual synodic months.
+
+### Public holidays
+
+Japan:
+- Cabinet Office, Government of Japan, “National Holidays”  
+  https://www8.cao.go.jp/chosei/shukujitsu/gaiyou.html
+
+United Kingdom:
+- GOV.UK, “UK bank holidays”  
+  https://www.gov.uk/bank-holidays
+
+### Representative locations for Japanese municipalities — `japan-municipalities.dat`
+
+**Main sources**
+
+- Ministry of Land, Infrastructure, Transport and Tourism (MLIT), National Land Numerical Information, **Municipal Offices and Public Meeting Facilities Data (P05), 2022 edition**  
+  https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-P05-2022.html
+- Licence: **CC BY 4.0**  
+  https://creativecommons.org/licenses/by/4.0/
+
+Locations classified by P05 as `P05_002=1` (main offices: city, ward, town and village offices) are used as representative locations for municipalities.
+
+For the orbit 0.04 data update, the municipality-code mapping and representative-location table from the open-source **jp-address-search** project, created from P05-22, were used to recreate the coordinates while preserving orbit's existing municipality display names and prefecture order.
+
+- uiuifree / jp-address-search  
+  https://github.com/uiuifree/rust-jp-address-search
+- Project licence: **MIT License**  
+  https://github.com/uiuifree/rust-jp-address-search/blob/main/LICENSE
+- Process used to create representative-location data from P05  
+  https://github.com/uiuifree/rust-jp-address-search/blob/main/src/bin/update_city_location.rs
+
+For three locations where the conversion process cannot use the P05 main-office record as-is (Katagami, Namie and Iitate), the representative point for the municipal-office address is corrected using the Geospatial Information Authority of Japan (GSI) address search. Unless otherwise stated, GSI web content may be used under the Public Data License 1.0 (PDL1.0).
+
+- GSI content terms of use  
+  https://www.gsi.go.jp/kikakuchousei/kikakuchousei40182.html
+
+**Processing carried out for orbit**
+- Matching municipality codes to the existing orbit display names
+- Retaining city-level entries for designated cities, preserving the municipality granularity previously used by orbit
+- Rounding latitude and longitude to four decimal places
+- Recreating the per-prefecture random-access offset table `jpidx`
+
+The romanised place names used for display are the existing orbit spellings and are not spellings supplied by MLIT.
+
+**Attribution**  
+Based on “National Land Numerical Information (Municipal Offices and Public Meeting Facilities Data)” (MLIT, 2022 edition, CC BY 4.0), processed and restructured for orbit with reference to the public conversion process in jp-address-search.
+
+### Countries and capitals worldwide
+
+The country names and capital coordinates are a static place table created during development with reference to the legacy open-source version of REST Countries. The legacy open-source repository is distributed under MPL 2.0.
+
+- REST Countries legacy open-source repository  
+  https://github.com/restcountries/restcountries
+- Mozilla Public License 2.0  
+  https://www.mozilla.org/MPL/2.0/
+
+orbit does not call the currently hosted REST Countries API at run time. Representative cities later added for some countries with multiple civil time zones were added manually for orbit.
+
+### Bangle.js / Espruino
+
+- Bangle.js App Loader / BangleApps  
+  https://github.com/espruino/BangleApps
+- Espruino Bangle.js documentation  
+  https://www.espruino.com/Bangle.js
+- Espruino Reference  
+  https://www.espruino.com/Reference
+
+### orbit software licence
+
+orbit follows the BangleApps repository licensing policy and is provided under the **MIT License**. See the repository-root `LICENSE` file for details.
+
+Third-party data remains subject to the respective terms and licences listed above.
+
+
+---
+
+<!-- 日本語 -->
+
 # orbit
 
 **orbit 0.04 stable**
