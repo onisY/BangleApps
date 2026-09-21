@@ -31,6 +31,8 @@ Open **Settings > Apps > orbit**, or double-tap the orbit face. The settings men
 
 Calendar display language and holiday region remain coupled: Japan uses Japanese weekday labels; the three UK regions use English labels.
 
+On the orbit face, the bottom-right shows the active location source: Place name shows the saved place name; Manual shows latitude and longitude; GPS shows a small satellite mark plus latitude and longitude.
+
 Location storage is intentionally simple: `manualLat/manualLon` are the single canonical coordinate pair used by the orbit clock. Manual editing changes them directly; GPS overwrites them only after a valid fix; Place selection copies the chosen place coordinates into them. Place tables are loaded only while Place is being edited, and Japan municipality data is read only for the selected prefecture.
 
 The orbit clock itself never enables GPS. A saved GPS fix is just stored latitude/longitude and costs no GPS power during normal clock use.
