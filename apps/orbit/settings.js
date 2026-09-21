@@ -9,7 +9,6 @@
   var TYPE_NAMES=["Holiday","Anniversary","Birthday","Other"];
   var REGIONS=["all","jp","ew","sc","ni"];
   var REGION_NAMES=["All","Japan","England/Wales","Scotland","N. Ireland"];
-  var LOCATION_MODES=["Place","Manual","GPS"];
   var gpsHandler,gpsActive=false,gpsStarted=0,gpsLastDraw=0,gpsLastSats=-1,gpsLastHdop=-1,gpsLastFix;
 
   function readJSON(name,def){return Storage.readJSON(name,1)||def;}
@@ -213,7 +212,7 @@
     gpsLastSats=sats;gpsLastHdop=hdop;gpsLastDraw=now;
     E.showMenu({
       "":{title:"GPS input"},
-      "< Cancel":function(){stopGPS();locationMenu(s);},
+      "< Cancel":function(){stopGPS();gpsMenu(s);},
       "State":{value:0,min:0,max:0,format:function(){return gpsStateText(fix);}},
       "Satellites":{value:0,min:0,max:0,format:function(){return sats+" "+gpsBar(sats);}},
       "HDOP":{value:0,min:0,max:0,format:function(){return hdop?hdop.toFixed(1):"--";}},
@@ -239,84 +238,104 @@
     try{Bangle.setGPSPower(1,GPS_ID);}
     catch(e){
       stopGPS();
-      E.showAlert("Could not start GPS","orbit GPS").then(function(){locationMenu(s);});
+      E.showAlert("Could not start GPS","orbit GPS").then(function(){gpsMenu(s);});
       return;
     }
     showGPSProgress(s,true);
   }
-  function locationInfo(s){
+  function locationInfo(s,next){
     var prefix=s.locationMode===0?(s.locPref||"Place"):(s.locationMode===2?"GPS":"Manual");
     E.showAlert(prefix+" / "+(s.locName||"")+
-      "\nLat "+Number(s.manualLat).toFixed(3)+"\nLon "+Number(s.manualLon).toFixed(3),"orbit location")
-      .then(function(){locationMenu(s);});
+      "\nLat "+Number(s.manualLat).toFixed(3)+
+      "\nLon "+Number(s.manualLon).toFixed(3),"orbit location")
+      .then(next||function(){locationMenu(s);});
   }
-  function locationMenu(s){
-    stopGPS();
-    if(!s)s=appCfg();
-    if(s.locationMode!==0)releasePlaceData();
-    else normalizePlaceState(s);
 
-    var m={"":{title:"Location"},"< Back":function(){releasePlaceData();main();},
-      "Location mode":{
-        value:s.locationMode,min:0,max:2,step:1,
-        format:function(v){return LOCATION_MODES[v];},
-        onchange:function(v){
-          stopGPS();s.locationMode=v;write(CFG,s);
-          if(v!==0)releasePlaceData();
-          setTimeout(function(){locationMenu(s);},10);
-        }
-      }
-    };
-    if(s.locationMode===0){
-      var ci=countryIndex(s.countryName);
-      m["Country"]={value:ci,min:0,max:C.length-1,step:1,
+  function placeMenu(s){
+    stopGPS();
+    normalizePlaceState(s);
+    var ci=countryIndex(s.countryName);
+    var m={"":{title:"Place name"},"< Back":function(){releasePlaceData();locationMenu(s);},
+      "Country":{value:ci,min:0,max:C.length-1,step:1,
         format:function(v){return C[v][0];},
         onchange:function(v){
           s.countryName=C[v][0];s.place=0;s.municipality=0;
           releaseMunicipalities();
-          setTimeout(function(){locationMenu(s);},10);
-        }
-      };
-      if(s.countryName==="Japan"){
-        m["Prefecture"]={value:s.pref,min:0,max:P.length-1,step:1,
-          format:function(v){return P[v][0];},
-          onchange:function(v){
-            s.pref=v;s.municipality=0;releaseMunicipalities();
-            setTimeout(function(){locationMenu(s);},10);
-          }
-        };
-        var ml=loadMunicipalities(s.pref);
-        s.municipality=Math.max(0,Math.min(ml.length-1,s.municipality|0));
-        m["Municipality"]={value:s.municipality,min:0,max:ml.length-1,step:1,
-          format:function(v){return ml[v][0];},
-          onchange:function(v){s.municipality=v;}
-        };
-      }else{
-        var list=C[ci][1]||[];
-        if(list.length>1){
-          s.place=Math.max(0,Math.min(list.length-1,s.place|0));
-          m["City"]={value:s.place,min:0,max:list.length-1,step:1,
-            format:function(v){return list[v][0];},
-            onchange:function(v){s.place=v;}
-          };
-        }else{
-          s.place=0;
-          m["Capital"]={value:0,min:0,max:0,format:function(){return list[0][0];}};
+          setTimeout(function(){placeMenu(s);},10);
         }
       }
-      m["Use place"]=function(){commitPlace(s);};
-      m["Current coords"]=function(){locationInfo(s);};
-    }else if(s.locationMode===1){
-      m["Latitude"]={value:s.manualLat,min:-90,max:90,step:0.001,format:function(v){return v.toFixed(3);},onchange:function(v){s.manualLat=v;applyManual(s);}};
-      m["Longitude"]={value:s.manualLon,min:-180,max:180,step:0.001,format:function(v){return v.toFixed(3);},onchange:function(v){s.manualLon=v;applyManual(s);}};
-      m["Current coords"]=function(){locationInfo(s);};
+    };
+
+    if(s.countryName==="Japan"){
+      m["Prefecture"]={value:s.pref,min:0,max:P.length-1,step:1,
+        format:function(v){return P[v][0];},
+        onchange:function(v){
+          s.pref=v;s.municipality=0;releaseMunicipalities();
+          setTimeout(function(){placeMenu(s);},10);
+        }
+      };
+      var ml=loadMunicipalities(s.pref);
+      s.municipality=Math.max(0,Math.min(ml.length-1,s.municipality|0));
+      m["Municipality"]={value:s.municipality,min:0,max:ml.length-1,step:1,
+        format:function(v){return ml[v][0];},
+        onchange:function(v){s.municipality=v;}
+      };
     }else{
-      m["Get GPS fix"]=function(){startGPS(s);};
-      m["Current coords"]=function(){locationInfo(s);};
-      m["GPS power"]={value:0,min:0,max:0,format:function(){return "Off";}};
+      var list=C[ci][1]||[];
+      if(list.length>1){
+        s.place=Math.max(0,Math.min(list.length-1,s.place|0));
+        m["City"]={value:s.place,min:0,max:list.length-1,step:1,
+          format:function(v){return list[v][0];},
+          onchange:function(v){s.place=v;}
+        };
+      }else{
+        s.place=0;
+        m["Capital"]={value:0,min:0,max:0,format:function(){return list[0][0];}};
+      }
     }
+
+    m["Use place"]=function(){commitPlace(s);};
     E.showMenu(m);
   }
+
+  function manualMenu(s){
+    stopGPS();releasePlaceData();
+    var m={"":{title:"Manual"},"< Back":function(){locationMenu(s);},
+      "Latitude":{value:s.manualLat,min:-90,max:90,step:0.001,
+        format:function(v){return v.toFixed(3);},
+        onchange:function(v){s.manualLat=v;applyManual(s);}
+      },
+      "Longitude":{value:s.manualLon,min:-180,max:180,step:0.001,
+        format:function(v){return v.toFixed(3);},
+        onchange:function(v){s.manualLon=v;applyManual(s);}
+      },
+      "Current coords":function(){locationInfo(s,function(){manualMenu(s);});}
+    };
+    E.showMenu(m);
+  }
+
+  function gpsMenu(s){
+    releasePlaceData();
+    var m={"":{title:"GPS"},"< Back":function(){stopGPS();locationMenu(s);},
+      "Get GPS fix":function(){startGPS(s);},
+      "Current coords":function(){locationInfo(s,function(){gpsMenu(s);});},
+      "GPS power":{value:0,min:0,max:0,format:function(){return gpsActive?"On":"Off";}}
+    };
+    E.showMenu(m);
+  }
+
+  function locationMenu(s){
+    stopGPS();releasePlaceData();
+    if(!s)s=appCfg();
+    var m={"":{title:"Location"},"< Back":main,
+      "Place name":function(){placeMenu(s);},
+      "Manual":function(){manualMenu(s);},
+      "GPS":function(){gpsMenu(s);},
+      "Current coords":function(){locationInfo(s,function(){locationMenu(s);});}
+    };
+    E.showMenu(m);
+  }
+
 
   // ---------- Holiday cache ----------
   function cacheInfo(){
