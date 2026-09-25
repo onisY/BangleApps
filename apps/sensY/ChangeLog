@@ -1,2 +1,3 @@
 0.01: Initial version.
 0.011: Improve graph contrast, share acceleration integration setting, and subtract estimated gravity from 3-axis acceleration.
+0.012: Use one shared Y-axis minimum and maximum for all three acceleration traces.
