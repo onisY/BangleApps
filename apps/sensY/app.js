@@ -1,69 +1,57 @@
 /*
- * sensY - accelerometer/barometer research logger and sweep graph
+ * sensY - research accelerometer/barometer point-plot logger
  * Bangle.js 2
  */
 (function () {
   var Storage = require("Storage");
-  var VERSION = "0.013";
+  var VERSION = "0.014";
   var SETTINGS_FILE = "sensY.json";
   var APP_ID = "sensY";
 
   var ACC_HZ = [1, 2, 5, 10, 12.5, 25, 50, 100];
-  var PRESS_HZ = [0.2, 0.5, 1];
 
   var DEFAULTS = {
-    span: 10,
-    accInteg: 0,
-    accYmin: -2,
-    accYmax: 2,
-    ax: { hz: 12.5, rec: false, graph: true },
-    ay: { hz: 12.5, rec: false, graph: true },
-    az: { hz: 12.5, rec: false, graph: true },
-    p:  { hz: 1,    rec: false, graph: true, integ: 0, ymin: 950, ymax: 1050 }
+    accHz: 12.5,
+    pressureInterval: 1,
+    accStore: false,
+    pressureStore: false,
+    accGraph: true,
+    pressureGraph: true,
+    accYmin: 0,
+    accYmax: 2
   };
 
-  /*
-   * Bangle.js 2 has a limited display palette. Choose four traces that
-   * keep strong luminance/chroma contrast against the active theme.
-   */
   var COLORS = g.theme.dark ? {
-    ax: "#fff",
-    ay: "#ff0",
-    az: "#0ff",
-    p:  "#f0f"
+    pressure: "#f0f",
+    accel: "#0ff"
   } : {
-    ax: "#000",
-    ay: "#f00",
-    az: "#00f",
-    p:  "#f0f"
+    pressure: "#f0f",
+    accel: "#f00"
   };
 
-  /*
-   * Gravity estimate from the 3-axis accelerometer. The low-pass vector
-   * follows orientation, then is normalised to 1 g before subtraction.
-   */
   var GRAVITY_TAU = 0.8;
-  var gravity = { init: false, x: 0, y: 0, z: 0, t: 0 };
+  var gravity = { init:false, x:0, y:0, z:0, t:0 };
 
-  /*
-   * When displaying integrated acceleration, suppress settled integration
-   * drift. Every 3 s compare the three integrated outputs with their
-   * values at the start of the window. If all relative changes are <=5%,
-   * reset the acceleration integrators together.
-   */
-  var STABLE_WINDOW_S = 3;
-  var STABLE_REL = 0.05;
-  var STABLE_EPS = 1e-6;
-  var accelStable = { t: undefined, ax: 0, ay: 0, az: 0 };
-
-  var cfg;
-  var states = {};
-  var lastPlot = {};
-  var measuring = false;
-  var sweepStart = 0;
-  var lastSweepX = -1;
   var W = g.getWidth();
   var H = g.getHeight();
+  var AXIS_W = 30;
+  var PLOT_X0 = AXIS_W;
+  var PLOT_X1 = W - 1;
+  var PLOT_Y0 = 8;
+  var PLOT_Y1 = H - 15;
+  var PLOT_W = PLOT_X1 - PLOT_X0 + 1;
+  var PLOT_H = PLOT_Y1 - PLOT_Y0 + 1;
+
+  var cfg;
+  var history = [];
+  var acquiring = false;
+  var paused = false;
+  var accelConfigured = false;
+
+  var nextAccelT;
+  var nextPressureT;
+  var accSum = 0;
+  var accCount = 0;
 
   var sessionStartT = getTime();
   var logFile;
@@ -77,30 +65,47 @@
     if (oldOpts && oldOpts.powerSave !== undefined) oldPowerSave = oldOpts.powerSave;
   } catch (e) {}
 
-  function clone(o) {
-    return JSON.parse(JSON.stringify(o));
+  function clamp(v, lo, hi) {
+    return Math.max(lo, Math.min(hi, v));
   }
 
   function loadSettings() {
     var s = Storage.readJSON(SETTINGS_FILE, 1) || {};
-    var d = clone(DEFAULTS);
-    if (typeof s.span === "number") d.span = s.span;
-    if (typeof s.accInteg === "number") d.accInteg = s.accInteg;
-    else if (s.ax && typeof s.ax.integ === "number") d.accInteg = s.ax.integ;
+    var d = {
+      accHz: DEFAULTS.accHz,
+      pressureInterval: DEFAULTS.pressureInterval,
+      accStore: DEFAULTS.accStore,
+      pressureStore: DEFAULTS.pressureStore,
+      accGraph: DEFAULTS.accGraph,
+      pressureGraph: DEFAULTS.pressureGraph,
+      accYmin: DEFAULTS.accYmin,
+      accYmax: DEFAULTS.accYmax
+    };
 
-    if (typeof s.accYmin === "number") d.accYmin = s.accYmin;
-    else if (s.ax && typeof s.ax.ymin === "number") d.accYmin = s.ax.ymin;
+    if (typeof s.accHz === "number") d.accHz = s.accHz;
+    else if (s.ax && typeof s.ax.hz === "number") d.accHz = s.ax.hz;
+
+    if (typeof s.pressureInterval === "number") d.pressureInterval = s.pressureInterval;
+    else if (s.p && typeof s.p.hz === "number" && s.p.hz > 0)
+      d.pressureInterval = Math.round(1 / s.p.hz);
+
+    if (typeof s.accStore === "boolean") d.accStore = s.accStore;
+    else d.accStore = !!((s.ax && s.ax.rec) || (s.ay && s.ay.rec) || (s.az && s.az.rec));
+
+    if (typeof s.pressureStore === "boolean") d.pressureStore = s.pressureStore;
+    else if (s.p && s.p.rec !== undefined) d.pressureStore = !!s.p.rec;
+
+    if (typeof s.accGraph === "boolean") d.accGraph = s.accGraph;
+    else d.accGraph = !!((s.ax && s.ax.graph) || (s.ay && s.ay.graph) || (s.az && s.az.graph));
+
+    if (typeof s.pressureGraph === "boolean") d.pressureGraph = s.pressureGraph;
+    else if (s.p && s.p.graph !== undefined) d.pressureGraph = !!s.p.graph;
+
+    if (typeof s.accYmin === "number") d.accYmin = Math.max(0, s.accYmin);
     if (typeof s.accYmax === "number") d.accYmax = s.accYmax;
-    else if (s.ax && typeof s.ax.ymax === "number") d.accYmax = s.ax.ymax;
 
-    ["ax", "ay", "az", "p"].forEach(function (k) {
-      if (!s[k]) return;
-      Object.keys(d[k]).forEach(function (q) {
-        if (s[k][q] !== undefined) d[k][q] = s[k][q];
-      });
-    });
-    d.span = Math.max(1, Math.min(300, d.span));
-    d.accInteg = Math.max(0, Math.min(2, d.accInteg | 0));
+    if (ACC_HZ.indexOf(d.accHz) < 0) d.accHz = DEFAULTS.accHz;
+    d.pressureInterval = clamp(Math.round(d.pressureInterval), 1, 300);
     if (!(d.accYmax > d.accYmin)) d.accYmax = d.accYmin + 0.1;
     return d;
   }
@@ -135,7 +140,7 @@
     if (logFile) return;
     logName = makeLogName();
     logFile = Storage.open(logName, "w");
-    logFile.write("t_s,ax_lin_g,ay_lin_g,az_lin_g,p_hPa\n");
+    logFile.write("t_s,acc_mag_avg_g,p_hPa\n");
   }
 
   function flushLog() {
@@ -145,42 +150,18 @@
     }
   }
 
-  function appendLog(t, vals) {
+  function appendLog(t, accAvg, pressure) {
+    if (!cfg.accStore && !cfg.pressureStore) return;
     ensureLog();
     var row = [(t - sessionStartT).toFixed(3)];
-    ["ax", "ay", "az", "p"].forEach(function (k) {
-      var v = vals[k];
-      if (v === undefined || v === null) row.push("");
-      else if (k === "p") row.push(v.toFixed(3));
-      else row.push(v.toFixed(6));
-    });
+    row.push(cfg.accStore && accAvg !== null ? accAvg.toFixed(6) : "");
+    row.push(cfg.pressureStore ? pressure.toFixed(3) : "");
     logBuf += row.join(",") + "\n";
     if (logBuf.length >= 768) flushLog();
   }
 
-  function newState() {
-    return {
-      nextT: undefined,
-      lastT: undefined,
-      prevRaw: 0,
-      i1: 0,
-      i2: 0,
-      value: 0,
-      raw: 0,
-      has: false
-    };
-  }
-
-  function resetStates() {
-    states = {
-      ax: newState(),
-      ay: newState(),
-      az: newState(),
-      p: newState()
-    };
-    gravity = { init: false, x: 0, y: 0, z: 0, t: 0 };
-    accelStable = { t: undefined, ax: 0, ay: 0, az: 0 };
-    lastPlot = { ax: null, ay: null, az: null, p: null };
+  function resetGravity() {
+    gravity = { init:false, x:0, y:0, z:0, t:0 };
   }
 
   function removeGravity(a, t) {
@@ -206,7 +187,7 @@
       gravity.y * gravity.y +
       gravity.z * gravity.z
     );
-    if (m < 0.05) return { x: a.x, y: a.y, z: a.z };
+    if (m < 0.05) return { x:a.x, y:a.y, z:a.z };
 
     return {
       x: a.x - gravity.x / m,
@@ -215,197 +196,12 @@
     };
   }
 
-  function integrationOrder(k) {
-    return k === "p" ? (cfg.p.integ | 0) : (cfg.accInteg | 0);
-  }
-
-  function accelGraphActive() {
-    return !!(cfg.ax.graph || cfg.ay.graph || cfg.az.graph);
-  }
-
-  function setAccelStableReference(t) {
-    accelStable.t = t;
-    accelStable.ax = states.ax.value;
-    accelStable.ay = states.ay.value;
-    accelStable.az = states.az.value;
-  }
-
-  function relativeChange(a, b) {
-    var d = Math.max(Math.abs(a), Math.abs(b), STABLE_EPS);
-    return Math.abs(b - a) / d;
-  }
-
-  function zeroAccelIntegrals(t) {
-    ["ax", "ay", "az"].forEach(function (k) {
-      var st = states[k];
-      st.i1 = 0;
-      st.i2 = 0;
-      st.value = 0;
-      st.lastT = t;
-      st.prevRaw = st.raw;
-      if (cfg[k].graph && Bangle.isLCDOn()) plotSample(k, 0, t);
-    });
-    setAccelStableReference(t);
-  }
-
-  function checkAccelStableReset(t) {
-    if (cfg.accInteg < 1 || !accelGraphActive()) {
-      accelStable.t = undefined;
-      return;
-    }
-    if (!states.ax.has || !states.ay.has || !states.az.has) return;
-
-    if (accelStable.t === undefined) {
-      setAccelStableReference(t);
-      return;
-    }
-    if (t - accelStable.t < STABLE_WINDOW_S) return;
-
-    var stable =
-      relativeChange(accelStable.ax, states.ax.value) <= STABLE_REL &&
-      relativeChange(accelStable.ay, states.ay.value) <= STABLE_REL &&
-      relativeChange(accelStable.az, states.az.value) <= STABLE_REL;
-
-    if (stable) zeroAccelIntegrals(t);
-    else setAccelStableReference(t);
-  }
-
-  function due(st, hz, t) {
-    if (st.nextT === undefined) {
-      st.nextT = t + 1 / hz;
-      return true;
-    }
-    if (t + 0.0005 < st.nextT) return false;
-    var period = 1 / hz;
-    do {
-      st.nextT += period;
-    } while (st.nextT <= t);
-    return true;
-  }
-
-  function processValue(k, raw, t) {
-    var c = cfg[k];
-    var st = states[k];
-    if (!due(st, c.hz, t)) return false;
-
-    if (!st.has) {
-      st.lastT = t;
-      st.prevRaw = raw;
-      st.i1 = 0;
-      st.i2 = 0;
-      st.has = true;
-    } else {
-      var dt = t - st.lastT;
-      if (dt < 0) dt = 0;
-      var oldI1 = st.i1;
-      st.i1 += 0.5 * (st.prevRaw + raw) * dt;
-      st.i2 += 0.5 * (oldI1 + st.i1) * dt;
-      st.prevRaw = raw;
-      st.lastT = t;
-    }
-
-    st.raw = raw;
-    var integ = integrationOrder(k);
-    st.value = integ === 1 ? st.i1 : (integ === 2 ? st.i2 : raw);
-    plotSample(k, st.value, t);
-    return true;
-  }
-
-  function graphX(t) {
-    var span = Math.max(1, cfg.span);
-    var phase = (t - sweepStart) % span;
-    if (phase < 0) phase += span;
-    var x = Math.floor(phase * W / span);
-    if (x >= W) x = W - 1;
-    return x;
-  }
-
-  function clearColumns(a, b) {
-    if (a > b) return;
-    g.reset().clearRect(a, 0, b, H - 1);
-  }
-
-  function advanceSweep(t) {
-    if (!measuring || !Bangle.isLCDOn()) return graphX(t);
-    var x = graphX(t);
-    if (lastSweepX < 0) {
-      lastSweepX = x;
-      return x;
-    }
-    if (x === lastSweepX) return x;
-
-    if (x > lastSweepX) {
-      clearColumns(lastSweepX + 1, Math.min(W - 1, x + 1));
-    } else {
-      clearColumns(lastSweepX + 1, W - 1);
-      clearColumns(0, Math.min(W - 1, x + 1));
-      lastPlot.ax = lastPlot.ay = lastPlot.az = lastPlot.p = null;
-    }
-    lastSweepX = x;
-    return x;
-  }
-
-  function valueToY(k, v) {
-    var c = cfg[k];
-    var lo = k === "p" ? c.ymin : cfg.accYmin;
-    var hi = k === "p" ? c.ymax : cfg.accYmax;
-    if (!(hi > lo)) hi = lo + 1;
-    var f = (v - lo) / (hi - lo);
-    var y = Math.round((1 - f) * (H - 1));
-    if (y < 0) y = 0;
-    if (y >= H) y = H - 1;
-    return y;
-  }
-
-  function plotSample(k, v, t) {
-    if (!cfg[k].graph || !Bangle.isLCDOn()) return;
-    var x = advanceSweep(t);
-    var y = valueToY(k, v);
-    var lp = lastPlot[k];
-    g.setColor(COLORS[k]);
-    if (!lp || x < lp.x) {
-      g.setPixel(x, y);
-    } else {
-      g.drawLine(lp.x, lp.y, x, y);
-    }
-    lastPlot[k] = { x: x, y: y };
-  }
-
-  function onAccel(a) {
-    if (!measuring) return;
-    var t = getTime();
-    advanceSweep(t);
-
-    var lin = removeGravity(a, t);
-    var vals = {};
-    var any = false;
-    var accepted;
-
-    accepted = processValue("ax", lin.x, t);
-    if (accepted && cfg.ax.rec) { vals.ax = lin.x; any = true; }
-
-    accepted = processValue("ay", lin.y, t);
-    if (accepted && cfg.ay.rec) { vals.ay = lin.y; any = true; }
-
-    accepted = processValue("az", lin.z, t);
-    if (accepted && cfg.az.rec) { vals.az = lin.z; any = true; }
-
-    checkAccelStableReset(t);
-
-    if (any) appendLog(t, vals);
-  }
-
-  function onPressure(e) {
-    if (!measuring) return;
-    var t = getTime();
-    advanceSweep(t);
-    if (processValue("p", e.pressure, t) && cfg.p.rec) {
-      appendLog(t, { p: e.pressure });
-    }
+  function accelEnabled() {
+    return cfg.accGraph || cfg.accStore;
   }
 
   function accelHardwareHz() {
-    var h = Math.max(cfg.ax.hz, cfg.ay.hz, cfg.az.hz);
+    var h = cfg.accHz;
     if (h <= 12.5) return 12.5;
     if (h <= 25) return 25;
     if (h <= 50) return 50;
@@ -413,56 +209,218 @@
   }
 
   function setAccelerometer() {
+    if (!accelEnabled()) return;
     var hz = accelHardwareHz();
     var code = hz === 100 ? 3 : (hz === 50 ? 2 : (hz === 25 ? 1 : 0));
     try {
-      Bangle.setOptions({ powerSave: false });
-      Bangle.accelWr(0x18, 0b01101100); // standby, +/-4g
-      Bangle.accelWr(0x1B, code ? (code | 0x40) : 0); // ODR, ODR/2 filter when >12.5 Hz
-      Bangle.accelWr(0x18, 0b11101100); // operating, +/-4g
+      Bangle.setOptions({ powerSave:false });
+      Bangle.accelWr(0x18, 0b01101100);
+      Bangle.accelWr(0x1B, code ? (code | 0x40) : 0);
+      Bangle.accelWr(0x18, 0b11101100);
       Bangle.setPollInterval(Math.round(1000 / hz));
+      accelConfigured = true;
     } catch (e) {
       Bangle.setPollInterval(Math.max(10, Math.round(1000 / hz)));
+      accelConfigured = true;
     }
   }
 
   function restoreAccelerometer() {
+    if (!accelConfigured) return;
     try {
       Bangle.setPollInterval(80);
       Bangle.accelWr(0x18, 0b01101100);
       Bangle.accelWr(0x1B, 0x00);
       Bangle.accelWr(0x18, 0b11101100);
-      Bangle.setOptions({ powerSave: oldPowerSave });
+      Bangle.setOptions({ powerSave:oldPowerSave });
     } catch (e) {}
+    accelConfigured = false;
   }
 
-  function clearGraph() {
-    g.reset().clearRect(0, 0, W - 1, H - 1);
-    lastSweepX = -1;
-    lastPlot = { ax: null, ay: null, az: null, p: null };
-    sweepStart = getTime();
+  function resetAcquisitionWindow() {
+    resetGravity();
+    accSum = 0;
+    accCount = 0;
+    var now = getTime();
+    nextAccelT = now;
+    nextPressureT = now + cfg.pressureInterval;
   }
 
-  function startMeasurement() {
-    if (measuring) return;
-    E.showMenu();
-    resetStates();
-    clearGraph();
-    setAccelerometer();
-    try { Bangle.setBarometerPower(1, APP_ID); } catch (e) {}
-    Bangle.on("accel", onAccel);
-    Bangle.on("pressure", onPressure);
-    measuring = true;
+  function onAccel(a) {
+    if (!acquiring || !accelEnabled()) return;
+    var t = getTime();
+    var lin = removeGravity(a, t);
+
+    if (t + 0.0005 < nextAccelT) return;
+    var period = 1 / cfg.accHz;
+    do {
+      nextAccelT += period;
+    } while (nextAccelT <= t);
+
+    var mag = Math.sqrt(
+      lin.x * lin.x +
+      lin.y * lin.y +
+      lin.z * lin.z
+    );
+    accSum += mag;
+    accCount++;
+  }
+
+  function onPressure(e) {
+    if (!acquiring) return;
+    var t = getTime();
+    if (t + 0.0005 < nextPressureT) return;
+
+    do {
+      nextPressureT += cfg.pressureInterval;
+    } while (nextPressureT <= t);
+
+    var accAvg = accCount ? accSum / accCount : null;
+    accSum = 0;
+    accCount = 0;
+
+    var sample = { t:t, p:e.pressure, a:accAvg };
+    history.push(sample);
+    if (history.length > PLOT_W) history.shift();
+
+    appendLog(t, accAvg, e.pressure);
+    if (Bangle.isLCDOn()) drawGraph();
+  }
+
+  function pressureScale() {
+    if (!history.length) return null;
+    var min = Infinity;
+    var max = -Infinity;
+    var sum = 0;
+    var n = 0;
+
+    history.forEach(function (s) {
+      if (s.p === undefined || !isFinite(s.p)) return;
+      min = Math.min(min, s.p);
+      max = Math.max(max, s.p);
+      sum += s.p;
+      n++;
+    });
+    if (!n) return null;
+
+    if (max - min <= 1) {
+      var mean = sum / n;
+      return { lo:mean - 0.5, hi:mean + 0.5 };
+    }
+    return { lo:min, hi:max };
+  }
+
+  function pressureY(v, scale) {
+    var f = (v - scale.lo) / (scale.hi - scale.lo);
+    return clamp(Math.round(PLOT_Y1 - f * (PLOT_H - 1)), PLOT_Y0, PLOT_Y1);
+  }
+
+  function accelY(v) {
+    var f = (v - cfg.accYmin) / (cfg.accYmax - cfg.accYmin);
+    return clamp(Math.round(PLOT_Y1 - f * (PLOT_H - 1)), PLOT_Y0, PLOT_Y1);
+  }
+
+  function formatDuration(sec) {
+    sec = Math.round(sec);
+    if (sec < 60) return sec + "s";
+    var m = Math.floor(sec / 60);
+    var s = sec % 60;
+    if (m < 60) return s ? (m + "m" + s + "s") : (m + "m");
+    var h = Math.floor(m / 60);
+    m %= 60;
+    return m ? (h + "h" + m + "m") : (h + "h");
+  }
+
+  function drawPressureAxis(scale) {
+    if (!cfg.pressureGraph || !scale) return;
+    var mid = (scale.lo + scale.hi) / 2;
+    var ys = [PLOT_Y0, Math.round((PLOT_Y0 + PLOT_Y1) / 2), PLOT_Y1];
+    var vs = [scale.hi, mid, scale.lo];
+
+    g.setColor(g.theme.fg).setFont("4x6").setFontAlign(-1, -1);
+    g.drawString("mbar", 0, 0);
+    g.setFontAlign(1, 0);
+    for (var i = 0; i < 3; i++) {
+      g.drawString(vs[i].toFixed(1), PLOT_X0 - 4, ys[i]);
+      g.drawLine(PLOT_X0 - 2, ys[i], PLOT_X0, ys[i]);
+    }
+  }
+
+  function drawXAxis() {
+    var span = (PLOT_W - 1) * cfg.pressureInterval;
+    g.setColor(g.theme.fg).setFont("4x6").setFontAlign(-1, -1);
+    g.drawString(cfg.pressureInterval + "s/px", PLOT_X0, H - 7);
+    g.setFontAlign(1, -1);
+    g.drawString("span " + formatDuration(span), PLOT_X1, H - 7);
+  }
+
+  function drawGraph() {
+    g.reset().clear();
+    var pScale = pressureScale();
+    drawPressureAxis(pScale);
+    drawXAxis();
+
+    for (var i = 0; i < history.length; i++) {
+      var x = PLOT_X0 + i;
+      var s = history[i];
+
+      if (cfg.pressureGraph && pScale && isFinite(s.p)) {
+        g.setColor(COLORS.pressure).setPixel(x, pressureY(s.p, pScale));
+      }
+      if (cfg.accGraph && s.a !== null && isFinite(s.a)) {
+        g.setColor(COLORS.accel).setPixel(x, accelY(s.a));
+      }
+    }
+
+    if (paused) drawPausedOverlay();
+  }
+
+  function drawPausedOverlay() {
+    var w = 94;
+    var h = 30;
+    var x = Math.round((W - w) / 2);
+    var y = Math.round((H - h) / 2);
+    g.setColor(g.theme.bg).fillRect(x, y, x + w, y + h);
+    g.setColor(g.theme.fg).drawRect(x, y, x + w, y + h);
+    g.setFont("6x8").setFontAlign(0, 0);
+    g.drawString("PAUSED", W / 2, y + 9);
+    g.setFont("4x6");
+    g.drawString("swipe up to resume", W / 2, y + 21);
+  }
+
+  function setupMeasurementUI() {
     Bangle.setUI({
-      mode: "custom",
-      touch: function () { setTimeout(showSettings, 0); },
-      btn: exitApp
+      mode:"custom",
+      touch:function () {
+        setTimeout(showSettings, 0);
+      },
+      swipe:function (lr, ud) {
+        if (ud === 1) pauseMeasurement();
+        else if (ud === -1) resumeMeasurement();
+      },
+      btn:exitApp
     });
   }
 
-  function stopMeasurement() {
-    if (!measuring) return;
-    measuring = false;
+  function startAcquisition(resetHistory) {
+    if (acquiring) return;
+    if (resetHistory) history = [];
+    paused = false;
+    resetAcquisitionWindow();
+
+    setAccelerometer();
+    if (accelEnabled()) Bangle.on("accel", onAccel);
+    try { Bangle.setBarometerPower(1, APP_ID); } catch (e) {}
+    Bangle.on("pressure", onPressure);
+    acquiring = true;
+
+    setupMeasurementUI();
+    if (Bangle.isLCDOn()) drawGraph();
+  }
+
+  function stopAcquisition() {
+    if (!acquiring) return;
+    acquiring = false;
     Bangle.removeListener("accel", onAccel);
     Bangle.removeListener("pressure", onPressure);
     try { Bangle.setBarometerPower(0, APP_ID); } catch (e) {}
@@ -470,8 +428,29 @@
     flushLog();
   }
 
+  function pauseMeasurement() {
+    if (paused) return;
+    stopAcquisition();
+    paused = true;
+    setupMeasurementUI();
+    if (Bangle.isLCDOn()) drawGraph();
+  }
+
+  function resumeMeasurement() {
+    if (!paused) return;
+    paused = false;
+    resetAcquisitionWindow();
+    setAccelerometer();
+    if (accelEnabled()) Bangle.on("accel", onAccel);
+    try { Bangle.setBarometerPower(1, APP_ID); } catch (e) {}
+    Bangle.on("pressure", onPressure);
+    acquiring = true;
+    setupMeasurementUI();
+    if (Bangle.isLCDOn()) drawGraph();
+  }
+
   function cleanup() {
-    stopMeasurement();
+    stopAcquisition();
     flushLog();
     if (flushTimer) {
       clearInterval(flushTimer);
@@ -484,124 +463,104 @@
     load();
   }
 
-  function hzIndex(list, hz) {
-    var idx = list.indexOf(hz);
-    if (idx < 0) idx = 0;
-    return idx;
-  }
-
-  function channelMenu(k, title, hzList, yStep, yLimit) {
-    var c = cfg[k];
-    var menu = {
-      "": { title: title },
-      "< Back": showSettings,
-      "Sample Hz": {
-        value: hzIndex(hzList, c.hz),
-        min: 0,
-        max: hzList.length - 1,
-        step: 1,
-        format: function (v) { return hzList[v] + " Hz"; },
-        onchange: function (v) { c.hz = hzList[v]; saveSettings(); }
-      },
-      "Store": {
-        value: !!c.rec,
-        onchange: function (v) { c.rec = !!v; saveSettings(); }
-      },
-      "Graph": {
-        value: !!c.graph,
-        onchange: function (v) { c.graph = !!v; saveSettings(); }
-      }
-    };
-
-    if (k === "p") {
-      menu.Integrate = {
-        value: c.integ | 0,
-        min: 0,
-        max: 2,
-        step: 1,
-        onchange: function (v) { c.integ = v | 0; saveSettings(); }
-      };
-      menu["Y min"] = {
-        value: c.ymin,
-        min: -yLimit,
-        max: yLimit,
-        step: yStep,
-        onchange: function (v) {
-          c.ymin = v;
-          if (!(c.ymax > c.ymin)) c.ymax = c.ymin + yStep;
-          saveSettings();
-        }
-      };
-      menu["Y max"] = {
-        value: c.ymax,
-        min: -yLimit,
-        max: yLimit,
-        step: yStep,
-        onchange: function (v) {
-          c.ymax = v;
-          if (!(c.ymax > c.ymin)) c.ymin = c.ymax - yStep;
-          saveSettings();
-        }
-      };
-    }
-    E.showMenu(menu);
+  function hzIndex(hz) {
+    var idx = ACC_HZ.indexOf(hz);
+    return idx < 0 ? 4 : idx;
   }
 
   function showSettings() {
-    if (measuring) stopMeasurement();
-    var menu = {
-      "": { title: "sensY settings" },
-      "< Back": startMeasurement,
-      "Span (s)": {
-        value: cfg.span,
-        min: 1,
-        max: 300,
-        step: 1,
-        onchange: function (v) { cfg.span = v; saveSettings(); }
+    stopAcquisition();
+    paused = true;
+
+    E.showMenu({
+      "": { title:"sensY settings" },
+      "< Back": function () {
+        E.showMenu();
+        startAcquisition(true);
       },
-      "Accel Integrate": {
-        value: cfg.accInteg | 0,
-        min: 0,
-        max: 2,
-        step: 1,
-        onchange: function (v) { cfg.accInteg = v | 0; saveSettings(); }
+      "Pressure int s": {
+        value:cfg.pressureInterval,
+        min:1,
+        max:300,
+        step:1,
+        onchange:function (v) {
+          cfg.pressureInterval = v;
+          saveSettings();
+        }
+      },
+      "Pressure graph": {
+        value:!!cfg.pressureGraph,
+        onchange:function (v) {
+          cfg.pressureGraph = !!v;
+          saveSettings();
+        }
+      },
+      "Pressure store": {
+        value:!!cfg.pressureStore,
+        onchange:function (v) {
+          cfg.pressureStore = !!v;
+          saveSettings();
+        }
+      },
+      "Accel Hz": {
+        value:hzIndex(cfg.accHz),
+        min:0,
+        max:ACC_HZ.length - 1,
+        step:1,
+        format:function (v) { return ACC_HZ[v] + " Hz"; },
+        onchange:function (v) {
+          cfg.accHz = ACC_HZ[v];
+          saveSettings();
+        }
+      },
+      "Accel graph": {
+        value:!!cfg.accGraph,
+        onchange:function (v) {
+          cfg.accGraph = !!v;
+          saveSettings();
+        }
+      },
+      "Accel store": {
+        value:!!cfg.accStore,
+        onchange:function (v) {
+          cfg.accStore = !!v;
+          saveSettings();
+        }
       },
       "Accel Y min": {
-        value: cfg.accYmin,
-        min: -10000,
-        max: 10000,
-        step: 0.1,
-        onchange: function (v) {
+        value:cfg.accYmin,
+        min:0,
+        max:100,
+        step:0.01,
+        format:function (v) { return v.toFixed(2); },
+        onchange:function (v) {
           cfg.accYmin = v;
-          if (!(cfg.accYmax > cfg.accYmin)) cfg.accYmax = cfg.accYmin + 0.1;
+          if (!(cfg.accYmax > cfg.accYmin)) cfg.accYmax = cfg.accYmin + 0.01;
           saveSettings();
         }
       },
       "Accel Y max": {
-        value: cfg.accYmax,
-        min: -10000,
-        max: 10000,
-        step: 0.1,
-        onchange: function (v) {
+        value:cfg.accYmax,
+        min:0.01,
+        max:100,
+        step:0.01,
+        format:function (v) { return v.toFixed(2); },
+        onchange:function (v) {
           cfg.accYmax = v;
-          if (!(cfg.accYmax > cfg.accYmin)) cfg.accYmin = cfg.accYmax - 0.1;
+          if (!(cfg.accYmax > cfg.accYmin)) cfg.accYmin = Math.max(0, cfg.accYmax - 0.01);
           saveSettings();
         }
-      },
-      "Accel X >": function () { channelMenu("ax", "Accel X", ACC_HZ, 0.1, 10000); },
-      "Accel Y >": function () { channelMenu("ay", "Accel Y", ACC_HZ, 0.1, 10000); },
-      "Accel Z >": function () { channelMenu("az", "Accel Z", ACC_HZ, 0.1, 10000); },
-      "Pressure >": function () { channelMenu("p", "Pressure", PRESS_HZ, 1, 100000); }
-    };
-    E.showMenu(menu);
+      }
+    });
   }
 
   Bangle.on("lcdPower", function (on) {
-    if (on && measuring) clearGraph();
+    if (on) drawGraph();
   });
 
   cfg = loadSettings();
+  saveSettings();
   flushTimer = setInterval(flushLog, 5000);
   E.on("kill", cleanup);
-  startMeasurement();
+  startAcquisition(true);
 }());
