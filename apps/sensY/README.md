@@ -4,10 +4,19 @@
 
 ## Measurement screen
 
-- Acceleration X: red
-- Acceleration Y: green
+Trace colours are chosen automatically for contrast with the active Bangle.js theme.
+
+Dark background:
+- Acceleration X: white
+- Acceleration Y: yellow
+- Acceleration Z: cyan
+- Pressure: magenta
+
+Light background:
+- Acceleration X: black
+- Acceleration Y: red
 - Acceleration Z: blue
-- Pressure: yellow
+- Pressure: magenta
 - All enabled traces are overlaid on one full-screen graph.
 - Every channel uses its own configured Y minimum and Y maximum.
 - Axis scale numbers are intentionally not drawn.
@@ -20,13 +29,17 @@ Measurement and logging continue while the LCD is off; graph drawing is skipped 
 
 ## Settings
 
-`Span (s)` is global. Each channel (Accel X, Accel Y, Accel Z, Pressure) has:
+`Span (s)` is global. `Accel Integrate` is one common setting for all three acceleration axes. Each channel (Accel X, Accel Y, Accel Z, Pressure) has:
 
 - `Sample Hz`: effective sample rate for that channel.
 - `Store`: include that channel in CSV logging.
 - `Graph`: show or hide that channel.
-- `Integrate`: 0 = raw value, 1 = one time integration, 2 = two time integrations.
 - `Y min`, `Y max`: graph scale limits for that channel.
+
+Pressure keeps its own `Integrate` setting. Acceleration integration is controlled only by the single top-level `Accel Integrate` item:
+- 0 = gravity-compensated acceleration
+- 1 = one time integration of the gravity-compensated acceleration
+- 2 = two time integrations of the gravity-compensated acceleration
 
 Opening settings pauses acquisition. Returning with `< Back` applies the settings, resets the graph, and resets integration state.
 
@@ -38,14 +51,16 @@ For rates up to 12.5 Hz, the accelerometer stays at 12.5 Hz and software decimat
 
 Pressure settings are 0.2, 0.5, or 1 Hz and are obtained by decimating Bangle.js pressure events.
 
-## Integration
+## Gravity compensation and integration
+
+Before acceleration data is used, `sensY` estimates the gravity vector from the three-axis accelerometer with a low-pass filter. The estimated vector is normalised to 1 g and subtracted from the measured X/Y/Z vector. The resulting linear-acceleration components are treated as the acceleration raw data everywhere else in the app: graphing, integration, and CSV storage.
+
+The current gravity-estimation time constant is 0.8 s. This lets the estimate follow changes in watch orientation, but very slow motion can partly enter the gravity estimate. No additional baseline subtraction or detrending is performed.
 
 Integration uses trapezoidal time integration and the actual interval between accepted samples.
 
-- Acceleration raw unit is `g`; integrated graph units are therefore `g*s` and `g*s^2`.
+- Gravity-compensated acceleration raw unit is `g`; integrated graph units are `g*s` and `g*s^2`.
 - Pressure raw unit is `hPa`; integrated graph units are `hPa*s` and `hPa*s^2`.
-
-No gravity removal, baseline subtraction, detrending, or drift correction is performed.
 
 ## Storage format
 
@@ -56,10 +71,10 @@ When at least one channel has `Store` enabled, the app creates a CSV file named 
 Header:
 
 ```text
-t_s,ax_g,ay_g,az_g,p_hPa
+t_s,ax_lin_g,ay_lin_g,az_lin_g,p_hPa
 ```
 
-`t_s` is elapsed time from app launch. The CSV stores **raw sensor values**, not integrated graph values. This preserves the original measurements for later processing. A cell is blank when that channel is not due at that timestamp or its `Store` option is off.
+`t_s` is elapsed time from app launch. The CSV stores **gravity-compensated acceleration raw values** and raw pressure, not integrated graph values. This preserves the corrected acceleration used by the app for later processing. A cell is blank when that channel is not due at that timestamp or its `Store` option is off.
 
 Writes are buffered to reduce flash-write overhead.
 
