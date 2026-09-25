@@ -4,7 +4,7 @@
  */
 (function () {
   var Storage = require("Storage");
-  var VERSION = "0.011";
+  var VERSION = "0.012";
   var SETTINGS_FILE = "sensY.json";
   var APP_ID = "sensY";
 
@@ -14,9 +14,11 @@
   var DEFAULTS = {
     span: 10,
     accInteg: 0,
-    ax: { hz: 12.5, rec: false, graph: true, ymin: -2, ymax: 2 },
-    ay: { hz: 12.5, rec: false, graph: true, ymin: -2, ymax: 2 },
-    az: { hz: 12.5, rec: false, graph: true, ymin: -2, ymax: 2 },
+    accYmin: -2,
+    accYmax: 2,
+    ax: { hz: 12.5, rec: false, graph: true },
+    ay: { hz: 12.5, rec: false, graph: true },
+    az: { hz: 12.5, rec: false, graph: true },
     p:  { hz: 1,    rec: false, graph: true, integ: 0, ymin: 950, ymax: 1050 }
   };
 
@@ -74,6 +76,12 @@
     if (typeof s.span === "number") d.span = s.span;
     if (typeof s.accInteg === "number") d.accInteg = s.accInteg;
     else if (s.ax && typeof s.ax.integ === "number") d.accInteg = s.ax.integ;
+
+    if (typeof s.accYmin === "number") d.accYmin = s.accYmin;
+    else if (s.ax && typeof s.ax.ymin === "number") d.accYmin = s.ax.ymin;
+    if (typeof s.accYmax === "number") d.accYmax = s.accYmax;
+    else if (s.ax && typeof s.ax.ymax === "number") d.accYmax = s.ax.ymax;
+
     ["ax", "ay", "az", "p"].forEach(function (k) {
       if (!s[k]) return;
       Object.keys(d[k]).forEach(function (q) {
@@ -82,6 +90,7 @@
     });
     d.span = Math.max(1, Math.min(300, d.span));
     d.accInteg = Math.max(0, Math.min(2, d.accInteg | 0));
+    if (!(d.accYmax > d.accYmin)) d.accYmax = d.accYmin + 0.1;
     return d;
   }
 
@@ -275,8 +284,8 @@
 
   function valueToY(k, v) {
     var c = cfg[k];
-    var lo = c.ymin;
-    var hi = c.ymax;
+    var lo = k === "p" ? c.ymin : cfg.accYmin;
+    var hi = k === "p" ? c.ymax : cfg.accYmax;
     if (!(hi > lo)) hi = lo + 1;
     var f = (v - lo) / (hi - lo);
     var y = Math.round((1 - f) * (H - 1));
@@ -436,15 +445,18 @@
       "Graph": {
         value: !!c.graph,
         onchange: function (v) { c.graph = !!v; saveSettings(); }
-      },
-      "Integrate": k === "p" ? {
+      }
+    };
+
+    if (k === "p") {
+      menu.Integrate = {
         value: c.integ | 0,
         min: 0,
         max: 2,
         step: 1,
         onchange: function (v) { c.integ = v | 0; saveSettings(); }
-      } : undefined,
-      "Y min": {
+      };
+      menu["Y min"] = {
         value: c.ymin,
         min: -yLimit,
         max: yLimit,
@@ -454,8 +466,8 @@
           if (!(c.ymax > c.ymin)) c.ymax = c.ymin + yStep;
           saveSettings();
         }
-      },
-      "Y max": {
+      };
+      menu["Y max"] = {
         value: c.ymax,
         min: -yLimit,
         max: yLimit,
@@ -465,9 +477,8 @@
           if (!(c.ymax > c.ymin)) c.ymin = c.ymax - yStep;
           saveSettings();
         }
-      }
-    };
-    if (k !== "p") delete menu.Integrate;
+      };
+    }
     E.showMenu(menu);
   }
 
@@ -489,6 +500,28 @@
         max: 2,
         step: 1,
         onchange: function (v) { cfg.accInteg = v | 0; saveSettings(); }
+      },
+      "Accel Y min": {
+        value: cfg.accYmin,
+        min: -10000,
+        max: 10000,
+        step: 0.1,
+        onchange: function (v) {
+          cfg.accYmin = v;
+          if (!(cfg.accYmax > cfg.accYmin)) cfg.accYmax = cfg.accYmin + 0.1;
+          saveSettings();
+        }
+      },
+      "Accel Y max": {
+        value: cfg.accYmax,
+        min: -10000,
+        max: 10000,
+        step: 0.1,
+        onchange: function (v) {
+          cfg.accYmax = v;
+          if (!(cfg.accYmax > cfg.accYmin)) cfg.accYmin = cfg.accYmax - 0.1;
+          saveSettings();
+        }
       },
       "Accel X >": function () { channelMenu("ax", "Accel X", ACC_HZ, 0.1, 10000); },
       "Accel Y >": function () { channelMenu("ay", "Accel Y", ACC_HZ, 0.1, 10000); },
