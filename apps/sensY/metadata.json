@@ -2,7 +2,7 @@
   "id": "sensY",
   "name": "sensY",
   "shortName": "sensY",
-  "version": "0.014",
+  "version": "0.015",
   "author": "onisY",
   "description": "Research point-plot logger for barometric pressure and interval-averaged gravity-compensated acceleration magnitude.",
   "icon": "app.png",
