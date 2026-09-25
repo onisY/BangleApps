@@ -1,1 +1,2 @@
 0.01: Initial version.
+0.011: Improve graph contrast, share acceleration integration setting, and subtract estimated gravity from 3-axis acceleration.
