@@ -21,9 +21,9 @@ All of those magnitude samples acquired during one pressure-sampling interval ar
 
 Pressure and interval-averaged acceleration magnitude are both shown as line graphs connecting successive valid samples.
 
-Each pressure sample advances the graph by exactly one horizontal pixel. The corresponding averaged acceleration magnitude uses the same X coordinate. A vertical red line is drawn at the newest sample position to indicate the current sweep position.
+Each pressure sample advances the graph by exactly one horizontal pixel. The corresponding averaged acceleration magnitude uses the same X coordinate. A vertical red line is drawn at the next write position to indicate the current sweep position.
 
-The graph retains the most recent samples that fit in the plot width. When the plot is full, the oldest sample is removed and the remaining samples shift one pixel to the left.
+The graph does not scroll. The sweep starts at the left edge, advances one horizontal pixel for each accepted pressure sample, reaches the right edge, then returns to the left edge and overwrites the old graph in place. During normal acquisition only the current/next two vertical plot columns are cleared and redrawn.
 
 ### Pressure Y axis
 
@@ -104,3 +104,10 @@ Each CSV row corresponds to one accepted pressure sample. The acceleration value
 A field is left blank when its corresponding storage option is disabled.
 
 Writes are buffered to reduce flash-write overhead. The App Loader interface can download or delete saved `sensY*.csv` files.
+
+
+## Display power during measurement
+
+While acquisition is active, sensY keeps the LCD/backlight on and disables the normal lock/LCD/backlight timeouts. When acquisition is paused, settings are opened, or the app exits, the original Bangle.js timeout settings are restored.
+
+Because the pressure Y axis is automatic, a change of pressure scale requires existing pressure pixels to be remapped. To preserve the normal two-column sweep update, sensY updates the automatic pressure scale and performs a full graph redraw only when a complete horizontal sweep reaches the right edge and wraps to the left.
