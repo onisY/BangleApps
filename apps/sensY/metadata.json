@@ -2,7 +2,7 @@
   "id": "sensY",
   "name": "sensY",
   "shortName": "sensY",
-  "version": "0.012",
+  "version": "0.013",
   "author": "onisY",
   "description": "Research accelerometer and barometer logger with gravity-compensated acceleration and configurable multi-channel sweep graph.",
   "icon": "app.png",
