@@ -6,3 +6,4 @@
 0.015: Draw acceleration magnitude as a line graph and show the current sweep position with a vertical red line.
 0.016: Draw pressure samples as a line graph while keeping automatic pressure scaling and the red sweep cursor.
 0.017: Replace scrolling with fixed left-to-right sweep overwrite, update only two plot columns per normal sample, and keep the LCD/backlight on while measuring.
+0.018: Use a black measurement background; add configurable pressure/acceleration trace colors and 1-5 px widths; set pressure interval to 0.5-120 s in 0.5 s steps; use mean +/-0.25 mbar as the minimum pressure scale.
