@@ -19,9 +19,9 @@ All of those magnitude samples acquired during one pressure-sampling interval ar
 
 ## Graph
 
-The graph uses point plots only. There are no connecting lines.
+Pressure is shown as point plots. The interval-averaged acceleration magnitude is shown as a line graph connecting successive valid acceleration samples.
 
-Each pressure sample advances the graph by exactly one horizontal pixel. The corresponding averaged acceleration magnitude is plotted at the same X coordinate.
+Each pressure sample advances the graph by exactly one horizontal pixel. The corresponding averaged acceleration magnitude uses the same X coordinate. A vertical red line is drawn at the newest sample position to indicate the current sweep position.
 
 The graph retains the most recent samples that fit in the plot width. When the plot is full, the oldest sample is removed and the remaining samples shift one pixel to the left.
 
