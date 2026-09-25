@@ -29,14 +29,14 @@ Measurement and logging continue while the LCD is off; graph drawing is skipped 
 
 ## Settings
 
-`Span (s)` is global. `Accel Integrate` is one common setting for all three acceleration axes. Each channel (Accel X, Accel Y, Accel Z, Pressure) has:
+`Span (s)` is global. `Accel Integrate`, `Accel Y min`, and `Accel Y max` are common settings for all three acceleration axes. Each channel (Accel X, Accel Y, Accel Z, Pressure) has:
 
 - `Sample Hz`: effective sample rate for that channel.
 - `Store`: include that channel in CSV logging.
 - `Graph`: show or hide that channel.
-- `Y min`, `Y max`: graph scale limits for that channel.
+Acceleration X/Y/Z no longer have individual Y-axis limits; all three use the shared `Accel Y min` and `Accel Y max` values.
 
-Pressure keeps its own `Integrate` setting. Acceleration integration is controlled only by the single top-level `Accel Integrate` item:
+Pressure keeps its own `Integrate`, `Y min`, and `Y max` settings. Acceleration integration is controlled only by the single top-level `Accel Integrate` item:
 - 0 = gravity-compensated acceleration
 - 1 = one time integration of the gravity-compensated acceleration
 - 2 = two time integrations of the gravity-compensated acceleration
