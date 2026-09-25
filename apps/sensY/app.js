@@ -4,7 +4,7 @@
  */
 (function () {
   var Storage = require("Storage");
-  var VERSION = "0.01";
+  var VERSION = "0.011";
   var SETTINGS_FILE = "sensY.json";
   var APP_ID = "sensY";
 
@@ -13,18 +13,35 @@
 
   var DEFAULTS = {
     span: 10,
-    ax: { hz: 12.5, rec: false, graph: true, integ: 0, ymin: -2, ymax: 2 },
-    ay: { hz: 12.5, rec: false, graph: true, integ: 0, ymin: -2, ymax: 2 },
-    az: { hz: 12.5, rec: false, graph: true, integ: 0, ymin: -2, ymax: 2 },
+    accInteg: 0,
+    ax: { hz: 12.5, rec: false, graph: true, ymin: -2, ymax: 2 },
+    ay: { hz: 12.5, rec: false, graph: true, ymin: -2, ymax: 2 },
+    az: { hz: 12.5, rec: false, graph: true, ymin: -2, ymax: 2 },
     p:  { hz: 1,    rec: false, graph: true, integ: 0, ymin: 950, ymax: 1050 }
   };
 
-  var COLORS = {
-    ax: "#f00",
-    ay: "#0f0",
+  /*
+   * Bangle.js 2 has a limited display palette. Choose four traces that
+   * keep strong luminance/chroma contrast against the active theme.
+   */
+  var COLORS = g.theme.dark ? {
+    ax: "#fff",
+    ay: "#ff0",
+    az: "#0ff",
+    p:  "#f0f"
+  } : {
+    ax: "#000",
+    ay: "#f00",
     az: "#00f",
-    p:  "#ff0"
+    p:  "#f0f"
   };
+
+  /*
+   * Gravity estimate from the 3-axis accelerometer. The low-pass vector
+   * follows orientation, then is normalised to 1 g before subtraction.
+   */
+  var GRAVITY_TAU = 0.8;
+  var gravity = { init: false, x: 0, y: 0, z: 0, t: 0 };
 
   var cfg;
   var states = {};
@@ -55,6 +72,8 @@
     var s = Storage.readJSON(SETTINGS_FILE, 1) || {};
     var d = clone(DEFAULTS);
     if (typeof s.span === "number") d.span = s.span;
+    if (typeof s.accInteg === "number") d.accInteg = s.accInteg;
+    else if (s.ax && typeof s.ax.integ === "number") d.accInteg = s.ax.integ;
     ["ax", "ay", "az", "p"].forEach(function (k) {
       if (!s[k]) return;
       Object.keys(d[k]).forEach(function (q) {
@@ -62,6 +81,7 @@
       });
     });
     d.span = Math.max(1, Math.min(300, d.span));
+    d.accInteg = Math.max(0, Math.min(2, d.accInteg | 0));
     return d;
   }
 
@@ -95,7 +115,7 @@
     if (logFile) return;
     logName = makeLogName();
     logFile = Storage.open(logName, "w");
-    logFile.write("t_s,ax_g,ay_g,az_g,p_hPa\n");
+    logFile.write("t_s,ax_lin_g,ay_lin_g,az_lin_g,p_hPa\n");
   }
 
   function flushLog() {
@@ -138,7 +158,44 @@
       az: newState(),
       p: newState()
     };
+    gravity = { init: false, x: 0, y: 0, z: 0, t: 0 };
     lastPlot = { ax: null, ay: null, az: null, p: null };
+  }
+
+  function removeGravity(a, t) {
+    if (!gravity.init) {
+      gravity.x = a.x;
+      gravity.y = a.y;
+      gravity.z = a.z;
+      gravity.t = t;
+      gravity.init = true;
+    } else {
+      var dt = t - gravity.t;
+      if (dt < 0) dt = 0;
+      if (dt > 0.25) dt = 0.25;
+      var alpha = dt / (GRAVITY_TAU + dt);
+      gravity.x += alpha * (a.x - gravity.x);
+      gravity.y += alpha * (a.y - gravity.y);
+      gravity.z += alpha * (a.z - gravity.z);
+      gravity.t = t;
+    }
+
+    var m = Math.sqrt(
+      gravity.x * gravity.x +
+      gravity.y * gravity.y +
+      gravity.z * gravity.z
+    );
+    if (m < 0.05) return { x: a.x, y: a.y, z: a.z };
+
+    return {
+      x: a.x - gravity.x / m,
+      y: a.y - gravity.y / m,
+      z: a.z - gravity.z / m
+    };
+  }
+
+  function integrationOrder(k) {
+    return k === "p" ? (cfg.p.integ | 0) : (cfg.accInteg | 0);
   }
 
   function due(st, hz, t) {
@@ -176,7 +233,8 @@
     }
 
     st.raw = raw;
-    st.value = c.integ === 1 ? st.i1 : (c.integ === 2 ? st.i2 : raw);
+    var integ = integrationOrder(k);
+    st.value = integ === 1 ? st.i1 : (integ === 2 ? st.i2 : raw);
     plotSample(k, st.value, t);
     return true;
   }
@@ -246,18 +304,19 @@
     var t = getTime();
     advanceSweep(t);
 
+    var lin = removeGravity(a, t);
     var vals = {};
     var any = false;
     var accepted;
 
-    accepted = processValue("ax", a.x, t);
-    if (accepted && cfg.ax.rec) { vals.ax = a.x; any = true; }
+    accepted = processValue("ax", lin.x, t);
+    if (accepted && cfg.ax.rec) { vals.ax = lin.x; any = true; }
 
-    accepted = processValue("ay", a.y, t);
-    if (accepted && cfg.ay.rec) { vals.ay = a.y; any = true; }
+    accepted = processValue("ay", lin.y, t);
+    if (accepted && cfg.ay.rec) { vals.ay = lin.y; any = true; }
 
-    accepted = processValue("az", a.z, t);
-    if (accepted && cfg.az.rec) { vals.az = a.z; any = true; }
+    accepted = processValue("az", lin.z, t);
+    if (accepted && cfg.az.rec) { vals.az = lin.z; any = true; }
 
     if (any) appendLog(t, vals);
   }
@@ -378,13 +437,13 @@
         value: !!c.graph,
         onchange: function (v) { c.graph = !!v; saveSettings(); }
       },
-      "Integrate": {
+      "Integrate": k === "p" ? {
         value: c.integ | 0,
         min: 0,
         max: 2,
         step: 1,
         onchange: function (v) { c.integ = v | 0; saveSettings(); }
-      },
+      } : undefined,
       "Y min": {
         value: c.ymin,
         min: -yLimit,
@@ -408,6 +467,7 @@
         }
       }
     };
+    if (k !== "p") delete menu.Integrate;
     E.showMenu(menu);
   }
 
@@ -422,6 +482,13 @@
         max: 300,
         step: 1,
         onchange: function (v) { cfg.span = v; saveSettings(); }
+      },
+      "Accel Integrate": {
+        value: cfg.accInteg | 0,
+        min: 0,
+        max: 2,
+        step: 1,
+        onchange: function (v) { cfg.accInteg = v | 0; saveSettings(); }
       },
       "Accel X >": function () { channelMenu("ax", "Accel X", ACC_HZ, 0.1, 10000); },
       "Accel Y >": function () { channelMenu("ay", "Accel Y", ACC_HZ, 0.1, 10000); },
