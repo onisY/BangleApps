@@ -4,7 +4,7 @@
  */
 (function () {
   var Storage = require("Storage");
-  var VERSION = "0.015";
+  var VERSION = "0.016";
   var SETTINGS_FILE = "sensY.json";
   var APP_ID = "sensY";
 
@@ -362,6 +362,8 @@
     drawPressureAxis(pScale);
     drawXAxis();
 
+    var prevPressureX = null;
+    var prevPressureY = null;
     var prevAccX = null;
     var prevAccY = null;
 
@@ -370,7 +372,15 @@
       var s = history[i];
 
       if (cfg.pressureGraph && pScale && isFinite(s.p)) {
-        g.setColor(COLORS.pressure).setPixel(x, pressureY(s.p, pScale));
+        var py = pressureY(s.p, pScale);
+        g.setColor(COLORS.pressure);
+        if (prevPressureX === null) g.setPixel(x, py);
+        else g.drawLine(prevPressureX, prevPressureY, x, py);
+        prevPressureX = x;
+        prevPressureY = py;
+      } else {
+        prevPressureX = null;
+        prevPressureY = null;
       }
 
       if (cfg.accGraph && s.a !== null && isFinite(s.a)) {
