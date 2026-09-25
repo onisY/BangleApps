@@ -5,3 +5,4 @@
 0.014: Remove all integration features; plot pressure and interval-averaged acceleration magnitude as points; auto-scale and label pressure axis; derive time scale from pressure interval; add swipe pause/resume.
 0.015: Draw acceleration magnitude as a line graph and show the current sweep position with a vertical red line.
 0.016: Draw pressure samples as a line graph while keeping automatic pressure scaling and the red sweep cursor.
+0.017: Replace scrolling with fixed left-to-right sweep overwrite, update only two plot columns per normal sample, and keep the LCD/backlight on while measuring.
