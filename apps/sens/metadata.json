@@ -8,15 +8,29 @@
   "icon": "app.png",
   "type": "app",
   "tags": "tool,science,sensor,accelerometer,barometer,logger",
-  "supports": ["BANGLEJS2"],
+  "supports": [
+    "BANGLEJS2"
+  ],
   "readme": "README.md",
   "interface": "interface.html",
   "storage": [
-    {"name": "sens.app.js", "url": "app.js"},
-    {"name": "sens.img", "url": "app-icon.js", "evaluate": true}
+    {
+      "name": "sens.app.js",
+      "url": "app.js"
+    },
+    {
+      "name": "sens.img",
+      "url": "app-icon.js",
+      "evaluate": true
+    }
   ],
   "data": [
-    {"name": "sens.json"},
-    {"wildcard": "sens*.csv"}
+    {
+      "name": "sens.json"
+    },
+    {
+      "wildcard": "sens*.csv",
+      "storageFile": true
+    }
   ]
 }
