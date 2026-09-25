@@ -19,11 +19,22 @@ All of those magnitude samples acquired during one pressure-sampling interval ar
 
 ## Graph
 
-Pressure and interval-averaged acceleration magnitude are both shown as line graphs connecting successive valid samples.
+The measurement screen always uses a black background. Settings menus continue to use the normal Bangle.js theme.
 
-Each pressure sample advances the graph by exactly one horizontal pixel. The corresponding averaged acceleration magnitude uses the same X coordinate. A vertical red line is drawn at the next write position to indicate the current sweep position.
+Pressure and interval-averaged acceleration magnitude are both shown as line graphs. Their line colours and widths are independently configurable.
 
-The graph does not scroll. The sweep starts at the left edge, advances one horizontal pixel for each accepted pressure sample, reaches the right edge, then returns to the left edge and overwrites the old graph in place. During normal acquisition only the current/next two vertical plot columns are cleared and redrawn.
+Available line colours are:
+- White
+- Red
+- Green
+- Blue
+- Yellow
+- Cyan
+- Magenta
+
+Each trace width can be set from 1 to 5 pixels. Width is added vertically so normal sweep updates remain confined to the current/next two X columns.
+
+The graph does not scroll. The sweep starts at the left edge, advances one horizontal pixel for each accepted pressure sample, reaches the right edge, then returns to the left and overwrites the old graph in place. A vertical red line marks the next write position.
 
 ### Pressure Y axis
 
@@ -32,7 +43,7 @@ Pressure scaling is automatic and cannot be set manually.
 For the pressure values currently visible across the horizontal plot range:
 
 - normally, the minimum visible pressure becomes the bottom of the pressure scale and the maximum visible pressure becomes the top;
-- if the visible maximum-minus-minimum is 1 mbar or less, the pressure scale is centred on the visible mean and forced to mean ±0.5 mbar.
+- if the visible maximum-minus-minimum is 0.5 mbar or less, the minimum pressure scale is centred on the visible mean and forced to mean ±0.25 mbar.
 
 The pressure Y axis is labelled in mbar. Top, middle, and bottom tick values are drawn on screen.
 
@@ -55,11 +66,15 @@ The screen displays both seconds-per-pixel and the total time span represented b
 
 ## Settings
 
-- `Pressure int s`: pressure sample interval, 1 to 300 seconds.
-- `Pressure graph`: show/hide pressure points.
+- `Pressure int s`: pressure sample interval, 0.5 to 120 seconds in 0.5-second steps.
+- `Pressure graph`: show/hide the pressure line.
+- `Pressure color`: pressure line colour.
+- `Pressure width`: pressure line width, 1 to 5 pixels.
 - `Pressure store`: save pressure data to CSV.
 - `Accel Hz`: acceleration sampling frequency.
-- `Accel graph`: show/hide interval-averaged acceleration-magnitude points.
+- `Accel graph`: show/hide the interval-averaged acceleration-magnitude line.
+- `Accel color`: acceleration line colour.
+- `Accel width`: acceleration line width, 1 to 5 pixels.
 - `Accel store`: save interval-averaged acceleration magnitude to CSV.
 - `Accel Y min`: acceleration graph minimum.
 - `Accel Y max`: acceleration graph maximum.
@@ -85,7 +100,7 @@ Acceleration hardware sampling supports:
 
 For requested rates up to 12.5 Hz, the accelerometer operates at 12.5 Hz and sensY decimates in software. For 25/50/100 Hz, sensY changes the Bangle.js 2 KX023 output data rate and polling interval.
 
-The barometer remains powered while acquisition is active. Pressure events are accepted according to the configured `Pressure int s` interval.
+The barometer remains powered while acquisition is active. Pressure events are accepted according to the configured `Pressure int s` interval, which may be set from 0.5 to 120 seconds in 0.5-second steps.
 
 ## CSV storage
 
