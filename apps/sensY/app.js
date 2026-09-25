@@ -4,7 +4,7 @@
  */
 (function () {
   var Storage = require("Storage");
-  var VERSION = "0.012";
+  var VERSION = "0.013";
   var SETTINGS_FILE = "sensY.json";
   var APP_ID = "sensY";
 
@@ -44,6 +44,17 @@
    */
   var GRAVITY_TAU = 0.8;
   var gravity = { init: false, x: 0, y: 0, z: 0, t: 0 };
+
+  /*
+   * When displaying integrated acceleration, suppress settled integration
+   * drift. Every 3 s compare the three integrated outputs with their
+   * values at the start of the window. If all relative changes are <=5%,
+   * reset the acceleration integrators together.
+   */
+  var STABLE_WINDOW_S = 3;
+  var STABLE_REL = 0.05;
+  var STABLE_EPS = 1e-6;
+  var accelStable = { t: undefined, ax: 0, ay: 0, az: 0 };
 
   var cfg;
   var states = {};
@@ -168,6 +179,7 @@
       p: newState()
     };
     gravity = { init: false, x: 0, y: 0, z: 0, t: 0 };
+    accelStable = { t: undefined, ax: 0, ay: 0, az: 0 };
     lastPlot = { ax: null, ay: null, az: null, p: null };
   }
 
@@ -205,6 +217,57 @@
 
   function integrationOrder(k) {
     return k === "p" ? (cfg.p.integ | 0) : (cfg.accInteg | 0);
+  }
+
+  function accelGraphActive() {
+    return !!(cfg.ax.graph || cfg.ay.graph || cfg.az.graph);
+  }
+
+  function setAccelStableReference(t) {
+    accelStable.t = t;
+    accelStable.ax = states.ax.value;
+    accelStable.ay = states.ay.value;
+    accelStable.az = states.az.value;
+  }
+
+  function relativeChange(a, b) {
+    var d = Math.max(Math.abs(a), Math.abs(b), STABLE_EPS);
+    return Math.abs(b - a) / d;
+  }
+
+  function zeroAccelIntegrals(t) {
+    ["ax", "ay", "az"].forEach(function (k) {
+      var st = states[k];
+      st.i1 = 0;
+      st.i2 = 0;
+      st.value = 0;
+      st.lastT = t;
+      st.prevRaw = st.raw;
+      if (cfg[k].graph && Bangle.isLCDOn()) plotSample(k, 0, t);
+    });
+    setAccelStableReference(t);
+  }
+
+  function checkAccelStableReset(t) {
+    if (cfg.accInteg < 1 || !accelGraphActive()) {
+      accelStable.t = undefined;
+      return;
+    }
+    if (!states.ax.has || !states.ay.has || !states.az.has) return;
+
+    if (accelStable.t === undefined) {
+      setAccelStableReference(t);
+      return;
+    }
+    if (t - accelStable.t < STABLE_WINDOW_S) return;
+
+    var stable =
+      relativeChange(accelStable.ax, states.ax.value) <= STABLE_REL &&
+      relativeChange(accelStable.ay, states.ay.value) <= STABLE_REL &&
+      relativeChange(accelStable.az, states.az.value) <= STABLE_REL;
+
+    if (stable) zeroAccelIntegrals(t);
+    else setAccelStableReference(t);
   }
 
   function due(st, hz, t) {
@@ -326,6 +389,8 @@
 
     accepted = processValue("az", lin.z, t);
     if (accepted && cfg.az.rec) { vals.az = lin.z; any = true; }
+
+    checkAccelStableReset(t);
 
     if (any) appendLog(t, vals);
   }
