@@ -4,11 +4,17 @@
  */
 (function () {
   var Storage = require("Storage");
-  var VERSION = "0.017";
+  var VERSION = "0.018";
   var SETTINGS_FILE = "sensY.json";
   var APP_ID = "sensY";
 
   var ACC_HZ = [1, 2, 5, 10, 12.5, 25, 50, 100];
+
+  var COLOR_NAMES = ["White", "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta"];
+  var COLOR_VALUES = ["#fff", "#f00", "#0f0", "#00f", "#ff0", "#0ff", "#f0f"];
+  var BG = "#000";
+  var FG = "#fff";
+  var SWEEP_COLOR = "#f00";
 
   var DEFAULTS = {
     accHz: 12.5,
@@ -17,18 +23,12 @@
     pressureStore: false,
     accGraph: true,
     pressureGraph: true,
+    pressureColor: 6,
+    pressureWidth: 1,
+    accColor: 5,
+    accWidth: 1,
     accYmin: 0,
     accYmax: 2
-  };
-
-  var COLORS = g.theme.dark ? {
-    pressure: "#f0f",
-    accel: "#0ff",
-    sweep: "#f00"
-  } : {
-    pressure: "#f0f",
-    accel: "#00f",
-    sweep: "#f00"
   };
 
   var GRAVITY_TAU = 0.8;
@@ -86,6 +86,10 @@
       pressureStore: DEFAULTS.pressureStore,
       accGraph: DEFAULTS.accGraph,
       pressureGraph: DEFAULTS.pressureGraph,
+      pressureColor: DEFAULTS.pressureColor,
+      pressureWidth: DEFAULTS.pressureWidth,
+      accColor: DEFAULTS.accColor,
+      accWidth: DEFAULTS.accWidth,
       accYmin: DEFAULTS.accYmin,
       accYmax: DEFAULTS.accYmax
     };
@@ -109,11 +113,20 @@
     if (typeof s.pressureGraph === "boolean") d.pressureGraph = s.pressureGraph;
     else if (s.p && s.p.graph !== undefined) d.pressureGraph = !!s.p.graph;
 
+    if (typeof s.pressureColor === "number") d.pressureColor = s.pressureColor | 0;
+    if (typeof s.pressureWidth === "number") d.pressureWidth = s.pressureWidth | 0;
+    if (typeof s.accColor === "number") d.accColor = s.accColor | 0;
+    if (typeof s.accWidth === "number") d.accWidth = s.accWidth | 0;
+
     if (typeof s.accYmin === "number") d.accYmin = Math.max(0, s.accYmin);
     if (typeof s.accYmax === "number") d.accYmax = s.accYmax;
 
     if (ACC_HZ.indexOf(d.accHz) < 0) d.accHz = DEFAULTS.accHz;
-    d.pressureInterval = clamp(Math.round(d.pressureInterval), 1, 300);
+    d.pressureInterval = clamp(Math.round(d.pressureInterval * 2) / 2, 0.5, 120);
+    d.pressureColor = clamp(d.pressureColor, 0, COLOR_VALUES.length - 1);
+    d.accColor = clamp(d.accColor, 0, COLOR_VALUES.length - 1);
+    d.pressureWidth = clamp(d.pressureWidth, 1, 5);
+    d.accWidth = clamp(d.accWidth, 1, 5);
     if (!(d.accYmax > d.accYmin)) d.accYmax = d.accYmin + 0.1;
     return d;
   }
@@ -330,15 +343,15 @@
     }
     if (!n) return null;
 
-    if (max - min <= 1) {
+    if (max - min <= 0.5) {
       var mean = sum / n;
-      return { lo:mean - 0.5, hi:mean + 0.5 };
+      return { lo:mean - 0.25, hi:mean + 0.25 };
     }
     return { lo:min, hi:max };
   }
 
   function initialScale(p) {
-    return { lo:p - 0.5, hi:p + 0.5 };
+    return { lo:p - 0.25, hi:p + 0.25 };
   }
 
   function pressureY(v) {
@@ -365,14 +378,14 @@
   }
 
   function drawPressureAxis() {
-    g.setColor(g.theme.bg).fillRect(0, 0, PLOT_X0 - 1, PLOT_Y1);
+    g.setColor(BG).fillRect(0, 0, PLOT_X0 - 1, PLOT_Y1);
     if (!cfg.pressureGraph || !displayPressureScale) return;
 
     var mid = (displayPressureScale.lo + displayPressureScale.hi) / 2;
     var ys = [PLOT_Y0, Math.round((PLOT_Y0 + PLOT_Y1) / 2), PLOT_Y1];
     var vs = [displayPressureScale.hi, mid, displayPressureScale.lo];
 
-    g.setColor(g.theme.fg).setFont("4x6").setFontAlign(-1, -1);
+    g.setColor(FG).setFont("4x6").setFontAlign(-1, -1);
     g.drawString("mbar", 0, 0);
     g.setFontAlign(1, 0);
     for (var i = 0; i < 3; i++) {
@@ -382,9 +395,9 @@
   }
 
   function drawXAxis() {
-    g.setColor(g.theme.bg).fillRect(PLOT_X0, PLOT_Y1 + 1, PLOT_X1, H - 1);
+    g.setColor(BG).fillRect(PLOT_X0, PLOT_Y1 + 1, PLOT_X1, H - 1);
     var span = (PLOT_W - 1) * cfg.pressureInterval;
-    g.setColor(g.theme.fg).setFont("4x6").setFontAlign(-1, -1);
+    g.setColor(FG).setFont("4x6").setFontAlign(-1, -1);
     g.drawString(cfg.pressureInterval + "s/px", PLOT_X0, H - 7);
     g.setFontAlign(1, -1);
     g.drawString("span " + formatDuration(span), PLOT_X1, H - 7);
@@ -393,7 +406,7 @@
   function clearPlotColumn(idx) {
     if (idx < 0 || idx >= PLOT_W) return;
     var x = PLOT_X0 + idx;
-    g.setColor(g.theme.bg).fillRect(x, PLOT_Y0, x, PLOT_Y1);
+    g.setColor(BG).fillRect(x, PLOT_Y0, x, PLOT_Y1);
   }
 
   function clearSweepColumns(idx) {
@@ -405,6 +418,27 @@
     return a && b && a.gen === b.gen;
   }
 
+  function drawThickPoint(x, y, color, width) {
+    g.setColor(color);
+    var lo = -Math.floor((width - 1) / 2);
+    var hi = Math.ceil((width - 1) / 2);
+    for (var o = lo; o <= hi; o++) {
+      var yy = y + o;
+      if (yy >= PLOT_Y0 && yy <= PLOT_Y1) g.setPixel(x, yy);
+    }
+  }
+
+  function drawThickLine(x1, y1, x2, y2, color, width) {
+    g.setColor(color);
+    var lo = -Math.floor((width - 1) / 2);
+    var hi = Math.ceil((width - 1) / 2);
+    for (var o = lo; o <= hi; o++) {
+      var yy1 = clamp(y1 + o, PLOT_Y0, PLOT_Y1);
+      var yy2 = clamp(y2 + o, PLOT_Y0, PLOT_Y1);
+      g.drawLine(x1, yy1, x2, yy2);
+    }
+  }
+
   function drawSampleAt(idx) {
     var s = samples[idx];
     if (!s) return;
@@ -413,30 +447,30 @@
 
     if (cfg.pressureGraph && isFinite(s.p)) {
       var py = pressureY(s.p);
-      g.setColor(COLORS.pressure);
+      var pc = COLOR_VALUES[cfg.pressureColor];
       if (sameGeneration(prev, s) && isFinite(prev.p))
-        g.drawLine(x - 1, pressureY(prev.p), x, py);
+        drawThickLine(x - 1, pressureY(prev.p), x, py, pc, cfg.pressureWidth);
       else
-        g.setPixel(x, py);
+        drawThickPoint(x, py, pc, cfg.pressureWidth);
     }
 
     if (cfg.accGraph && s.a !== null && isFinite(s.a)) {
       var ay = accelY(s.a);
-      g.setColor(COLORS.accel);
+      var ac = COLOR_VALUES[cfg.accColor];
       if (sameGeneration(prev, s) && prev.a !== null && isFinite(prev.a))
-        g.drawLine(x - 1, accelY(prev.a), x, ay);
+        drawThickLine(x - 1, accelY(prev.a), x, ay, ac, cfg.accWidth);
       else
-        g.setPixel(x, ay);
+        drawThickPoint(x, ay, ac, cfg.accWidth);
     }
   }
 
   function drawSweepCursor() {
     var x = PLOT_X0 + sweepIndex;
-    g.setColor(COLORS.sweep).drawLine(x, PLOT_Y0, x, PLOT_Y1);
+    g.setColor(SWEEP_COLOR).drawLine(x, PLOT_Y0, x, PLOT_Y1);
   }
 
   function drawFullGraph() {
-    g.reset().clear();
+    g.reset().setColor(BG).fillRect(0, 0, W - 1, H - 1);
     drawPressureAxis();
     drawXAxis();
 
@@ -519,9 +553,9 @@
     var h = 30;
     var x = Math.round((W - w) / 2);
     var y = Math.round((H - h) / 2);
-    g.setColor(g.theme.bg).fillRect(x, y, x + w, y + h);
-    g.setColor(g.theme.fg).drawRect(x, y, x + w, y + h);
-    g.setFont("6x8").setFontAlign(0, 0);
+    g.setColor(BG).fillRect(x, y, x + w, y + h);
+    g.setColor(FG).drawRect(x, y, x + w, y + h);
+    g.setColor(FG).setFont("6x8").setFontAlign(0, 0);
     g.drawString("PAUSED", W / 2, y + 9);
     g.setFont("4x6");
     g.drawString("swipe up to resume", W / 2, y + 21);
@@ -628,9 +662,10 @@
       },
       "Pressure int s": {
         value:cfg.pressureInterval,
-        min:1,
-        max:300,
-        step:1,
+        min:0.5,
+        max:120,
+        step:0.5,
+        format:function (v) { return v.toFixed(1) + " s"; },
         onchange:function (v) {
           cfg.pressureInterval = v;
           saveSettings();
@@ -640,6 +675,28 @@
         value:!!cfg.pressureGraph,
         onchange:function (v) {
           cfg.pressureGraph = !!v;
+          saveSettings();
+        }
+      },
+      "Pressure color": {
+        value:cfg.pressureColor,
+        min:0,
+        max:COLOR_NAMES.length - 1,
+        step:1,
+        format:function (v) { return COLOR_NAMES[v]; },
+        onchange:function (v) {
+          cfg.pressureColor = v | 0;
+          saveSettings();
+        }
+      },
+      "Pressure width": {
+        value:cfg.pressureWidth,
+        min:1,
+        max:5,
+        step:1,
+        format:function (v) { return v + " px"; },
+        onchange:function (v) {
+          cfg.pressureWidth = v | 0;
           saveSettings();
         }
       },
@@ -665,6 +722,28 @@
         value:!!cfg.accGraph,
         onchange:function (v) {
           cfg.accGraph = !!v;
+          saveSettings();
+        }
+      },
+      "Accel color": {
+        value:cfg.accColor,
+        min:0,
+        max:COLOR_NAMES.length - 1,
+        step:1,
+        format:function (v) { return COLOR_NAMES[v]; },
+        onchange:function (v) {
+          cfg.accColor = v | 0;
+          saveSettings();
+        }
+      },
+      "Accel width": {
+        value:cfg.accWidth,
+        min:1,
+        max:5,
+        step:1,
+        format:function (v) { return v + " px"; },
+        onchange:function (v) {
+          cfg.accWidth = v | 0;
           saveSettings();
         }
       },
