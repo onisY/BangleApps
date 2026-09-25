@@ -1,0 +1,36 @@
+{
+  "id": "sensY",
+  "name": "sensY",
+  "shortName": "sensY",
+  "version": "0.01",
+  "author": "onisY",
+  "description": "Research accelerometer and barometer logger with configurable multi-channel sweep graph.",
+  "icon": "app.png",
+  "type": "app",
+  "tags": "tool,science,sensor,accelerometer,barometer,logger",
+  "supports": [
+    "BANGLEJS2"
+  ],
+  "readme": "README.md",
+  "interface": "interface.html",
+  "storage": [
+    {
+      "name": "sensY.app.js",
+      "url": "app.js"
+    },
+    {
+      "name": "sensY.img",
+      "url": "app-icon.js",
+      "evaluate": true
+    }
+  ],
+  "data": [
+    {
+      "name": "sensY.json"
+    },
+    {
+      "wildcard": "sensY*.csv",
+      "storageFile": true
+    }
+  ]
+}
