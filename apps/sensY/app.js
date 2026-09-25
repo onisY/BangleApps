@@ -4,7 +4,7 @@
  */
 (function () {
   var Storage = require("Storage");
-  var VERSION = "0.014";
+  var VERSION = "0.015";
   var SETTINGS_FILE = "sensY.json";
   var APP_ID = "sensY";
 
@@ -23,10 +23,12 @@
 
   var COLORS = g.theme.dark ? {
     pressure: "#f0f",
-    accel: "#0ff"
+    accel: "#0ff",
+    sweep: "#f00"
   } : {
     pressure: "#f0f",
-    accel: "#f00"
+    accel: "#00f",
+    sweep: "#f00"
   };
 
   var GRAVITY_TAU = 0.8;
@@ -360,6 +362,9 @@
     drawPressureAxis(pScale);
     drawXAxis();
 
+    var prevAccX = null;
+    var prevAccY = null;
+
     for (var i = 0; i < history.length; i++) {
       var x = PLOT_X0 + i;
       var s = history[i];
@@ -367,9 +372,23 @@
       if (cfg.pressureGraph && pScale && isFinite(s.p)) {
         g.setColor(COLORS.pressure).setPixel(x, pressureY(s.p, pScale));
       }
+
       if (cfg.accGraph && s.a !== null && isFinite(s.a)) {
-        g.setColor(COLORS.accel).setPixel(x, accelY(s.a));
+        var ay = accelY(s.a);
+        g.setColor(COLORS.accel);
+        if (prevAccX === null) g.setPixel(x, ay);
+        else g.drawLine(prevAccX, prevAccY, x, ay);
+        prevAccX = x;
+        prevAccY = ay;
+      } else {
+        prevAccX = null;
+        prevAccY = null;
       }
+    }
+
+    if (history.length) {
+      var sweepX = PLOT_X0 + history.length - 1;
+      g.setColor(COLORS.sweep).drawLine(sweepX, PLOT_Y0, sweepX, PLOT_Y1);
     }
 
     if (paused) drawPausedOverlay();
