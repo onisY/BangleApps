@@ -1,10 +1,10 @@
 /*
- * sensY - research accelerometer/barometer point-plot logger
+ * sensY - research accelerometer/barometer sweep logger
  * Bangle.js 2
  */
 (function () {
   var Storage = require("Storage");
-  var VERSION = "0.016";
+  var VERSION = "0.017";
   var SETTINGS_FILE = "sensY.json";
   var APP_ID = "sensY";
 
@@ -45,7 +45,11 @@
   var PLOT_H = PLOT_Y1 - PLOT_Y0 + 1;
 
   var cfg;
-  var history = [];
+  var samples = new Array(PLOT_W);
+  var sweepIndex = 0;
+  var sweepGeneration = 1;
+  var displayPressureScale = null;
+
   var acquiring = false;
   var paused = false;
   var accelConfigured = false;
@@ -61,10 +65,12 @@
   var logBuf = "";
   var flushTimer;
 
+  var originalOptions = {};
   var oldPowerSave = true;
   try {
-    var oldOpts = Bangle.getOptions();
-    if (oldOpts && oldOpts.powerSave !== undefined) oldPowerSave = oldOpts.powerSave;
+    originalOptions = Bangle.getOptions() || {};
+    if (originalOptions.powerSave !== undefined)
+      oldPowerSave = originalOptions.powerSave;
   } catch (e) {}
 
   function clamp(v, lo, hi) {
@@ -239,6 +245,39 @@
     accelConfigured = false;
   }
 
+  function keepScreenOn() {
+    try {
+      Bangle.setOptions({
+        lockTimeout:0,
+        lcdPowerTimeout:0,
+        backlightTimeout:0
+      });
+      Bangle.setLocked(0);
+      Bangle.setLCDPower(1);
+      if (Bangle.setBacklight) Bangle.setBacklight(1);
+    } catch (e) {
+      try {
+        Bangle.setLCDPower(1);
+        Bangle.setLCDTimeout(0);
+      } catch (e2) {}
+    }
+  }
+
+  function restoreScreenTimeouts() {
+    try {
+      Bangle.setOptions({
+        lockTimeout:originalOptions.lockTimeout,
+        lcdPowerTimeout:originalOptions.lcdPowerTimeout,
+        backlightTimeout:originalOptions.backlightTimeout
+      });
+    } catch (e) {
+      try {
+        if (originalOptions.lockTimeout !== undefined)
+          Bangle.setLCDTimeout(originalOptions.lockTimeout / 1000);
+      } catch (e2) {}
+    }
+  }
+
   function resetAcquisitionWindow() {
     resetGravity();
     accSum = 0;
@@ -246,6 +285,13 @@
     var now = getTime();
     nextAccelT = now;
     nextPressureT = now + cfg.pressureInterval;
+  }
+
+  function resetSweep() {
+    samples = new Array(PLOT_W);
+    sweepIndex = 0;
+    sweepGeneration = 1;
+    displayPressureScale = null;
   }
 
   function onAccel(a) {
@@ -268,41 +314,20 @@
     accCount++;
   }
 
-  function onPressure(e) {
-    if (!acquiring) return;
-    var t = getTime();
-    if (t + 0.0005 < nextPressureT) return;
-
-    do {
-      nextPressureT += cfg.pressureInterval;
-    } while (nextPressureT <= t);
-
-    var accAvg = accCount ? accSum / accCount : null;
-    accSum = 0;
-    accCount = 0;
-
-    var sample = { t:t, p:e.pressure, a:accAvg };
-    history.push(sample);
-    if (history.length > PLOT_W) history.shift();
-
-    appendLog(t, accAvg, e.pressure);
-    if (Bangle.isLCDOn()) drawGraph();
-  }
-
-  function pressureScale() {
-    if (!history.length) return null;
+  function scaleFromSamples() {
     var min = Infinity;
     var max = -Infinity;
     var sum = 0;
     var n = 0;
 
-    history.forEach(function (s) {
-      if (s.p === undefined || !isFinite(s.p)) return;
+    for (var i = 0; i < samples.length; i++) {
+      var s = samples[i];
+      if (!s || s.p === undefined || !isFinite(s.p)) continue;
       min = Math.min(min, s.p);
       max = Math.max(max, s.p);
       sum += s.p;
       n++;
-    });
+    }
     if (!n) return null;
 
     if (max - min <= 1) {
@@ -312,8 +337,14 @@
     return { lo:min, hi:max };
   }
 
-  function pressureY(v, scale) {
-    var f = (v - scale.lo) / (scale.hi - scale.lo);
+  function initialScale(p) {
+    return { lo:p - 0.5, hi:p + 0.5 };
+  }
+
+  function pressureY(v) {
+    if (!displayPressureScale) return Math.round((PLOT_Y0 + PLOT_Y1) / 2);
+    var f = (v - displayPressureScale.lo) /
+            (displayPressureScale.hi - displayPressureScale.lo);
     return clamp(Math.round(PLOT_Y1 - f * (PLOT_H - 1)), PLOT_Y0, PLOT_Y1);
   }
 
@@ -333,11 +364,13 @@
     return m ? (h + "h" + m + "m") : (h + "h");
   }
 
-  function drawPressureAxis(scale) {
-    if (!cfg.pressureGraph || !scale) return;
-    var mid = (scale.lo + scale.hi) / 2;
+  function drawPressureAxis() {
+    g.setColor(g.theme.bg).fillRect(0, 0, PLOT_X0 - 1, PLOT_Y1);
+    if (!cfg.pressureGraph || !displayPressureScale) return;
+
+    var mid = (displayPressureScale.lo + displayPressureScale.hi) / 2;
     var ys = [PLOT_Y0, Math.round((PLOT_Y0 + PLOT_Y1) / 2), PLOT_Y1];
-    var vs = [scale.hi, mid, scale.lo];
+    var vs = [displayPressureScale.hi, mid, displayPressureScale.lo];
 
     g.setColor(g.theme.fg).setFont("4x6").setFontAlign(-1, -1);
     g.drawString("mbar", 0, 0);
@@ -349,6 +382,7 @@
   }
 
   function drawXAxis() {
+    g.setColor(g.theme.bg).fillRect(PLOT_X0, PLOT_Y1 + 1, PLOT_X1, H - 1);
     var span = (PLOT_W - 1) * cfg.pressureInterval;
     g.setColor(g.theme.fg).setFont("4x6").setFontAlign(-1, -1);
     g.drawString(cfg.pressureInterval + "s/px", PLOT_X0, H - 7);
@@ -356,52 +390,128 @@
     g.drawString("span " + formatDuration(span), PLOT_X1, H - 7);
   }
 
-  function drawGraph() {
+  function clearPlotColumn(idx) {
+    if (idx < 0 || idx >= PLOT_W) return;
+    var x = PLOT_X0 + idx;
+    g.setColor(g.theme.bg).fillRect(x, PLOT_Y0, x, PLOT_Y1);
+  }
+
+  function clearSweepColumns(idx) {
+    clearPlotColumn(idx);
+    clearPlotColumn((idx + 1) % PLOT_W);
+  }
+
+  function sameGeneration(a, b) {
+    return a && b && a.gen === b.gen;
+  }
+
+  function drawSampleAt(idx) {
+    var s = samples[idx];
+    if (!s) return;
+    var x = PLOT_X0 + idx;
+    var prev = idx > 0 ? samples[idx - 1] : null;
+
+    if (cfg.pressureGraph && isFinite(s.p)) {
+      var py = pressureY(s.p);
+      g.setColor(COLORS.pressure);
+      if (sameGeneration(prev, s) && isFinite(prev.p))
+        g.drawLine(x - 1, pressureY(prev.p), x, py);
+      else
+        g.setPixel(x, py);
+    }
+
+    if (cfg.accGraph && s.a !== null && isFinite(s.a)) {
+      var ay = accelY(s.a);
+      g.setColor(COLORS.accel);
+      if (sameGeneration(prev, s) && prev.a !== null && isFinite(prev.a))
+        g.drawLine(x - 1, accelY(prev.a), x, ay);
+      else
+        g.setPixel(x, ay);
+    }
+  }
+
+  function drawSweepCursor() {
+    var x = PLOT_X0 + sweepIndex;
+    g.setColor(COLORS.sweep).drawLine(x, PLOT_Y0, x, PLOT_Y1);
+  }
+
+  function drawFullGraph() {
     g.reset().clear();
-    var pScale = pressureScale();
-    drawPressureAxis(pScale);
+    drawPressureAxis();
     drawXAxis();
 
-    var prevPressureX = null;
-    var prevPressureY = null;
-    var prevAccX = null;
-    var prevAccY = null;
+    for (var i = 0; i < PLOT_W; i++)
+      drawSampleAt(i);
 
-    for (var i = 0; i < history.length; i++) {
-      var x = PLOT_X0 + i;
-      var s = history[i];
-
-      if (cfg.pressureGraph && pScale && isFinite(s.p)) {
-        var py = pressureY(s.p, pScale);
-        g.setColor(COLORS.pressure);
-        if (prevPressureX === null) g.setPixel(x, py);
-        else g.drawLine(prevPressureX, prevPressureY, x, py);
-        prevPressureX = x;
-        prevPressureY = py;
-      } else {
-        prevPressureX = null;
-        prevPressureY = null;
-      }
-
-      if (cfg.accGraph && s.a !== null && isFinite(s.a)) {
-        var ay = accelY(s.a);
-        g.setColor(COLORS.accel);
-        if (prevAccX === null) g.setPixel(x, ay);
-        else g.drawLine(prevAccX, prevAccY, x, ay);
-        prevAccX = x;
-        prevAccY = ay;
-      } else {
-        prevAccX = null;
-        prevAccY = null;
-      }
-    }
-
-    if (history.length) {
-      var sweepX = PLOT_X0 + history.length - 1;
-      g.setColor(COLORS.sweep).drawLine(sweepX, PLOT_Y0, sweepX, PLOT_Y1);
-    }
-
+    drawSweepCursor();
     if (paused) drawPausedOverlay();
+  }
+
+  function updateSweep(sample) {
+    var idx = sweepIndex;
+    var next = (idx + 1) % PLOT_W;
+
+    /*
+     * Incremental sweep: remove the current cursor/old sample column and the
+     * next column (which contains the old forward segment), then redraw only
+     * the new sample and cursor. Normal updates therefore touch two plot
+     * columns only.
+     */
+    clearSweepColumns(idx);
+    samples[idx] = sample;
+    drawSampleAt(idx);
+
+    sweepIndex = next;
+
+    if (next === 0) {
+      /*
+       * One horizontal sweep is complete. Pressure auto-scaling requires all
+       * existing pressure pixels to be remapped when the axis range changes,
+       * so do one full redraw at the sweep boundary only.
+       */
+      var scale = scaleFromSamples();
+      if (scale) displayPressureScale = scale;
+      sweepGeneration++;
+      drawFullGraph();
+    } else {
+      drawSweepCursor();
+    }
+  }
+
+  function onPressure(e) {
+    if (!acquiring) return;
+    var t = getTime();
+    if (t + 0.0005 < nextPressureT) return;
+
+    do {
+      nextPressureT += cfg.pressureInterval;
+    } while (nextPressureT <= t);
+
+    var accAvg = accCount ? accSum / accCount : null;
+    accSum = 0;
+    accCount = 0;
+
+    if (!displayPressureScale)
+      displayPressureScale = initialScale(e.pressure);
+
+    var sample = {
+      t:t,
+      p:e.pressure,
+      a:accAvg,
+      gen:sweepGeneration
+    };
+
+    appendLog(t, accAvg, e.pressure);
+    if (Bangle.isLCDOn()) updateSweep(sample);
+    else {
+      samples[sweepIndex] = sample;
+      sweepIndex = (sweepIndex + 1) % PLOT_W;
+      if (sweepIndex === 0) {
+        var scale = scaleFromSamples();
+        if (scale) displayPressureScale = scale;
+        sweepGeneration++;
+      }
+    }
   }
 
   function drawPausedOverlay() {
@@ -431,12 +541,13 @@
     });
   }
 
-  function startAcquisition(resetHistory) {
+  function startAcquisition(resetGraph) {
     if (acquiring) return;
-    if (resetHistory) history = [];
+    if (resetGraph) resetSweep();
     paused = false;
     resetAcquisitionWindow();
 
+    keepScreenOn();
     setAccelerometer();
     if (accelEnabled()) Bangle.on("accel", onAccel);
     try { Bangle.setBarometerPower(1, APP_ID); } catch (e) {}
@@ -444,16 +555,20 @@
     acquiring = true;
 
     setupMeasurementUI();
-    if (Bangle.isLCDOn()) drawGraph();
+    drawFullGraph();
   }
 
   function stopAcquisition() {
-    if (!acquiring) return;
+    if (!acquiring) {
+      restoreScreenTimeouts();
+      return;
+    }
     acquiring = false;
     Bangle.removeListener("accel", onAccel);
     Bangle.removeListener("pressure", onPressure);
     try { Bangle.setBarometerPower(0, APP_ID); } catch (e) {}
     restoreAccelerometer();
+    restoreScreenTimeouts();
     flushLog();
   }
 
@@ -462,24 +577,28 @@
     stopAcquisition();
     paused = true;
     setupMeasurementUI();
-    if (Bangle.isLCDOn()) drawGraph();
+    if (Bangle.isLCDOn()) drawFullGraph();
   }
 
   function resumeMeasurement() {
     if (!paused) return;
     paused = false;
     resetAcquisitionWindow();
+
+    keepScreenOn();
     setAccelerometer();
     if (accelEnabled()) Bangle.on("accel", onAccel);
     try { Bangle.setBarometerPower(1, APP_ID); } catch (e) {}
     Bangle.on("pressure", onPressure);
     acquiring = true;
+
     setupMeasurementUI();
-    if (Bangle.isLCDOn()) drawGraph();
+    drawFullGraph();
   }
 
   function cleanup() {
     stopAcquisition();
+    restoreScreenTimeouts();
     flushLog();
     if (flushTimer) {
       clearInterval(flushTimer);
@@ -576,7 +695,8 @@
         format:function (v) { return v.toFixed(2); },
         onchange:function (v) {
           cfg.accYmax = v;
-          if (!(cfg.accYmax > cfg.accYmin)) cfg.accYmin = Math.max(0, cfg.accYmax - 0.01);
+          if (!(cfg.accYmax > cfg.accYmin))
+            cfg.accYmin = Math.max(0, cfg.accYmax - 0.01);
           saveSettings();
         }
       }
@@ -584,7 +704,7 @@
   }
 
   Bangle.on("lcdPower", function (on) {
-    if (on) drawGraph();
+    if (on) drawFullGraph();
   });
 
   cfg = loadSettings();
