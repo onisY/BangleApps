@@ -192,7 +192,7 @@
 
   function clearColumns(a, b) {
     if (a > b) return;
-    g.setColor(0).fillRect(a, 0, b, H - 1);
+    g.reset().clearRect(a, 0, b, H - 1);
   }
 
   function advanceSweep(t) {
@@ -304,7 +304,7 @@
   }
 
   function clearGraph() {
-    g.reset().setColor(0).fillRect(0, 0, W - 1, H - 1);
+    g.reset().clearRect(0, 0, W - 1, H - 1);
     lastSweepX = -1;
     lastPlot = { ax: null, ay: null, az: null, p: null };
     sweepStart = getTime();
@@ -337,10 +337,17 @@
     flushLog();
   }
 
-  function exitApp() {
+  function cleanup() {
     stopMeasurement();
     flushLog();
-    if (flushTimer) clearInterval(flushTimer);
+    if (flushTimer) {
+      clearInterval(flushTimer);
+      flushTimer = undefined;
+    }
+  }
+
+  function exitApp() {
+    cleanup();
     load();
   }
 
@@ -430,5 +437,6 @@
 
   cfg = loadSettings();
   flushTimer = setInterval(flushLog, 5000);
+  E.on("kill", cleanup);
   startMeasurement();
 }());
