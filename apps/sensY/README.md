@@ -18,7 +18,7 @@ Light background:
 - Acceleration Z: blue
 - Pressure: magenta
 - All enabled traces are overlaid on one full-screen graph.
-- Every channel uses its own configured Y minimum and Y maximum.
+- Acceleration X/Y/Z share one configured Y minimum and maximum; pressure has its own Y minimum and maximum.
 - Axis scale numbers are intentionally not drawn.
 - The X axis is time. `Span (s)` sets the time represented by the full screen width.
 - The graph is a sweep display: it moves from left to right and, after reaching the right edge, returns to the left and overwrites the old trace progressively.
@@ -58,6 +58,10 @@ Before acceleration data is used, `sensY` estimates the gravity vector from the 
 The current gravity-estimation time constant is 0.8 s. This lets the estimate follow changes in watch orientation, but very slow motion can partly enter the gravity estimate. No additional baseline subtraction or detrending is performed.
 
 Integration uses trapezoidal time integration and the actual interval between accepted samples.
+
+When `Accel Integrate` is 1 or 2 and at least one acceleration trace is enabled for graph display, sensY also performs a drift-reset check. It stores the three displayed integrated acceleration values, waits 3 seconds, and compares them with the current X/Y/Z values. If the relative change of **all three axes** is 5% or less, the first- and second-order acceleration integrators for X/Y/Z are reset together to zero. If the condition is not met, the current values become the reference for the next 3-second window.
+
+The relative change is calculated from the absolute difference divided by the larger absolute magnitude of the old and new values. A small numerical floor is used near zero to avoid division by zero.
 
 - Gravity-compensated acceleration raw unit is `g`; integrated graph units are `g*s` and `g*s^2`.
 - Pressure raw unit is `hPa`; integrated graph units are `hPa*s` and `hPa*s^2`.
