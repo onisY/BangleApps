@@ -322,18 +322,6 @@
     }
   }
 
-  function drawBoldSpaced(str,x,y,advance,color){
-    var xx=x;
-    g.setBgColor(WHITE).setColor(color).setFont("12x20").setFontAlign(-1,-1);
-    for(var i=0;i<str.length;i++){
-      if(str[i]===" "){xx+=7;continue;}
-      g.drawString(str[i],xx,y);
-      g.drawString(str[i],xx+1,y);
-      xx+=advance;
-    }
-    return xx;
-  }
-
   function topFreeGap(){
     var spans=[];
     if(typeof WIDGETS!=="undefined")Object.keys(WIDGETS).forEach(function(k){
