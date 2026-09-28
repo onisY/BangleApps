@@ -406,27 +406,6 @@ function onAppJSONLoaded() {
     });
   }
 
-  // Personal fork safeguard: keep BG Monitor installable even if generated apps.json is stale.
-  if (!appJSON.find(a => a.id === "bgmon")) {
-    appJSON.push({
-      id:"bgmon",
-      name:"BG Monitor",
-      shortName:"BG Monitor",
-      version:"0.011",
-      author:"onisY",
-      description:"Read-only runtime monitor for Bangle.js 2 showing sensor power owners, timers, event listeners, boot files, RAM and estimated power use.",
-      icon:"app.png",
-      type:"app",
-      tags:"tool,system,debug,developer,power,sensor",
-      supports:["BANGLEJS2"],
-      readme:"README.md",
-      storage:[
-        {name:"bgmon.app.js",url:"app.js"},
-        {name:"bgmon.img",url:"app-icon.js",evaluate:true}
-      ]
-    });
-  }
-
   let deviceId = getSavedDeviceId()
   if (deviceId !== undefined)
     filterAppsForDevice(deviceId);
