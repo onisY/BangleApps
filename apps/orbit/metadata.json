@@ -2,7 +2,7 @@
   "id": "orbit",
   "name": "orbit",
   "shortName": "orbit",
-  "version": "0.046",
+  "version": "0.047",
   "author": "onisY",
   "description": "Sun-Earth-Moon clock with integrated calendar.",
   "icon": "app.png",

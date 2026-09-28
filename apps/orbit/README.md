@@ -2,7 +2,7 @@
 
 # orbit
 
-**orbit 0.046 stable**
+**orbit 0.047 stable**
 
 A clock app for Bangle.js 2 that lets you read the time, the phases of the Moon and related information from the relative positions of the Sun, Earth and Moon.
 
@@ -317,6 +317,10 @@ orbit は、現在時刻だけでなく、**「今、太陽・地球・月がど
 - 通常の時計表示中に GPS は使用しません。保存済みの測位結果は単なる緯度・経度として使うため、通常表示時のGPS電力消費はありません。
 
 ### その他の設定
+
+- Date pos / Time pos で Header / Top left / Below Sun を個別に選択できます。
+- Date size / Time size で、描画面に表示する場合の文字サイズを選択できます。Header表示ではウィジェット帯の配色に合わせ、描画面では黒背景に白系文字で表示します。
+
 
 - **View side**: North / South
 - 太陽・地球・月の表示サイズ
