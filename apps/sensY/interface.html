@@ -11,7 +11,8 @@ var dataElement = document.getElementById("data");
 function getData() {
   Util.showModal("Loading...");
   dataElement.innerHTML = "";
-  Puck.eval('require("Storage").list(/^sensY.*\\.csv$/)', function(files) {
+  Puck.eval('require("Storage").list(/^sensY.*\\.csv\\x01$/)', function(files) {
+    files = files.map(function(fn) { return fn.slice(0, -1); });
     if (!files.length) {
       dataElement.innerHTML = "<p>No saved sensY data</p>";
       Util.hideModal();
