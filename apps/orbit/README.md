@@ -2,7 +2,7 @@
 
 # orbit
 
-**orbit 0.047 stable**
+**orbit 0.048 stable**
 
 A clock app for Bangle.js 2 that lets you read the time, the phases of the Moon and related information from the relative positions of the Sun, Earth and Moon.
 

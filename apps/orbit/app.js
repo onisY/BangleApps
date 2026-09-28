@@ -1,4 +1,4 @@
-/* orbit 0.047 stable */
+/* orbit 0.048 stable */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbit.json";
@@ -783,7 +783,7 @@
     clear(idleTimer);idleTimer=undefined;
     clearTaps();
     interactive=false;
-    try{Bangle.setBacklight(false);}catch(e){}
+    try{Bangle.setLCDPower(0);}catch(e){}
     try{Bangle.setLocked(false);}catch(e){}
   }
 
@@ -910,6 +910,10 @@
     if(up&&mode==="orbit")startInteraction();
   }
 
+  function onTwist(){
+    if(mode==="orbit")startInteraction();
+  }
+
   function onLCD(on){
     if(!on){
       clearTaps();
@@ -968,6 +972,7 @@
     removeWidgetRedrawHook();
     try{Bangle.setUI();}catch(e){}
     try{Bangle.removeListener("faceUp",onFaceUp);}catch(e){}
+    try{Bangle.removeListener("twist",onTwist);}catch(e){}
     try{Bangle.removeListener("lcdPower",onLCD);}catch(e){}
     try{Bangle.removeListener("lock",onLock);}catch(e){}
     try{E.removeListener("kill",cleanup);}catch(e){}
@@ -983,6 +988,7 @@
   try{if(typeof WIDGETS==="undefined")Bangle.loadWidgets();}catch(e){}
   installWidgetRedrawHook();
   Bangle.on("faceUp",onFaceUp);
+  Bangle.on("twist",onTwist);
   Bangle.on("lcdPower",onLCD);
   Bangle.on("lock",onLock);
   E.on("kill",cleanup);
