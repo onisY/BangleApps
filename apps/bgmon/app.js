@@ -1,13 +1,12 @@
 /*
  * BG Monitor - read-only runtime activity monitor for Bangle.js 2
- * v0.010
+ * v0.011
  */
 (function () {
   var Storage = require("Storage");
-  var VERSION = "0.010";
+  var VERSION = "0.011";
   var REFRESH_MS = 2000;
   var TICKS_PER_MS = 1048.576;
-  var PAGE_COUNT = 6;
   var page = 0;
   var refreshTimer;
   var lastDraw = 0;
@@ -64,7 +63,7 @@
         var name = "anonymous";
         try {
           if (cb && cb.name) name = cb.name;
-          else if (typeof cb === "string") name = clip(cb.replace(/\s+/g, " "), 16);
+          else if (typeof cb === "string") name = clip(cb.replace(/\s+/g, " "), 14);
           else if (cb) {
             var z = String(cb).replace(/\s+/g, " ");
             var m = z.match(/function\s+([^\s(]+)/);
@@ -123,34 +122,22 @@
     return null;
   }
 
-  function clear() {
-    g.reset();
-    g.clear();
+  function addChunked(pages, title, items, footer) {
+    if (!items.length) {
+      pages.push({title:title, items:[["None","-"]], footer:footer});
+      return;
+    }
+    for (var i = 0; i < items.length; i += 3) {
+      pages.push({
+        title:title,
+        items:items.slice(i, i + 3),
+        footer:footer
+      });
+    }
   }
 
-  function header(title, p) {
-    g.setColor(g.theme.fg).setFont("6x8",2).setFontAlign(-1,-1);
-    g.drawString(title, 4, 5);
-    g.setFont("6x8").setFontAlign(1,-1);
-    g.drawString((p + 1) + "/" + PAGE_COUNT, W - 4, 8);
-    g.drawLine(4, 25, W - 5, 25);
-  }
-
-  function row(y, left, right, dim) {
-    g.setFont("6x8").setFontAlign(-1,-1);
-    g.setColor(dim ? (g.theme.dark ? "#aaa" : "#555") : g.theme.fg);
-    g.drawString(clip(left, 17), 5, y);
-    g.setFontAlign(1,-1);
-    g.drawString(clip(right, 11), W - 5, y);
-  }
-
-  function footer(s) {
-    g.setColor(g.theme.fg).setFont("4x6").setFontAlign(0,1);
-    g.drawString(s, W / 2, H - 2);
-  }
-
-  function drawOverview() {
-    clear(); header("BG MONITOR", 0);
+  function buildPages() {
+    var pages = [];
     var mem = process.memory(false);
     var pct = Math.round(mem.usage * 100 / mem.total);
     var p = power();
@@ -158,99 +145,120 @@
     var ls = listeners();
     var ln = 0;
     ls.forEach(function (x) { ln += x.c; });
-    var y = 34;
-    row(y, "Version", VERSION); y += 18;
-    row(y, "RAM", pct + "%"); y += 18;
-    row(y, "Power est.", p ? ((p.total / 1000).toFixed(p.total < 10000 ? 2 : 1) + "mA") : "n/a"); y += 18;
-    row(y, "Timers", ts.length); y += 18;
-    row(y, "Watches", watches()); y += 18;
-    row(y, "Listeners", ln);
-    footer("tap/swipe pages  button exit");
-  }
 
-  function drawSensors() {
-    clear(); header("SENSORS", 1);
-    var a = sensors(), y = 34;
-    a.forEach(function (x) {
-      var o = owners(x.k);
-      row(y, x.n + " " + (x.on ? "ON" : "OFF"), o.length ? o.join(",") : "-");
-      y += 27;
+    pages.push({
+      title:"BG MONITOR",
+      items:[
+        ["RAM", pct + "%"],
+        ["Power", p ? ((p.total / 1000).toFixed(p.total < 10000 ? 2 : 1) + "mA") : "n/a"],
+        ["Timers", ts.length]
+      ],
+      footer:"tap/swipe pages"
     });
-    row(y, "BT connected", NRF.getSecurityStatus().connected ? "YES" : "NO");
-    footer("right side = power owner ID");
-  }
 
-  function drawTimers() {
-    clear(); header("TIMERS", 2);
-    var a = timers(), y = 31;
-    if (!a.length) row(y, "No app timers", "");
-    for (var i = 0; i < a.length && i < 7; i++) {
-      var t = a[i];
-      row(y, t.type + " #" + t.id + " " + (t.ms === null ? "once" : fmtMs(t.ms)), t.cb);
-      y += 18;
-    }
-    if (a.length > 7) row(y, "+" + (a.length - 7) + " more", "", true);
-    footer("BG Monitor timer excluded");
-  }
+    pages.push({
+      title:"OVERVIEW",
+      items:[
+        ["Watches", watches()],
+        ["Listeners", ln],
+        ["Version", VERSION]
+      ],
+      footer:"button exits"
+    });
 
-  function drawEvents() {
-    clear(); header("EVENTS", 3);
-    var a = listeners(), y = 34;
-    if (!a.length) row(y, "No monitored", "listeners");
-    for (var i = 0; i < a.length && i < 7; i++) {
-      row(y, a[i].n, a[i].c + " listener" + (a[i].c === 1 ? "" : "s"));
-      y += 18;
-    }
-    if (a.length > 7) row(y, "+" + (a.length - 7) + " events", "", true);
-    footer("selected Bangle event listeners");
-  }
+    var si = [];
+    sensors().forEach(function (x) {
+      var o = owners(x.k);
+      si.push([x.n + " " + (x.on ? "ON" : "OFF"), o.length ? o.join(",") : "-"]);
+    });
+    addChunked(pages, "SENSORS", si, "value = owner ID");
 
-  function drawBoot() {
-    clear(); header("BOOT FILES", 4);
-    var a = bootFiles(), y = 31;
-    if (!a.length) row(y, "No .boot.js", "");
-    for (var i = 0; i < a.length && i < 7; i++) {
-      row(y, clip(a[i].replace(/\.boot\.js$/, ""), 24), "loaded");
-      y += 18;
-    }
-    if (a.length > 7) row(y, "+" + (a.length - 7) + " more", "", true);
-    footer("installed boot code; activity not proven");
-  }
+    var ti = [];
+    ts.forEach(function (t) {
+      ti.push([
+        t.type + " #" + t.id + " " + (t.ms === null ? "once" : fmtMs(t.ms)),
+        t.cb
+      ]);
+    });
+    addChunked(pages, "TIMERS", ti, "BG timer excluded");
 
-  function drawPower() {
-    clear(); header("POWER / MODULES", 5);
-    var p = power(), y = 31;
+    var ei = [];
+    ls.forEach(function (x) {
+      ei.push([x.n, x.c + (x.c === 1 ? " listener" : " listeners")]);
+    });
+    addChunked(pages, "EVENTS", ei, "Bangle listeners");
+
+    var bi = [];
+    bootFiles().forEach(function (x) {
+      bi.push([x.replace(/\.boot\.js$/, ""), "loaded"]);
+    });
+    addChunked(pages, "BOOT FILES", bi, "not proof active");
+
+    var pi = [];
     if (p && p.device) {
       var keys = Object.keys(p.device);
       keys.sort(function (a,b) { return p.device[b] - p.device[a]; });
-      for (var i = 0; i < keys.length && i < 5; i++) {
-        var k = keys[i], v = p.device[k];
-        row(y, k, v >= 1000 ? ((v / 1000).toFixed(2) + "mA") : (Math.round(v) + "uA"));
-        y += 18;
-      }
-      row(y, "TOTAL", (p.total / 1000).toFixed(2) + "mA"); y += 18;
+      keys.forEach(function (k) {
+        var v = p.device[k];
+        pi.push([k, v >= 1000 ? ((v / 1000).toFixed(2) + "mA") : (Math.round(v) + "uA")]);
+      });
+      pi.push(["TOTAL", (p.total / 1000).toFixed(2) + "mA"]);
     } else {
-      row(y, "Power estimate", "n/a"); y += 18;
+      pi.push(["Power estimate", "n/a"]);
     }
-    var m = modules();
-    row(y, "Modules", m.length);
-    footer(m.length ? clip(m.join(","), 35) : "no cached modules");
+    pi.push(["Modules", modules().length]);
+    addChunked(pages, "POWER", pi, "firmware estimate");
+    return pages;
+  }
+
+  function clear() {
+    g.reset();
+    g.clear();
+  }
+
+  function header(title, n, total) {
+    g.setColor(g.theme.fg).setFont("6x8",2).setFontAlign(-1,-1);
+    g.drawString(clip(title, 10), 4, 4);
+    g.setFont("6x8",2).setFontAlign(1,-1);
+    g.drawString((n + 1) + "/" + total, W - 4, 4);
+    g.drawLine(4, 25, W - 5, 25);
+  }
+
+  function bigItem(y, label, value) {
+    g.setColor(g.theme.fg).setFont("6x8",2).setFontAlign(-1,-1);
+    g.drawString(clip(label, 14), 5, y);
+    g.setFontAlign(1,-1);
+    g.drawString(clip(value, 14), W - 5, y + 17);
+  }
+
+  function footer(s) {
+    g.setColor(g.theme.fg).setFont("4x6",2).setFontAlign(0,1);
+    g.drawString(clip(s, 21), W / 2, H - 1);
   }
 
   function draw(force) {
     var now = Date.now();
     if (!force && now - lastDraw < 250) return;
     lastDraw = now;
-    if (page === 0) drawOverview();
-    else if (page === 1) drawSensors();
-    else if (page === 2) drawTimers();
-    else if (page === 3) drawEvents();
-    else if (page === 4) drawBoot();
-    else drawPower();
+
+    var pages = buildPages();
+    if (page >= pages.length) page = pages.length - 1;
+    if (page < 0) page = 0;
+    var x = pages[page];
+
+    clear();
+    header(x.title, page, pages.length);
+    var y = 32;
+    for (var i = 0; i < x.items.length && i < 3; i++) {
+      bigItem(y, x.items[i][0], x.items[i][1]);
+      y += 40;
+    }
+    footer(x.footer || "");
   }
 
   function move(d) {
-    page = (page + d + PAGE_COUNT) % PAGE_COUNT;
+    var n = buildPages().length;
+    page = (page + d + n) % n;
     draw(true);
   }
 

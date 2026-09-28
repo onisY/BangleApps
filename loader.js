@@ -412,7 +412,7 @@ function onAppJSONLoaded() {
       id:"bgmon",
       name:"BG Monitor",
       shortName:"BG Monitor",
-      version:"0.010",
+      version:"0.011",
       author:"onisY",
       description:"Read-only runtime monitor for Bangle.js 2 showing sensor power owners, timers, event listeners, boot files, RAM and estimated power use.",
       icon:"app.png",
