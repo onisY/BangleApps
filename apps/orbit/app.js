@@ -1,4 +1,4 @@
-/* orbit 0.04 stable */
+/* orbit 0.042 stable */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbit.json";
@@ -49,8 +49,7 @@
   var busy=false,killed=false,minuteTimer,secondTimer,idleTimer,tapTimer,unlockTimer;
   var mode="orbit",interactive=true,tapCount=0,resetOnWake=false;
   var selectedDayOffset=0,hasSelectedDate=false;
-  var colonX=0,colonVisible=true,batteryCharging=false;
-  var BATLEFT=138;
+  var colonX=0,colonVisible=true,headerFont=20,headerY=2,colonW=8;
   var SUNR=Math.max(6,Math.min(15,cfg.sunSize|0));
   var EARTHR=Math.max(40,Math.min(45,cfg.earthSize|0));
   var MOONR=Math.max(14,Math.min(16,cfg.moonSize|0));
@@ -337,59 +336,75 @@
     return xx;
   }
 
-  function isCharging(){
-    try{return !!Bangle.isCharging();}catch(e){return false;}
-  }
-
-  function drawBattery(show){
-    var bat=E.getBattery(),txt=""+bat;
-    g.setColor(WHITE).fillRect(BATLEFT,0,W-1,23);
-    if(!show)return;
-    g.setBgColor(WHITE)
-      .setColor(bat<=20?RED:GREEN)
-      .setFont("12x20")
-      .setFontAlign(1,-1);
-    g.drawString(txt,W-1,2);
-    g.drawString(txt,W-2,2);
+  function topFreeGap(){
+    var spans=[];
+    if(typeof WIDGETS!=="undefined")Object.keys(WIDGETS).forEach(function(k){
+      var wd=WIDGETS[k];
+      if(!wd||!wd.width||!wd.area||wd.area.charAt(0)!=="t")return;
+      if(typeof wd.x==="number")spans.push([wd.x,wd.x+wd.width-1]);
+    });
+    if(!spans.length&&typeof WIDGETS!=="undefined"){
+      var lw=0,rw=0;
+      Object.keys(WIDGETS).forEach(function(k){
+        var wd=WIDGETS[k];
+        if(!wd||!wd.width)return;
+        if(wd.area==="tl")lw+=wd.width;
+        else if(wd.area==="tr")rw+=wd.width;
+      });
+      if(lw)spans.push([0,lw-1]);
+      if(rw)spans.push([W-rw,W-1]);
+    }
+    spans.sort(function(a,b){return a[0]-b[0];});
+    var merged=[];
+    spans.forEach(function(s){
+      s[0]=Math.max(0,s[0]);s[1]=Math.min(W-1,s[1]);
+      if(!merged.length||s[0]>merged[merged.length-1][1]+1)merged.push([s[0],s[1]]);
+      else if(s[1]>merged[merged.length-1][1])merged[merged.length-1][1]=s[1];
+    });
+    var gaps=[],p=0;
+    merged.forEach(function(s){if(s[0]>p)gaps.push([p,s[0]-1]);p=Math.max(p,s[1]+1);});
+    if(p<W)gaps.push([p,W-1]);
+    if(!gaps.length)return undefined;
+    gaps.sort(function(a,b){
+      var aw=a[1]-a[0]+1,bw=b[1]-b[0]+1;
+      if(aw!==bw)return bw-aw;
+      return Math.abs(((a[0]+a[1])>>1)-(W>>1))-Math.abs(((b[0]+b[1])>>1)-(W>>1));
+    });
+    return gaps[0];
   }
 
   function drawHeader(){
+    var gap=topFreeGap();
+    if(!gap)return;
     var d=virtualDate();
     var pre=pad(d.getMonth()+1)+"/"+pad(d.getDate())+" "+pad(d.getHours());
     var post=pad(d.getMinutes());
-    var x=1,adv=13;
-
-    g.setColor(WHITE).fillRect(0,0,W-1,23);
-
-    x=drawBoldSpaced(pre,x,2,adv,BLACK);
-    colonX=x;
+    var full=pre+":"+post;
+    var x1=gap[0],x2=gap[1],maxW=Math.max(1,x2-x1-3);
+    var size=20;
+    g.setFont("Vector",size);
+    while(size>10&&g.stringWidth(full)>maxW){size--;g.setFont("Vector",size);}
+    headerFont=size;
+    headerY=Math.max(0,Math.floor((24-size)/2));
+    g.setColor(WHITE).fillRect(x1,0,x2,23);
+    g.setBgColor(WHITE).setColor(BLACK).setFont("Vector",size).setFontAlign(-1,-1);
+    var x=x1+2;
+    g.drawString(pre,x,headerY);
+    colonX=x+g.stringWidth(pre);
+    colonW=Math.max(3,g.stringWidth(":"));
     colonVisible=(d.getSeconds()%2)===0;
-    if(colonVisible){
-      g.setBgColor(WHITE).setColor(BLACK).setFont("12x20").setFontAlign(-1,-1);
-      g.drawString(":",colonX,2);
-      g.drawString(":",colonX+1,2);
-    }
-    x=colonX+adv;
-    drawBoldSpaced(post,x,2,adv,BLACK);
-
-    batteryCharging=isCharging();
-    drawBattery(!batteryCharging||colonVisible);
+    if(colonVisible)g.drawString(":",colonX,headerY);
+    g.drawString(post,colonX+colonW,headerY);
   }
 
   function drawColon(show){
     if(killed||busy||mode!=="orbit")return;
-    g.setColor(WHITE).fillRect(colonX,2,colonX+12,21);
+    g.setColor(WHITE).fillRect(colonX,0,colonX+colonW-1,23);
     if(show){
-      g.setBgColor(WHITE).setColor(BLACK).setFont("12x20").setFontAlign(-1,-1);
-      g.drawString(":",colonX,2);
-      g.drawString(":",colonX+1,2);
+      g.setBgColor(WHITE).setColor(BLACK).setFont("Vector",headerFont).setFontAlign(-1,-1);
+      g.drawString(":",colonX,headerY);
     }
     colonVisible=show;
-
-    var charging=isCharging();
-    if(charging)drawBattery(show);
-    else if(batteryCharging)drawBattery(true);
-    batteryCharging=charging;
   }
 
   function armSecond(){
@@ -690,6 +705,7 @@
     drawObserver(sol);
     var moon=drawMoon();
     drawLocationStatus(moon);
+    try{Bangle.drawWidgets();}catch(e){}
     drawHeader();
     try{g.flip();}catch(err){}
     busy=false;
@@ -926,7 +942,7 @@
   buildLightingCache();
   buildEarthMapCache();
   buildMoonCache();
-  try{Bangle.setUI({mode:"custom",touch:onTouch,swipe:onSwipe,btn:onButton});}catch(e){}
+  try{Bangle.setUI({mode:"custom",clock:1,touch:onTouch,swipe:onSwipe,btn:onButton});}catch(e){}
   Bangle.on("faceUp",onFaceUp);
   Bangle.on("lcdPower",onLCD);
   Bangle.on("lock",onLock);
