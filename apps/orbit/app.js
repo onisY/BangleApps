@@ -1,4 +1,4 @@
-/* orbit 0.042 stable */
+/* orbit 0.043 stable */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbit.json";
@@ -33,6 +33,17 @@
     set("manualLat",lat);set("manualLon",lon);
     if(cfg.lat!==undefined){delete cfg.lat;changed=true;}
     if(cfg.lon!==undefined){delete cfg.lon;changed=true;}
+
+    /* Keep a string location source as the canonical display selector.
+       Migrate older numeric locationMode values without changing coordinates. */
+    var src=cfg.locationSource;
+    if(src!=="place"&&src!=="manual"&&src!=="gps"){
+      src=(cfg.locationMode===0||cfg.locationMode==="0")?"place":
+          ((cfg.locationMode===2||cfg.locationMode==="2")?"gps":"manual");
+      set("locationSource",src);
+    }
+    set("locationMode",src==="place"?0:(src==="gps"?2:1));
+
     if(changed)try{Storage.writeJSON(CFGFILE,cfg);}catch(e){}
   })();
   /* GPS is settings-only; release any stale settings-owned request. */
@@ -68,7 +79,8 @@
   var TESTLON=Math.max(-180,Math.min(180,+cfg.manualLon));
   var VIEW_SOUTH=!!cfg.viewSide;
   /* Copy only location fields needed by the clock; place tables stay unloaded. */
-  var LOCMODE=(cfg.locationMode===0?0:(cfg.locationMode===2?2:1));
+  var LOCSOURCE=cfg.locationSource||((cfg.locationMode===0)?"place":((cfg.locationMode===2)?"gps":"manual"));
+  var LOCMODE=LOCSOURCE==="place"?0:(LOCSOURCE==="gps"?2:1);
   var LOCNAME=(LOCMODE===0?(cfg.locName||cfg.locPref||"Place"):"");
   var LOCCOUNTRY=(LOCMODE===0?(cfg.countryName||"Japan"):"");
   var LOCLAT=Math.abs(TESTLAT).toFixed(3)+(TESTLAT<0?"S":"N");

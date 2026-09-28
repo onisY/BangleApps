@@ -1,4 +1,4 @@
-/* orbit 0.042 stable: settings and editable event data. */
+/* orbit 0.043 stable: settings and editable event data. */
 (function(back){
   var Storage=require("Storage");
   var C,P,JPI;
@@ -86,7 +86,12 @@
     if(s.lat!==undefined){delete s.lat;changed=true;}
     if(s.lon!==undefined){delete s.lon;changed=true;}
 
-    if(s.locationMode<0||s.locationMode>2||s.locationMode===undefined)s.locationMode=1;
+    if(s.locationSource!=="place"&&s.locationSource!=="manual"&&s.locationSource!=="gps"){
+      s.locationSource=(s.locationMode===0||s.locationMode==="0")?"place":
+        ((s.locationMode===2||s.locationMode==="2")?"gps":"manual");
+      changed=true;
+    }
+    set("locationMode",s.locationSource==="place"?0:(s.locationSource==="gps"?2:1));
     if(s.viewSide!==0&&s.viewSide!==1)s.viewSide=0;
     if(!s.countryName)s.countryName="Japan";
     if(!isFinite(s.pref))s.pref=12;
@@ -162,7 +167,8 @@
   function commitPlace(s){
     var q=selectedPlace(s),p=q.place;
     if(!p)return;
-    s.locationMode=0;s.locPref=q.group;s.locName=p[0];
+    s.locationSource="place";s.locationMode=0;
+    s.locPref=q.group;s.locName=p[0];
     s.manualLat=p[1];s.manualLon=p[2];
     write(CFG,s);
     var msg=q.group+" / "+p[0]+"\nLat "+Number(s.manualLat).toFixed(3)+"\nLon "+Number(s.manualLon).toFixed(3);
@@ -170,11 +176,11 @@
     E.showAlert(msg,"Location saved").then(main);
   }
   function applyManual(s){
-    s.locationMode=1;s.locPref="Manual";s.locName="Custom";
+    s.locationSource="manual";s.locationMode=1;s.locPref="Manual";s.locName="Custom";
     write(CFG,s);
   }
   function applyGPS(s,fix){
-    s.locationMode=2;s.locPref="GPS";s.locName="GPS";
+    s.locationSource="gps";s.locationMode=2;s.locPref="GPS";s.locName="GPS";
     s.manualLat=Math.max(-90,Math.min(90,+fix.lat));
     s.manualLon=Math.max(-180,Math.min(180,+fix.lon));
     write(CFG,s);
