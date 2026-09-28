@@ -1,10 +1,10 @@
 /*
  * BG Monitor - read-only runtime activity monitor for Bangle.js 2
- * v0.011
+ * v0.012
  */
 (function () {
   var Storage = require("Storage");
-  var VERSION = "0.011";
+  var VERSION = "0.012";
   var REFRESH_MS = 2000;
   var TICKS_PER_MS = 1048.576;
   var page = 0;
