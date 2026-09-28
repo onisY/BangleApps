@@ -1,13 +1,36 @@
 (function(back){
   const S=require("Storage"),F="lifemon.json",ST="lifemon.state.json",L="lifemon.log";
-  const D={stillG:.020,moveG:.035,baroSlowSec:15,baroFastStillSec:2,hrmStillSec:10,tempStillSec:15,tempIntervalSec:3,wearTempC:28,placedZMin:.85,placedStillSec:60,stairDispM:.30,integDeadband:.12,baroStableDeltaM:.20,stairStableSec:5,elevatorStableSec:15,fastMaxSec:120,minHeightM:.40,hrmSampleSec:10,hrmBlockMin:5,hrmConfidence:90,batteryTargetPct:10,batteryWarnHours:3,batteryWindowHours:6};
+  const D={
+    stillG:.020,moveG:.035,baroSlowSec:15,baroFastStillSec:2,hrmStillSec:10,tempStillSec:15,tempIntervalSec:3,wearTempC:28,placedZMin:.85,placedStillSec:60,
+    stairDispM:.30,integDeadband:.12,baroStableDeltaM:.20,stairStableSec:5,elevatorStableSec:15,fastMaxSec:120,minHeightM:.40,hrmSampleSec:10,hrmBlockMin:5,
+    hrmConfidence:90,batteryTargetPct:10,batteryWarnHours:3,batteryWindowHours:6,featureWindowSec:5,featureUpdateSec:1,dispRangeM:.55,accStdG:.070,periodicityMin:.45,
+    altRateMps:.12,elevatorRateMps:.55
+  };
   let c=Object.assign({},D,S.readJSON(F,1)||{});
   function save(){S.writeJSON(F,c);if(global.LIFEMON&&global.LIFEMON.reloadSettings)global.LIFEMON.reloadSettings();}
-  function f1(v){return v.toFixed(1)} function f2(v){return v.toFixed(2)} function f3(v){return v.toFixed(3)}
+  function f1(v){return v.toFixed(1)}function f2(v){return v.toFixed(2)}function f3(v){return v.toFixed(3)}
   function ts(ms){if(!ms)return "-";let d=new Date(ms);return ("0"+d.getHours()).substr(-2)+":"+("0"+d.getMinutes()).substr(-2);}
   function noop(){}
-  function status(){let p=S.readJSON(ST,1)||{},s=p.summary||{},v=global.LIFEMON&&global.LIFEMON.getState?global.LIFEMON.getState():null,w=v?v.wear:(s.wear||p.wear||"unknown"),b=v?v.batteryPct:(p.batteryPct===undefined?E.getBattery():p.batteryPct),e=v?v.batteryEstimateHours:p.batteryEstimateHours,h=v&&v.hrmPartial!==null?v.hrmPartial:s.lastHR,m={"":{"title":"Life data"},"< Back":main};m["Wear: "+w]=noop;m["Temp: "+(s.lastTemp===undefined?"-":s.lastTemp+" C")]=noop;m["HR: "+(h===null||h===undefined?"-":h+" bpm")]=noop;m["Stair +: "+(s.stairsUp||0)+"m"]=noop;m["Stair -: "+(s.stairsDown||0)+"m"]=noop;m["Lift +: "+(s.elevatorUp||0)+"m"]=noop;m["Lift -: "+(s.elevatorDown||0)+"m"]=noop;m["Battery: "+b+"%"]=noop;m["To "+c.batteryTargetPct+"%: "+(e===null||e===undefined?"?":e.toFixed(1)+"h")]=noop;if(s.lastEvent)m["Last "+ts(s.lastEventTime)+" "+s.lastEvent]=noop;E.showMenu(m);}
-  function recent(){let x=S.read(L)||"",a=x.trim()?x.trim().split("\n"):[];if(a.length>12)a=a.slice(-12);let m={"":{"title":"Recent data"},"< Back":main};if(!a.length)m["No data"]=noop;for(let i=a.length-1,j=1;i>=0;i--,j++){let p=a[i].split(","),t=ts(parseInt(p[0],10)),z=p[1]==="H"?t+" HR "+p[2]:p[1]==="S"?t+" stair "+p[2]+"m":p[1]==="E"?t+" lift "+p[2]+"m":p[1]==="W"?t+" "+p[2]+" "+p[3]+"C":t+" "+p[1]+" "+p[2];m[j+" "+z]=noop;}E.showMenu(m);}
+  function status(){
+    let p=S.readJSON(ST,1)||{},s=p.summary||{},v=global.LIFEMON&&global.LIFEMON.getState?global.LIFEMON.getState():null,w=v?v.wear:(s.wear||p.wear||"unknown"),
+      b=v?v.batteryPct:(p.batteryPct===undefined?E.getBattery():p.batteryPct),e=v?v.batteryEstimateHours:p.batteryEstimateHours,h=v&&v.hrmPartial!==null?v.hrmPartial:s.lastHR,
+      ft=v?v.features:{dispRange:0,accStd:0,periodicity:0,altRate:0},act=v?v.activity:(s.activity||"desk"),m={"":{"title":"Life data"},"< Back":main};
+    m["Activity: "+act]=noop;m["disp: "+ft.dispRange.toFixed(2)+"m"]=noop;m["accStd: "+ft.accStd.toFixed(3)+"g"]=noop;m["period: "+ft.periodicity.toFixed(2)]=noop;m["altRate: "+ft.altRate.toFixed(2)+"m/s"]=noop;
+    m["Wear: "+w]=noop;m["Temp: "+(s.lastTemp===undefined?"-":s.lastTemp+" C")]=noop;m["HR: "+(h===null||h===undefined?"-":h+" bpm")]=noop;
+    m["Stair +: "+(s.stairsUp||0)+"m"]=noop;m["Stair -: "+(s.stairsDown||0)+"m"]=noop;m["Lift +: "+(s.elevatorUp||0)+"m"]=noop;m["Lift -: "+(s.elevatorDown||0)+"m"]=noop;
+    m["Battery: "+b+"%"]=noop;m["To "+c.batteryTargetPct+"%: "+(e===null||e===undefined?"?":e.toFixed(1)+"h")]=noop;if(s.lastEvent)m["Last "+ts(s.lastEventTime)+" "+s.lastEvent]=noop;E.showMenu(m);
+  }
+  function legend(){E.showMenu({"":{"title":"Dots: green=ON"},"< Back":main,"Row1-1 Desk":noop,"Row1-2 Walk":noop,"Row1-3 Stairs UP":noop,"Row1-4 Stairs DN":noop,"Row2-1 Escal UP":noop,"Row2-2 Escal DN":noop,"Row2-3 Elevator UP":noop,"Row2-4 Elevator DN":noop,"Row3-1 dispRange":noop,"Row3-2 accStd":noop,"Row3-3 periodicity":noop,"Row3-4 altRate":noop});}
+  function recent(){let x=S.read(L)||"",a=x.trim()?x.trim().split("\n"):[];if(a.length>12)a=a.slice(-12);let m={"":{"title":"Recent data"},"< Back":main};if(!a.length)m["No data"]=noop;for(let i=a.length-1,j=1;i>=0;i--,j++){let p=a[i].split(","),t=ts(parseInt(p[0],10)),z=p[1]==="H"?t+" HR "+p[2]:p[1]==="S"?t+" stair "+p[2]+"m":p[1]==="E"?t+" lift "+p[2]+"m":p[1]==="W"?t+" "+p[2]+" "+p[3]+"C":p[1]==="A"?t+" "+p[2]:t+" "+p[1]+" "+p[2];m[j+" "+z]=noop;}E.showMenu(m);}
+  function classifier(){E.showMenu({"":{"title":"Classifier"},"< Back":main,
+    "Window":{value:c.featureWindowSec,min:3,max:10,step:1,format:v=>v+"s",onchange:v=>{c.featureWindowSec=v;save();}},
+    "Update":{value:c.featureUpdateSec,min:.5,max:3,step:.5,format:v=>f1(v)+"s",onchange:v=>{c.featureUpdateSec=v;save();}},
+    "dispRange":{value:c.dispRangeM,min:.1,max:2,step:.05,format:v=>f2(v)+"m",onchange:v=>{c.dispRangeM=v;save();}},
+    "accStd":{value:c.accStdG,min:.01,max:.30,step:.01,format:v=>f2(v)+"g",onchange:v=>{c.accStdG=v;save();}},
+    "periodicity":{value:c.periodicityMin,min:.1,max:.9,step:.05,format:f2,onchange:v=>{c.periodicityMin=v;save();}},
+    "altRate":{value:c.altRateMps,min:.03,max:.60,step:.03,format:v=>f2(v)+"m/s",onchange:v=>{c.altRateMps=v;save();}},
+    "Elevator rate":{value:c.elevatorRateMps,min:.2,max:2,step:.05,format:v=>f2(v)+"m/s",onchange:v=>{c.elevatorRateMps=v;save();}}
+  });}
   function motion(){E.showMenu({"":{"title":"Motion"},"< Back":main,"Still g":{value:c.stillG,min:.005,max:.08,step:.005,format:f3,onchange:v=>{c.stillG=v;save();}},"Move g":{value:c.moveG,min:.01,max:.12,step:.005,format:f3,onchange:v=>{c.moveG=v;save();}},"Stair disp":{value:c.stairDispM,min:.1,max:1,step:.05,format:v=>f2(v)+"m",onchange:v=>{c.stairDispM=v;save();}},"Int deadband":{value:c.integDeadband,min:.02,max:.5,step:.02,format:v=>f2(v)+"m/s2",onchange:v=>{c.integDeadband=v;save();}}});}
   function baro(){E.showMenu({"":{"title":"Barometer"},"< Back":main,"Slow sec":{value:c.baroSlowSec,min:5,max:60,step:5,onchange:v=>{c.baroSlowSec=v;save();}},"Fast after":{value:c.baroFastStillSec,min:1,max:10,step:1,format:v=>v+"s",onchange:v=>{c.baroFastStillSec=v;save();}},"Stable dH":{value:c.baroStableDeltaM,min:.05,max:1,step:.05,format:v=>f2(v)+"m",onchange:v=>{c.baroStableDeltaM=v;save();}},"Stair stable":{value:c.stairStableSec,min:2,max:30,step:1,format:v=>v+"s",onchange:v=>{c.stairStableSec=v;save();}},"Lift stable":{value:c.elevatorStableSec,min:5,max:30,step:1,format:v=>v+"s",onchange:v=>{c.elevatorStableSec=v;save();}},"Min height":{value:c.minHeightM,min:.1,max:3,step:.1,format:v=>f1(v)+"m",onchange:v=>{c.minHeightM=v;save();}},"FAST max":{value:c.fastMaxSec,min:30,max:300,step:10,format:v=>v+"s",onchange:v=>{c.fastMaxSec=v;save();}}});}
   function hrm(){E.showMenu({"":{"title":"Heart rate"},"< Back":main,"Start still":{value:c.hrmStillSec,min:3,max:60,step:1,format:v=>v+"s",onchange:v=>{c.hrmStillSec=v;save();}},"Sample":{value:c.hrmSampleSec,min:5,max:60,step:5,format:v=>v+"s",onchange:v=>{c.hrmSampleSec=v;save();}},"Average":{value:c.hrmBlockMin,min:1,max:15,step:1,format:v=>v+"min",onchange:v=>{c.hrmBlockMin=v;save();}},"Confidence":{value:c.hrmConfidence,min:20,max:100,step:5,format:v=>v+"%",onchange:v=>{c.hrmConfidence=v;save();}}});}
@@ -15,6 +38,6 @@
   function battery(){E.showMenu({"":{"title":"Battery"},"< Back":main,"Target":{value:c.batteryTargetPct,min:5,max:30,step:1,format:v=>v+"%",onchange:v=>{c.batteryTargetPct=v;save();}},"Warn before":{value:c.batteryWarnHours,min:1,max:12,step:1,format:v=>v+"h",onchange:v=>{c.batteryWarnHours=v;save();}},"Fit window":{value:c.batteryWindowHours,min:2,max:24,step:1,format:v=>v+"h",onchange:v=>{c.batteryWindowHours=v;save();}}});}
   function reset(){E.showPrompt("Restore all thresholds?",{title:"Life Monitor"}).then(ok=>{if(ok){c=Object.assign({},D);save();}main();});}
   function clear(){E.showPrompt("Delete Life Monitor history?",{title:"Life Monitor"}).then(ok=>{if(ok){S.erase(L);S.erase(ST);}main();});}
-  function main(){E.showMenu({"":{"title":"Life Monitor"},"< Back":back,"Current / Today":status,"Recent data":recent,"Motion":motion,"Barometer":baro,"Heart rate":hrm,"Wear detect":wear,"Battery":battery,"Reset thresholds":reset,"Clear history":clear});}
+  function main(){E.showMenu({"":{"title":"Life Monitor"},"< Back":back,"Current / Today":status,"Indicator legend":legend,"Recent data":recent,"Classifier":classifier,"Motion":motion,"Barometer":baro,"Heart rate":hrm,"Wear detect":wear,"Battery":battery,"Reset thresholds":reset,"Clear history":clear});}
   main();
 })

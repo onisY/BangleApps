@@ -1,1 +1,2 @@
+0.002: Added real-time activity classification using dispRange, accStd, periodicity and barometric altRate. Added desk/walk/stairs/escalator/elevator up/down states, configurable classifier thresholds, live feature values, indicator legend, and a 12-dot red/green widget display. Fixed HRM stop call in wear classification.
 0.001: Initial version. Background acceleration monitor, adaptive fast barometer, stair/elevator relative-height logging, 3-sample wear temperature check, resting HRM averages, settings/data menus, and battery-to-10% prediction with flashing widget warning.
