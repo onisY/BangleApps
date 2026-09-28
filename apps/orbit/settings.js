@@ -291,7 +291,7 @@
       s.municipality=Math.max(0,Math.min(ml.length-1,s.municipality|0));
       m["Municipality"]={value:s.municipality,min:0,max:ml.length-1,step:1,
         format:function(v){return ml[v][0];},
-        onchange:function(v){s.municipality=v;}
+        onchange:function(v){s.municipality=v;saveSelectedPlace(s);}
       };
     }else{
       var list=C[ci][1]||[];
