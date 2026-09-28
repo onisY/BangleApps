@@ -1,4 +1,4 @@
-/* orbit 0.043 stable */
+/* orbit 0.044 stable */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbit.json";
@@ -55,10 +55,10 @@
     calSource=undefined;
   }catch(calErr){calModule=undefined;calendar=undefined;}
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800,GREEN=0x07E0;
-  var busy=false,killed=false,minuteTimer,secondTimer,idleTimer,tapTimer,unlockTimer;
+  var busy=false,killed=false,minuteTimer,headerTimer,idleTimer,tapTimer,unlockTimer;
   var mode="orbit",interactive=true,tapCount=0,resetOnWake=false;
   var selectedDayOffset=0,hasSelectedDate=false;
-  var colonX=0,colonVisible=true,headerFont=20,headerY=2,colonW=8;
+  var nativeDrawWidgets,widgetDrawWrapper;
   var SUNR=Math.max(6,Math.min(15,cfg.sunSize|0));
   var EARTHR=Math.max(40,Math.min(45,cfg.earthSize|0));
   var MOONR=Math.max(14,Math.min(16,cfg.moonSize|0));
@@ -372,49 +372,53 @@
   }
 
   function drawHeader(){
+    if(killed||mode!=="orbit")return;
     var gap=topFreeGap();
     if(!gap)return;
     var d=virtualDate();
-    var pre=pad(d.getMonth()+1)+"/"+pad(d.getDate())+" "+pad(d.getHours());
-    var post=pad(d.getMinutes());
-    var full=pre+":"+post;
-    var x1=gap[0],x2=gap[1],maxW=Math.max(1,x2-x1-3);
-    var size=20;
+    var date=pad(d.getMonth()+1)+pad(d.getDate());
+    var time=pad(d.getHours())+pad(d.getMinutes());
+    var text=date+" "+time;
+    var x1=gap[0],x2=gap[1],maxW=Math.max(1,x2-x1-2);
+    var size=23;
     g.setFont("Vector",size);
-    while(size>10&&g.stringWidth(full)>maxW){size--;g.setFont("Vector",size);}
-    headerFont=size;
-    headerY=Math.max(0,Math.floor((24-size)/2));
+    while(size>8&&g.stringWidth(text)>maxW){size--;g.setFont("Vector",size);}
+    var y=Math.max(0,Math.floor((24-size)/2));
     g.setColor(WHITE).fillRect(x1,0,x2,23);
-    g.setBgColor(WHITE).setColor(BLACK).setFont("Vector",size).setFontAlign(-1,-1);
-    var x=x1+2;
-    g.drawString(pre,x,headerY);
-    colonX=x+g.stringWidth(pre);
-    colonW=Math.max(3,g.stringWidth(":"));
-    colonVisible=(d.getSeconds()%2)===0;
-    if(colonVisible)g.drawString(":",colonX,headerY);
-    g.drawString(post,colonX+colonW,headerY);
+    g.setBgColor(WHITE).setFont("Vector",size).setFontAlign(-1,-1);
+    var x=x1+1;
+    g.setColor(BLACK).drawString(date,x,y);
+    x+=g.stringWidth(date+" ");
+    g.setColor((Math.floor(Date.now()/2000)&1)?0x8410:BLACK).drawString(time,x,y);
   }
 
-  function drawColon(show){
-    if(killed||busy||mode!=="orbit")return;
-    g.setColor(WHITE).fillRect(colonX,0,colonX+colonW-1,23);
-    if(show){
-      g.setBgColor(WHITE).setColor(BLACK).setFont("Vector",headerFont).setFontAlign(-1,-1);
-      g.drawString(":",colonX,headerY);
-    }
-    colonVisible=show;
-  }
-
-  function armSecond(){
-    clear(secondTimer);
-    secondTimer=setTimeout(function(){
-      secondTimer=undefined;
+  function armHeader(){
+    clear(headerTimer);
+    headerTimer=setTimeout(function(){
+      headerTimer=undefined;
       if(!killed&&mode==="orbit"){
-        var show=(new Date().getSeconds()%2)===0;
-        if(show!==colonVisible)drawColon(show);
-        armSecond();
+        drawHeader();
+        armHeader();
       }
-    },1000-(Date.now()%1000)+20);
+    },2000-(Date.now()%2000)+20);
+  }
+
+  function installWidgetRedrawHook(){
+    if(widgetDrawWrapper||typeof Bangle.drawWidgets!=="function")return;
+    nativeDrawWidgets=Bangle.drawWidgets;
+    widgetDrawWrapper=function(){
+      var r=nativeDrawWidgets.apply(Bangle,arguments);
+      if(!killed&&mode==="orbit")drawHeader();
+      return r;
+    };
+    Bangle.drawWidgets=widgetDrawWrapper;
+  }
+
+  function removeWidgetRedrawHook(){
+    if(widgetDrawWrapper&&Bangle.drawWidgets===widgetDrawWrapper)
+      Bangle.drawWidgets=nativeDrawWidgets;
+    widgetDrawWrapper=undefined;
+    nativeDrawWidgets=undefined;
   }
 
   function drawSun(){
@@ -703,8 +707,7 @@
     drawObserver(sol);
     var moon=drawMoon();
     drawLocationStatus(moon);
-    try{Bangle.drawWidgets();}catch(e){}
-    drawHeader();
+    try{Bangle.drawWidgets();}catch(e){drawHeader();}
     try{g.flip();}catch(err){}
     busy=false;
   }
@@ -728,7 +731,7 @@
 
   function stopOrbitTimers(){
     clear(minuteTimer);minuteTimer=undefined;
-    clear(secondTimer);secondTimer=undefined;
+    clear(headerTimer);headerTimer=undefined;
     clear(idleTimer);idleTimer=undefined;
     clearTaps();
   }
@@ -762,7 +765,7 @@
     busy=false;
     drawBase();
     armMinute();
-    armSecond();
+    armHeader();
     interactive=!!keepInteractive;
     if(interactive){
       try{Bangle.setLocked(false);}catch(e){}
@@ -928,6 +931,7 @@
     stopOrbitTimers();
     clear(unlockTimer);unlockTimer=undefined;
     if(calendar)calendar.stop();
+    removeWidgetRedrawHook();
     try{Bangle.setUI();}catch(e){}
     try{Bangle.removeListener("faceUp",onFaceUp);}catch(e){}
     try{Bangle.removeListener("lcdPower",onLCD);}catch(e){}
@@ -943,6 +947,7 @@
   try{Bangle.setUI({mode:"custom",clock:1,touch:onTouch,swipe:onSwipe,btn:onButton});}catch(e){}
   /* Load widgets only after setUI, as required for clock/widget state tracking. */
   try{if(typeof WIDGETS==="undefined")Bangle.loadWidgets();}catch(e){}
+  installWidgetRedrawHook();
   Bangle.on("faceUp",onFaceUp);
   Bangle.on("lcdPower",onLCD);
   Bangle.on("lock",onLock);
@@ -951,5 +956,5 @@
   try{Bangle.setLocked(false);}catch(e){}
   drawBase();
   armMinute();
-  armSecond();
+  armHeader();
 })();
