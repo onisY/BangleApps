@@ -1,0 +1,1 @@
+0.001: Initial version. Background acceleration monitor, adaptive fast barometer, stair/elevator relative-height logging, 3-sample wear temperature check, resting HRM averages, settings/data menus, and battery-to-10% prediction with flashing widget warning.

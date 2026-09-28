@@ -1,0 +1,19 @@
+{
+  "id":"lifemon",
+  "name":"Life Monitor",
+  "shortName":"LifeMon",
+  "version":"0.001",
+  "author":"onisY",
+  "description":"Low-power background widget for wear state, resting heart-rate averages, stair/elevator height from barometric pressure, and predicted time to 10% battery.",
+  "icon":"app.png",
+  "type":"widget",
+  "tags":"widget,health,sensor,barometer,heart,battery",
+  "supports":["BANGLEJS2"],
+  "readme":"README.md",
+  "storage":[
+    {"name":"lifemon.boot.js","url":"boot.js"},
+    {"name":"lifemon.wid.js","url":"widget.js"},
+    {"name":"lifemon.settings.js","url":"settings.js"}
+  ],
+  "data":[{"name":"lifemon.json"},{"name":"lifemon.state.json"},{"name":"lifemon.log"}]
+}
