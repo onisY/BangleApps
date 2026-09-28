@@ -40,18 +40,21 @@ The graph does not scroll. The sweep starts at the left edge, advances one horiz
 
 Pressure scaling is automatic and cannot be set manually.
 
-For the pressure values currently visible across the horizontal plot range:
+The minimum full-scale span is 0.5 mbar. When a visible pressure sample reaches or exceeds the current display range, sensY immediately doubles the full-scale span and redraws the whole graph so the trace is no longer clipped to the top or bottom edge. If the expanded range is still insufficient, it continues doubling until all visible pressure samples fit.
 
-- normally, the minimum visible pressure becomes the bottom of the pressure scale and the maximum visible pressure becomes the top;
-- if the visible maximum-minus-minimum is 0.5 mbar or less, the minimum pressure scale is centred on the visible mean and forced to mean ±0.25 mbar.
+To avoid rapid scale oscillation, pressure scale reduction is slower. At the end of a complete horizontal sweep, if the visible pressure range occupies no more than one quarter of the current full scale, sensY halves the full-scale span once. It never shrinks below 0.5 mbar.
 
 The pressure Y axis is labelled in mbar. Top, middle, and bottom tick values are drawn on screen.
 
 ### Acceleration Y axis
 
-Acceleration magnitude uses the user-configured `Accel Y min` and `Accel Y max`.
+`Accel auto Y` enables the same x2 / x0.5 adaptive full-scale behaviour for interval-averaged acceleration magnitude.
 
-This acceleration scale is intentionally not printed on the measurement screen.
+When automatic acceleration scaling is enabled, `Accel Y min` and `Accel Y max` define the starting range. If a visible acceleration sample reaches or exceeds that range, sensY immediately expands the full scale in x2 steps. At each completed sweep, it may halve the span once when the visible data occupies no more than one quarter of the current full scale.
+
+When `Accel auto Y` is disabled, `Accel Y min` and `Accel Y max` remain a fixed scale.
+
+The acceleration scale is intentionally not printed on the measurement screen.
 
 ### Time X axis
 
@@ -76,8 +79,9 @@ The screen displays both seconds-per-pixel and the total time span represented b
 - `Accel color`: acceleration line colour.
 - `Accel width`: acceleration line width, 1 to 5 pixels.
 - `Accel store`: save interval-averaged acceleration magnitude to CSV.
-- `Accel Y min`: acceleration graph minimum.
-- `Accel Y max`: acceleration graph maximum.
+- `Accel auto Y`: automatically expand/contract the acceleration full scale in x2 / x0.5 steps.
+- `Accel Y min`: acceleration graph minimum; also the starting lower bound when auto Y is enabled.
+- `Accel Y max`: acceleration graph maximum; also the starting upper bound when auto Y is enabled.
 
 Tap the measurement screen to open settings. Returning from settings starts a fresh measurement graph.
 
@@ -125,4 +129,4 @@ Writes are buffered to reduce flash-write overhead. The App Loader interface can
 
 While acquisition is active, sensY keeps the LCD/backlight on and disables the normal lock/LCD/backlight timeouts. When acquisition is paused, settings are opened, or the app exits, the original Bangle.js timeout settings are restored.
 
-Because the pressure Y axis is automatic, a change of pressure scale requires existing pressure pixels to be remapped. To preserve the normal two-column sweep update, sensY updates the automatic pressure scale and performs a full graph redraw only when a complete horizontal sweep reaches the right edge and wraps to the left.
+Normal samples still use the low-overhead two-column sweep update. If a visible pressure or auto-scaled acceleration sample reaches/exceeds the current Y range, sensY expands that full scale immediately and performs one full redraw so existing pixels are remapped. Scale contraction is considered only at a completed sweep boundary, which prevents repeated expand/shrink pumping.
