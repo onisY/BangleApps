@@ -1,4 +1,4 @@
-/* orbit 0.046 stable: settings and editable event data. */
+/* orbit 0.047 stable: settings and editable event data. */
 (function(back){
   var Storage=require("Storage");
   var C,P,JPI;
@@ -65,9 +65,13 @@
     if(!isFinite(s.earthSize))s.earthSize=42;
     if(!isFinite(s.moonSize))s.moonSize=15;
     if(!isFinite(s.moonOrbit))s.moonOrbit=62;
+    if(!isFinite(s.datePos))s.datePos=1;if(!isFinite(s.timePos))s.timePos=2;
+    if(!isFinite(s.dateSize))s.dateSize=22;if(!isFinite(s.timeSize))s.timeSize=22;
     s.sunSize=Math.max(6,Math.min(15,s.sunSize|0));
     s.earthSize=Math.max(40,Math.min(45,s.earthSize|0));
     s.moonSize=Math.max(14,Math.min(16,s.moonSize|0));
+    s.datePos=Math.max(0,Math.min(2,s.datePos|0));s.timePos=Math.max(0,Math.min(2,s.timePos|0));
+    s.dateSize=Math.max(12,Math.min(30,s.dateSize|0));s.timeSize=Math.max(12,Math.min(30,s.timeSize|0));
     var minOrbit=s.earthSize+s.moonSize+4;
     s.moonOrbit=Math.max(minOrbit,Math.min(70,s.moonOrbit|0));
     s.layoutVersion=2;
@@ -472,6 +476,16 @@
         format:function(v){return v?"South":"North";},
         onchange:function(v){s.viewSide=v?1:0;write(CFG,s);}
       },
+      "Date pos":{value:s.datePos,min:0,max:2,step:1,
+        format:function(v){return ["Header","Top left","Below Sun"][v];},
+        onchange:function(v){s.datePos=v;write(CFG,s);}
+      },
+      "Time pos":{value:s.timePos,min:0,max:2,step:1,
+        format:function(v){return ["Header","Top left","Below Sun"][v];},
+        onchange:function(v){s.timePos=v;write(CFG,s);}
+      },
+      "Date size":{value:s.dateSize,min:12,max:30,step:2,onchange:function(v){s.dateSize=v;write(CFG,s);}},
+      "Time size":{value:s.timeSize,min:12,max:30,step:2,onchange:function(v){s.timeSize=v;write(CFG,s);}},
       "Sun size":{value:s.sunSize,min:6,max:15,step:1,onchange:function(v){s.sunSize=v;write(CFG,s);}},
       "Earth size":{value:s.earthSize,min:40,max:45,step:1,onchange:function(v){
         s.earthSize=v;var mn=s.earthSize+s.moonSize+4;if(s.moonOrbit<mn)s.moonOrbit=mn;
