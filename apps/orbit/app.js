@@ -1,8 +1,11 @@
-/* orbit 0.045 stable */
+/* orbit 0.046 stable */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbit.json";
   var cfg=Storage.readJSON(CFGFILE,1)||{};
+  var sysCfg=Storage.readJSON("setting.json",1)||{};
+  var VIEWLIGHT_MS=isFinite(sysCfg.timeout)?Math.max(0,+sysCfg.timeout)*1000:10000;
+  sysCfg=undefined;
   /* Normalize persisted settings and migrate legacy coordinates once. */
   (function(){
     var changed=false;
@@ -55,10 +58,9 @@
     calSource=undefined;
   }catch(calErr){calModule=undefined;calendar=undefined;}
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800,GREEN=0x04C0;
-  var busy=false,killed=false,minuteTimer,headerTimer,idleTimer,tapTimer,unlockTimer;
+  var busy=false,killed=false,minuteTimer,timeTimer,idleTimer,tapTimer,unlockTimer;
   var mode="orbit",interactive=true,tapCount=0,resetOnWake=false;
   var selectedDayOffset=0,hasSelectedDate=false;
-  var nativeDrawWidgets,widgetDrawWrapper;
   var SUNR=Math.max(6,Math.min(15,cfg.sunSize|0));
   var EARTHR=Math.max(40,Math.min(45,cfg.earthSize|0));
   var MOONR=Math.max(14,Math.min(16,cfg.moonSize|0));
@@ -76,10 +78,15 @@
   var TESTLAT=Math.max(-90,Math.min(90,+cfg.manualLat));
   var TESTLON=Math.max(-180,Math.min(180,+cfg.manualLon));
   var VIEW_SOUTH=!!cfg.viewSide;
-  /* Copy only location fields needed by the clock; place tables stay unloaded. */
-  var LOCSOURCE=cfg.locationSource||((cfg.locationMode===0)?"place":((cfg.locationMode===2)?"gps":"manual"));
+  /* Copy only location fields needed by the clock; place tables stay unloaded.
+     The saved label is also used as a recovery cue for older/stale source flags. */
+  var savedLocName=cfg.locName||"",savedLocPref=cfg.locPref||"";
+  var LOCSOURCE=(savedLocName==="GPS"||savedLocPref==="GPS")?"gps":
+    ((savedLocName==="Custom"||savedLocPref==="Manual")?"manual":
+    ((savedLocName||savedLocPref)?"place":
+    (cfg.locationSource||((cfg.locationMode===0)?"place":((cfg.locationMode===2)?"gps":"manual")))));
   var LOCMODE=LOCSOURCE==="place"?0:(LOCSOURCE==="gps"?2:1);
-  var LOCNAME=(LOCMODE===0?(cfg.locName||cfg.locPref||"Place"):"");
+  var LOCNAME=(LOCMODE===0?(savedLocName||savedLocPref||"Place"):"");
   var LOCCOUNTRY=(LOCMODE===0?(cfg.countryName||"Japan"):"");
   var LOCLAT=Math.abs(TESTLAT).toFixed(3)+(TESTLAT<0?"S":"N");
   var LOCLON=Math.abs(TESTLON).toFixed(3)+(TESTLON<0?"W":"E");
@@ -334,91 +341,60 @@
     }
   }
 
-  function topFreeGap(){
-    var spans=[];
-    if(typeof WIDGETS!=="undefined")Object.keys(WIDGETS).forEach(function(k){
-      var wd=WIDGETS[k];
-      if(!wd||!wd.width||!wd.area||wd.area.charAt(0)!=="t")return;
-      if(typeof wd.x==="number")spans.push([wd.x,wd.x+wd.width-1]);
-    });
-    if(!spans.length&&typeof WIDGETS!=="undefined"){
-      var lw=0,rw=0;
-      Object.keys(WIDGETS).forEach(function(k){
-        var wd=WIDGETS[k];
-        if(!wd||!wd.width)return;
-        if(wd.area==="tl")lw+=wd.width;
-        else if(wd.area==="tr")rw+=wd.width;
-      });
-      if(lw)spans.push([0,lw-1]);
-      if(rw)spans.push([W-rw,W-1]);
-    }
-    spans.sort(function(a,b){return a[0]-b[0];});
-    var merged=[];
-    spans.forEach(function(s){
-      s[0]=Math.max(0,s[0]);s[1]=Math.min(W-1,s[1]);
-      if(!merged.length||s[0]>merged[merged.length-1][1]+1)merged.push([s[0],s[1]]);
-      else if(s[1]>merged[merged.length-1][1])merged[merged.length-1][1]=s[1];
-    });
-    var gaps=[],p=0;
-    merged.forEach(function(s){if(s[0]>p)gaps.push([p,s[0]-1]);p=Math.max(p,s[1]+1);});
-    if(p<W)gaps.push([p,W-1]);
-    if(!gaps.length)return undefined;
-    gaps.sort(function(a,b){
-      var aw=a[1]-a[0]+1,bw=b[1]-b[0]+1;
-      if(aw!==bw)return bw-aw;
-      return Math.abs(((a[0]+a[1])>>1)-(W>>1))-Math.abs(((b[0]+b[1])>>1)-(W>>1));
-    });
-    return gaps[0];
+  function moonHitsRect(m,x,y,w,h){
+    if(!m)return false;
+    var nx=Math.max(x,Math.min(m.x,x+w)),ny=Math.max(y,Math.min(m.y,y+h));
+    var dx=m.x-nx,dy=m.y-ny,r=MOONR+2;
+    return dx*dx+dy*dy<=r*r;
   }
 
-  function drawHeader(){
-    if(killed||mode!=="orbit")return;
-    var gap=topFreeGap();
-    if(!gap)return;
-    var d=virtualDate();
-    var date=pad(d.getMonth()+1)+pad(d.getDate());
-    var time=pad(d.getHours())+pad(d.getMinutes());
-    var text=date+" "+time;
-    var x1=gap[0],x2=gap[1],maxW=Math.max(1,x2-x1-2);
-    var size=23;
+  function drawDateLabel(m){
+    var d=virtualDate(),txt=pad(d.getMonth()+1)+pad(d.getDate()),size=22;
     g.setFont("Vector",size);
-    while(size>8&&g.stringWidth(text)>maxW){size--;g.setFont("Vector",size);}
-    var y=Math.max(0,Math.floor((24-size)/2));
-    g.setColor(WHITE).fillRect(x1,0,x2,23);
-    g.setBgColor(WHITE).setFont("Vector",size).setFontAlign(-1,-1);
-    var x=x1+1;
-    g.setColor(BLACK).drawString(date,x,y);
-    x+=g.stringWidth(date+" ");
-    g.setColor((Math.floor(Date.now()/2000)&1)?0x8410:BLACK).drawString(time,x,y);
+    var w=g.stringWidth(txt),h=size+1,x=2,y=25;
+    if(moonHitsRect(m,x,y,w,h)){
+      var nx=m.x+MOONR+4;
+      if(nx+w<=W-2)x=nx;
+      else y=Math.min(H-h-2,m.y+MOONR+4);
+    }
+    g.setColor(WHITE).fillRect(x-1,y-1,x+w+1,y+h);
+    g.setBgColor(WHITE).setColor(BLACK).setFont("Vector",size).setFontAlign(-1,-1);
+    g.drawString(txt,x,y);
   }
 
-  function armHeader(){
-    clear(headerTimer);
-    headerTimer=setTimeout(function(){
-      headerTimer=undefined;
+  function timeLabelGeometry(m){
+    var d=virtualDate(),txt=pad(d.getHours())+pad(d.getMinutes()),size=22;
+    g.setFont("Vector",size);
+    var w=g.stringWidth(txt),h=size+1,right=W-2,x=right-w;
+    var y=SUNY+SUNR+SUNRAY+3;
+    if(moonHitsRect(m,x,y,w,h))y=Math.min(H-h-2,m.y+MOONR+4);
+    return {text:txt,size:size,x:x,y:y,w:w,h:h};
+  }
+
+  function drawTimeLabel(m){
+    if(killed||mode!=="orbit")return;
+    var q=timeLabelGeometry(m);
+    g.setColor(WHITE).fillRect(q.x-1,q.y-1,W-1,q.y+q.h);
+    g.setBgColor(WHITE).setFont("Vector",q.size).setFontAlign(-1,-1)
+      .setColor((Math.floor(Date.now()/2000)&1)?0x8410:BLACK)
+      .drawString(q.text,q.x,q.y);
+  }
+
+  function drawDateTime(m){
+    drawDateLabel(m);
+    drawTimeLabel(m);
+  }
+
+  function armTime(){
+    clear(timeTimer);
+    timeTimer=setTimeout(function(){
+      timeTimer=undefined;
       if(!killed&&mode==="orbit"){
-        drawHeader();
-        armHeader();
+        drawTimeLabel(MOON_CACHE_DATA);
+        try{g.flip();}catch(e){}
+        armTime();
       }
     },2000-(Date.now()%2000)+20);
-  }
-
-  function installWidgetRedrawHook(){
-    if(widgetDrawWrapper||typeof Bangle.drawWidgets!=="function")return;
-    nativeDrawWidgets=Bangle.drawWidgets;
-    widgetDrawWrapper=function(){
-      var r=nativeDrawWidgets.apply(Bangle,arguments);
-      if(!killed&&mode==="orbit")drawHeader();
-      return r;
-    };
-    Bangle.drawWidgets=widgetDrawWrapper;
-  }
-
-  function removeWidgetRedrawHook(){
-    if(widgetDrawWrapper&&Bangle.drawWidgets===widgetDrawWrapper)
-      Bangle.drawWidgets=nativeDrawWidgets;
-    widgetDrawWrapper=undefined;
-    nativeDrawWidgets=undefined;
   }
 
   function drawSun(){
@@ -707,7 +683,8 @@
     drawObserver(sol);
     var moon=drawMoon();
     drawLocationStatus(moon);
-    try{Bangle.drawWidgets();}catch(e){drawHeader();}
+    drawDateTime(moon);
+    try{Bangle.drawWidgets();}catch(e){}
     try{g.flip();}catch(err){}
     busy=false;
   }
@@ -731,7 +708,7 @@
 
   function stopOrbitTimers(){
     clear(minuteTimer);minuteTimer=undefined;
-    clear(headerTimer);headerTimer=undefined;
+    clear(timeTimer);timeTimer=undefined;
     clear(idleTimer);idleTimer=undefined;
     clearTaps();
   }
@@ -739,13 +716,14 @@
   function armIdle(){
     clear(idleTimer);
     if(mode!=="orbit"||!interactive)return;
-    idleTimer=setTimeout(goIdle,8000);
+    if(VIEWLIGHT_MS>0)idleTimer=setTimeout(goIdle,VIEWLIGHT_MS);
   }
 
   function startInteraction(){
     if(killed||mode!=="orbit")return;
     interactive=true;
     try{Bangle.setLocked(false);}catch(e){}
+    try{if(!Bangle.isLCDOn())Bangle.setLCDPower(1);}catch(e){}
     try{Bangle.setBacklight(true);}catch(e){}
     armIdle();
   }
@@ -754,8 +732,7 @@
     clear(idleTimer);idleTimer=undefined;
     clearTaps();
     interactive=false;
-    try{Bangle.setBacklight(false);}catch(e){}
-    try{Bangle.setLocked(false);}catch(e){}
+      try{Bangle.setLocked(false);}catch(e){}
   }
 
   function startOrbit(keepInteractive){
@@ -765,7 +742,7 @@
     busy=false;
     drawBase();
     armMinute();
-    armHeader();
+    armTime();
     interactive=!!keepInteractive;
     if(interactive){
       try{Bangle.setLocked(false);}catch(e){}
@@ -900,6 +877,11 @@
       resetOnWake=false;
       startOrbit(false);
     }
+    if(mode==="orbit"){
+      interactive=true;
+      try{Bangle.setBacklight(true);}catch(e){}
+      armIdle();
+    }
   }
 
   function onLock(isLocked){
@@ -931,7 +913,6 @@
     stopOrbitTimers();
     clear(unlockTimer);unlockTimer=undefined;
     if(calendar)calendar.stop();
-    removeWidgetRedrawHook();
     try{Bangle.setUI();}catch(e){}
     try{Bangle.removeListener("faceUp",onFaceUp);}catch(e){}
     try{Bangle.removeListener("lcdPower",onLCD);}catch(e){}
@@ -947,7 +928,6 @@
   try{Bangle.setUI({mode:"custom",clock:1,touch:onTouch,swipe:onSwipe,btn:onButton});}catch(e){}
   /* Load widgets only after setUI, as required for clock/widget state tracking. */
   try{if(typeof WIDGETS==="undefined")Bangle.loadWidgets();}catch(e){}
-  installWidgetRedrawHook();
   Bangle.on("faceUp",onFaceUp);
   Bangle.on("lcdPower",onLCD);
   Bangle.on("lock",onLock);
@@ -956,5 +936,5 @@
   try{Bangle.setLocked(false);}catch(e){}
   drawBase();
   armMinute();
-  armHeader();
+  armTime();
 })();

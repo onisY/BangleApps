@@ -1,4 +1,4 @@
-/* orbit 0.045 stable: integrated five-week calendar module. */
+/* orbit 0.04 stable: integrated five-week calendar module. */
 (function(){
   var Storage=require("Storage");
   var CFG_FILE="orbit.cal.json";

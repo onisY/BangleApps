@@ -1,4 +1,4 @@
-/* orbit 0.045 stable: settings and editable event data. */
+/* orbit 0.046 stable: settings and editable event data. */
 (function(back){
   var Storage=require("Storage");
   var C,P,JPI;
@@ -86,11 +86,12 @@
     if(s.lat!==undefined){delete s.lat;changed=true;}
     if(s.lon!==undefined){delete s.lon;changed=true;}
 
-    if(s.locationSource!=="place"&&s.locationSource!=="manual"&&s.locationSource!=="gps"){
-      s.locationSource=(s.locationMode===0||s.locationMode==="0")?"place":
-        ((s.locationMode===2||s.locationMode==="2")?"gps":"manual");
-      changed=true;
-    }
+    if(s.locName==="GPS"||s.locPref==="GPS")set("locationSource","gps");
+    else if(s.locName==="Custom"||s.locPref==="Manual")set("locationSource","manual");
+    else if(s.locName||s.locPref)set("locationSource","place");
+    else if(s.locationSource!=="place"&&s.locationSource!=="manual"&&s.locationSource!=="gps")
+      set("locationSource",(s.locationMode===0||s.locationMode==="0")?"place":
+        ((s.locationMode===2||s.locationMode==="2")?"gps":"manual"));
     set("locationMode",s.locationSource==="place"?0:(s.locationSource==="gps"?2:1));
     if(s.viewSide!==0&&s.viewSide!==1)s.viewSide=0;
     if(!s.countryName)s.countryName="Japan";
@@ -164,13 +165,18 @@
     var list=C[ci][1]||[];
     return {group:C[ci][0],place:list[s.place]};
   }
-  function commitPlace(s){
+  function saveSelectedPlace(s){
     var q=selectedPlace(s),p=q.place;
     if(!p)return;
     s.locationSource="place";s.locationMode=0;
     s.locPref=q.group;s.locName=p[0];
     s.manualLat=p[1];s.manualLon=p[2];
     write(CFG,s);
+    return q;
+  }
+  function commitPlace(s){
+    var q=saveSelectedPlace(s),p=q&&q.place;
+    if(!p)return;
     var msg=q.group+" / "+p[0]+"\nLat "+Number(s.manualLat).toFixed(3)+"\nLon "+Number(s.manualLon).toFixed(3);
     releasePlaceData();
     E.showAlert(msg,"Location saved").then(main);
@@ -285,7 +291,7 @@
       s.municipality=Math.max(0,Math.min(ml.length-1,s.municipality|0));
       m["Municipality"]={value:s.municipality,min:0,max:ml.length-1,step:1,
         format:function(v){return ml[v][0];},
-        onchange:function(v){s.municipality=v;}
+        onchange:function(v){s.municipality=v;saveSelectedPlace(s);}
       };
     }else{
       var list=C[ci][1]||[];
@@ -293,7 +299,7 @@
         s.place=Math.max(0,Math.min(list.length-1,s.place|0));
         m["City"]={value:s.place,min:0,max:list.length-1,step:1,
           format:function(v){return list[v][0];},
-          onchange:function(v){s.place=v;}
+          onchange:function(v){s.place=v;saveSelectedPlace(s);}
         };
       }else{
         s.place=0;
