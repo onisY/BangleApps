@@ -4,7 +4,7 @@
  */
 (function () {
   var Storage = require("Storage");
-  var VERSION = "0.018";
+  var VERSION = "0.019";
   var SETTINGS_FILE = "sensY.json";
   var APP_ID = "sensY";
 
@@ -27,11 +27,14 @@
     pressureWidth: 1,
     accColor: 5,
     accWidth: 1,
+    accAutoScale: true,
     accYmin: 0,
     accYmax: 2
   };
 
   var GRAVITY_TAU = 0.8;
+  var PRESSURE_MIN_SPAN = 0.5;
+  var ACC_MIN_SPAN = 0.01;
   var gravity = { init:false, x:0, y:0, z:0, t:0 };
 
   var W = g.getWidth();
@@ -49,6 +52,7 @@
   var sweepIndex = 0;
   var sweepGeneration = 1;
   var displayPressureScale = null;
+  var displayAccelScale = null;
 
   var acquiring = false;
   var paused = false;
@@ -90,6 +94,7 @@
       pressureWidth: DEFAULTS.pressureWidth,
       accColor: DEFAULTS.accColor,
       accWidth: DEFAULTS.accWidth,
+      accAutoScale: DEFAULTS.accAutoScale,
       accYmin: DEFAULTS.accYmin,
       accYmax: DEFAULTS.accYmax
     };
@@ -117,6 +122,7 @@
     if (typeof s.pressureWidth === "number") d.pressureWidth = s.pressureWidth | 0;
     if (typeof s.accColor === "number") d.accColor = s.accColor | 0;
     if (typeof s.accWidth === "number") d.accWidth = s.accWidth | 0;
+    if (typeof s.accAutoScale === "boolean") d.accAutoScale = s.accAutoScale;
 
     if (typeof s.accYmin === "number") d.accYmin = Math.max(0, s.accYmin);
     if (typeof s.accYmax === "number") d.accYmax = s.accYmax;
@@ -305,6 +311,8 @@
     sweepIndex = 0;
     sweepGeneration = 1;
     displayPressureScale = null;
+    displayAccelScale = cfg && cfg.accAutoScale ?
+      { lo:cfg.accYmin, hi:cfg.accYmax } : null;
   }
 
   function onAccel(a) {
@@ -327,31 +335,129 @@
     accCount++;
   }
 
-  function scaleFromSamples() {
+  function sampleRange(key) {
     var min = Infinity;
     var max = -Infinity;
-    var sum = 0;
     var n = 0;
 
     for (var i = 0; i < samples.length; i++) {
       var s = samples[i];
-      if (!s || s.p === undefined || !isFinite(s.p)) continue;
-      min = Math.min(min, s.p);
-      max = Math.max(max, s.p);
-      sum += s.p;
+      if (!s) continue;
+      var v = s[key];
+      if (v === null || v === undefined || !isFinite(v)) continue;
+      min = Math.min(min, v);
+      max = Math.max(max, v);
       n++;
     }
-    if (!n) return null;
-
-    if (max - min <= 0.5) {
-      var mean = sum / n;
-      return { lo:mean - 0.25, hi:mean + 0.25 };
-    }
-    return { lo:min, hi:max };
+    return n ? { min:min, max:max, n:n } : null;
   }
 
-  function initialScale(p) {
-    return { lo:p - 0.25, hi:p + 0.25 };
+  function makeScale(range, span, nonnegative) {
+    var center = (range.min + range.max) / 2;
+    var lo = center - span / 2;
+    var hi = center + span / 2;
+
+    if (nonnegative && lo < 0) {
+      hi -= lo;
+      lo = 0;
+    }
+    return { lo:lo, hi:hi };
+  }
+
+  function expandScale(scale, range, minSpan, nonnegative) {
+    if (!range) return { scale:scale, changed:false };
+
+    if (!scale) {
+      var firstSpan = minSpan;
+      while (range.max - range.min >= firstSpan) firstSpan *= 2;
+      return {
+        scale:makeScale(range, firstSpan, nonnegative),
+        changed:true
+      };
+    }
+
+    if (range.min > scale.lo && range.max < scale.hi)
+      return { scale:scale, changed:false };
+
+    var span = Math.max(minSpan, scale.hi - scale.lo) * 2;
+    while (range.max - range.min >= span) span *= 2;
+
+    return {
+      scale:makeScale(range, span, nonnegative),
+      changed:true
+    };
+  }
+
+  function shrinkScale(scale, range, minSpan, nonnegative) {
+    if (!scale || !range) return { scale:scale, changed:false };
+
+    var span = scale.hi - scale.lo;
+    if (span <= minSpan * 1.0001)
+      return { scale:scale, changed:false };
+
+    /*
+     * Hysteresis: only halve when the visible data occupies at most one
+     * quarter of the current full scale. After halving, the data therefore
+     * still occupies at most half the new scale and does not stick to an edge.
+     */
+    if (range.max - range.min > span / 4)
+      return { scale:scale, changed:false };
+
+    var nextSpan = Math.max(minSpan, span / 2);
+    return {
+      scale:makeScale(range, nextSpan, nonnegative),
+      changed:true
+    };
+  }
+
+  function expandAutoScales() {
+    var changed = false;
+    var r = expandScale(
+      displayPressureScale,
+      sampleRange("p"),
+      PRESSURE_MIN_SPAN,
+      false
+    );
+    displayPressureScale = r.scale;
+    changed = changed || r.changed;
+
+    if (cfg.accAutoScale) {
+      r = expandScale(
+        displayAccelScale,
+        sampleRange("a"),
+        ACC_MIN_SPAN,
+        true
+      );
+      displayAccelScale = r.scale;
+      changed = changed || r.changed;
+    }
+
+    return changed;
+  }
+
+  function shrinkAutoScales() {
+    var changed = false;
+    var r = shrinkScale(
+      displayPressureScale,
+      sampleRange("p"),
+      PRESSURE_MIN_SPAN,
+      false
+    );
+    displayPressureScale = r.scale;
+    changed = changed || r.changed;
+
+    if (cfg.accAutoScale) {
+      r = shrinkScale(
+        displayAccelScale,
+        sampleRange("a"),
+        ACC_MIN_SPAN,
+        true
+      );
+      displayAccelScale = r.scale;
+      changed = changed || r.changed;
+    }
+
+    return changed;
   }
 
   function pressureY(v) {
@@ -362,7 +468,9 @@
   }
 
   function accelY(v) {
-    var f = (v - cfg.accYmin) / (cfg.accYmax - cfg.accYmin);
+    var scale = cfg.accAutoScale && displayAccelScale ?
+      displayAccelScale : { lo:cfg.accYmin, hi:cfg.accYmax };
+    var f = (v - scale.lo) / (scale.hi - scale.lo);
     return clamp(Math.round(PLOT_Y1 - f * (PLOT_H - 1)), PLOT_Y0, PLOT_Y1);
   }
 
@@ -485,29 +593,30 @@
     var idx = sweepIndex;
     var next = (idx + 1) % PLOT_W;
 
-    /*
-     * Incremental sweep: remove the current cursor/old sample column and the
-     * next column (which contains the old forward segment), then redraw only
-     * the new sample and cursor. Normal updates therefore touch two plot
-     * columns only.
-     */
     clearSweepColumns(idx);
     samples[idx] = sample;
-    drawSampleAt(idx);
 
+    /*
+     * Expand immediately when any visible pressure/acceleration value reaches
+     * or exceeds the current full scale. Expansion is in x2 steps and the
+     * whole graph is redrawn so old pixels are remapped to the new scale.
+     */
+    var scaleChanged = expandAutoScales();
     sweepIndex = next;
 
     if (next === 0) {
       /*
-       * One horizontal sweep is complete. Pressure auto-scaling requires all
-       * existing pressure pixels to be remapped when the axis range changes,
-       * so do one full redraw at the sweep boundary only.
+       * Shrinking is deliberately slower than expansion. It is considered
+       * only once per completed sweep and only when the data occupies <= 1/4
+       * of the current range, then the full scale is halved once.
        */
-      var scale = scaleFromSamples();
-      if (scale) displayPressureScale = scale;
+      if (!scaleChanged) shrinkAutoScales();
       sweepGeneration++;
       drawFullGraph();
+    } else if (scaleChanged) {
+      drawFullGraph();
     } else {
+      drawSampleAt(idx);
       drawSweepCursor();
     }
   }
@@ -525,9 +634,6 @@
     accSum = 0;
     accCount = 0;
 
-    if (!displayPressureScale)
-      displayPressureScale = initialScale(e.pressure);
-
     var sample = {
       t:t,
       p:e.pressure,
@@ -539,10 +645,10 @@
     if (Bangle.isLCDOn()) updateSweep(sample);
     else {
       samples[sweepIndex] = sample;
+      var scaleChanged = expandAutoScales();
       sweepIndex = (sweepIndex + 1) % PLOT_W;
       if (sweepIndex === 0) {
-        var scale = scaleFromSamples();
-        if (scale) displayPressureScale = scale;
+        if (!scaleChanged) shrinkAutoScales();
         sweepGeneration++;
       }
     }
@@ -751,6 +857,13 @@
         value:!!cfg.accStore,
         onchange:function (v) {
           cfg.accStore = !!v;
+          saveSettings();
+        }
+      },
+      "Accel auto Y": {
+        value:!!cfg.accAutoScale,
+        onchange:function (v) {
+          cfg.accAutoScale = !!v;
           saveSettings();
         }
       },
