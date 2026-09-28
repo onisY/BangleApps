@@ -1,4 +1,4 @@
-/* orbit 0.04 stable: settings and editable event data. */
+/* orbit 0.041 stable: settings and editable event data. */
 (function(back){
   var Storage=require("Storage");
   var C,P,JPI;
@@ -455,7 +455,7 @@
     if(s.moonOrbit<minOrbit){s.moonOrbit=minOrbit;write(CFG,s);}
     var m={"":{title:"orbit"},"< Back":leave,
       "Exit to orbit":exitToOrbit,
-      "Location":locationMenu,
+      "Location":function(){locationMenu(s);},
       "View side":{value:s.viewSide,min:0,max:1,step:1,
         format:function(v){return v?"South":"North";},
         onchange:function(v){s.viewSide=v?1:0;write(CFG,s);}
