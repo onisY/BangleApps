@@ -1,4 +1,4 @@
-/* orbit 0.048 stable */
+/* orbit 0.049 stable */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbit.json";
