@@ -1,4 +1,4 @@
-/* orbit 0.048 stable: settings and editable event data. */
+/* orbit 0.049 stable: settings and editable event data. */
 (function(back){
   var Storage=require("Storage");
   var C,P,JPI;
@@ -30,8 +30,11 @@
     releaseMunicipalities();
     C=undefined;P=undefined;JPI=undefined;
     try{
-      if(typeof Modules!=="undefined"&&Modules.getCached&&
-         Modules.getCached().includes("orbitloc"))Modules.removeCached("orbitloc");
+      if(typeof Modules!=="undefined"&&Modules.getCached){
+        var mc=Modules.getCached();
+        if(mc.includes("orbitloc"))Modules.removeCached("orbitloc");
+        if(mc.includes("orbittz"))Modules.removeCached("orbittz");
+      }
     }catch(e){}
   }
   function countryIndex(name){
@@ -67,6 +70,7 @@
     if(!isFinite(s.moonOrbit))s.moonOrbit=62;
     if(!isFinite(s.datePos))s.datePos=1;if(!isFinite(s.timePos))s.timePos=2;
     if(!isFinite(s.dateSize))s.dateSize=22;if(!isFinite(s.timeSize))s.timeSize=22;
+    set("timeSource",(s.timeSource===1||s.timeSource==="1")?1:0);
     s.sunSize=Math.max(6,Math.min(15,s.sunSize|0));
     s.earthSize=Math.max(40,Math.min(45,s.earthSize|0));
     s.moonSize=Math.max(14,Math.min(16,s.moonSize|0));
@@ -164,10 +168,19 @@
     var ci=countryIndex(s.countryName);
     if(s.countryName==="Japan"){
       var jl=loadMunicipalities(s.pref);
-      return {group:P[s.pref][0],place:jl[s.municipality]};
+      return {group:P[s.pref][0],place:jl[s.municipality],ci:ci,pi:0};
     }
     var list=C[ci][1]||[];
-    return {group:C[ci][0],place:list[s.place]};
+    return {group:C[ci][0],place:list[s.place],ci:ci,pi:s.place|0};
+  }
+  function placeTimeData(q){
+    var t;
+    try{
+      var z=require("orbittz");
+      t=z.get(q.ci,q.pi);
+      z=undefined;
+    }catch(e){t=undefined;}
+    return t;
   }
   function saveSelectedPlace(s){
     var q=selectedPlace(s),p=q.place;
@@ -175,13 +188,16 @@
     s.locationSource="place";s.locationMode=0;
     s.locPref=q.group;s.locName=p[0];
     s.manualLat=p[1];s.manualLon=p[2];
+    var t=placeTimeData(q);
+    if(t&&isFinite(t[0])){s.tzBase=+t[0];s.tzRule=t[1]|0;}
     write(CFG,s);
     return q;
   }
   function commitPlace(s){
     var q=saveSelectedPlace(s),p=q&&q.place;
     if(!p)return;
-    var msg=q.group+" / "+p[0]+"\nLat "+Number(s.manualLat).toFixed(3)+"\nLon "+Number(s.manualLon).toFixed(3);
+    var tz=isFinite(s.tzBase)?((s.tzBase>=0?"+":"")+((s.tzBase/60).toFixed(s.tzBase%60?2:0))):"--";
+    var msg=q.group+" / "+p[0]+"\nLat "+Number(s.manualLat).toFixed(3)+"\nLon "+Number(s.manualLon).toFixed(3)+"\nUTC "+tz+(s.tzRule?" + DST":"");
     releasePlaceData();
     E.showAlert(msg,"Location saved").then(main);
   }
@@ -472,6 +488,14 @@
     var m={"":{title:"orbit"},"< Back":leave,
       "Exit to orbit":exitToOrbit,
       "Location":function(){locationMenu(s);},
+      "Time source":{value:s.timeSource,min:0,max:1,step:1,
+        format:function(v){return v?"Place":"Bangle";},
+        onchange:function(v){
+          s.timeSource=v?1:0;
+          if(s.timeSource===1&&s.locationSource==="place"&&!isFinite(s.tzBase))saveSelectedPlace(s);
+          write(CFG,s);releasePlaceData();
+        }
+      },
       "View side":{value:s.viewSide,min:0,max:1,step:1,
         format:function(v){return v?"South":"North";},
         onchange:function(v){s.viewSide=v?1:0;write(CFG,s);}
