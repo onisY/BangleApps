@@ -1,4 +1,4 @@
-/* orbit 0.048 stable: settings and editable event data. */
+/* orbit 0.049 stable: settings and editable event data. */
 (function(back){
   var Storage=require("Storage");
   var C,P,JPI;
