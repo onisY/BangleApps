@@ -34,7 +34,7 @@ Using the built-in five-week calendar, you can select another date and display t
 
 The location display at the bottom-right changes according to the selected location method.
 
-- **Place name**: Shows the country on the upper line and the municipality or city on the lower line. Text is made as large as practical and moves where necessary to avoid overlapping the Moon.
+- **Place name**: Shows the country on the upper line and the municipality or city on the lower line.
 - **Manual**: Shows latitude and longitude.
 - **GPS**: Shows a satellite symbol together with latitude and longitude.
 
@@ -43,7 +43,7 @@ The location display at the bottom-right changes according to the selected locat
 - Displays 35 days, Monday to Sunday, across five weeks.
 - Saturdays are blue, Sundays and public holidays are red, and today is green.
 - **Double-tap** a date to select it; the selected date blinks yellow.
-- **Single-tap** the calendar to return to the clock display while retaining the selected date.
+- **Single-tap** the calendar to return to the clock display while retaining the selected date blinking yellow.
 - **Double-tap** outside the date cells to clear the selected date.
 - **Swipe up or down** to move backwards or forwards by five weeks.
 
@@ -51,9 +51,8 @@ The location display at the bottom-right changes according to the selected locat
 
 There are three ways to set the location.
 
-**Place name**
-- Outside Japan: normally select country → capital. Representative cities are also included for some large countries that use several civil time zones.
-- Japan: select prefecture → municipality.
+**Place 
+- Select country → capital. Representative cities are also included for some large countries that use several civil time zones → push "Use place >".
 
 **Manual**
 - Enter latitude and longitude directly.
@@ -61,7 +60,7 @@ There are three ways to set the location.
 **GPS**
 - GPS is used only when **Get GPS fix** is selected in the settings screen.
 - GPS is switched off after a valid fix, after cancelling, or when leaving the settings screen.
-- GPS is not used during normal clock display. A saved GPS fix is used only as stored latitude and longitude, so there is no GPS power consumption during normal display.
+- GPS is not used during normal clock display. A saved GPS fix is used only as stored latitude and longitude.
 
 ### Time display source
 
@@ -274,22 +273,6 @@ orbit does not include or execute the full tzdb. It stores the standard UTC offs
 
 Civil time-zone and DST rules are set by governments and can change. Therefore the Place-time table is a static approximation that may require updating when rules change. It must not be used where legally authoritative or safety-critical local time is required.
 
-### タイムゾーン・サマータイム
-
-Place time用のコンパクトな時刻データは、IANA Time Zone Database（tzdb）およびオープンソースの **countries-and-timezones** を参考に作成しています。
-
-- IANA Time Zone Database / tz repository  
-  https://github.com/eggert/tz
-- 同リポジトリのtz code/dataは、特記があるファイルを除き public domain
-- manuelmhtr / countries-and-timezones  
-  https://github.com/manuelmhtr/countries-and-timezones
-- ライセンス: **MIT License**  
-  https://github.com/manuelmhtr/countries-and-timezones/blob/master/LICENSE
-
-orbitは完全なtzdbを収録・実行するのではなく、orbitに収録した地名について、標準UTC差と共通DSTルールIDを小さな表として保持し、Place time表示時にorbit内部で現地日時を計算します。
-
-タイムゾーンやDST制度は各国・地域の政策によって変更されることがあります。そのため、このPlace timeデータは静的な近似データであり、制度変更時には更新が必要になる場合があります。法的に厳密な時刻や安全上重要な用途には使用しないでください。
-
 ### Bangle.js / Espruino
 
 - Bangle.js App Loader / BangleApps  
@@ -365,8 +348,7 @@ orbit は、現在時刻だけでなく、**「今、太陽・地球・月がど
 位置設定は3方式です。
 
 **Place name**
-- 日本以外: 原則として国 → 首都を選択します。複数の標準時を持つ広い国の一部には代表都市も収録しています。
-- 日本: 都道府県 → 市区町村の順に選択します。
+- 原則として国 → 首都を選択します。複数の標準時を持つ広い国の一部には代表都市も収録しています。は
 
 
 **Manual**
@@ -568,7 +550,7 @@ orbit 0.04 のデータ更新では、P05-22から作成されたオープンソ
 - Mozilla Public License 2.0  
   https://www.mozilla.org/MPL/2.0/
 
-現在の hosted REST Countries API を orbit が実行時に呼び出すことはありません。複数標準時を持つ一部の国について後から追加した代表都市は、orbit用に手動で追加したものです。
+現在の hosted REST Countries API を orbit が実行時に呼び出すことはありません。複数標準時を持つ一部の国について後から追加した代表都市は、orbit専用に手動で追加したものです。
 
 ### Bangle.js / Espruino
 
@@ -584,7 +566,22 @@ orbit 0.04 のデータ更新では、P05-22から作成されたオープンソ
 orbit は BangleApps リポジトリのライセンス方針に従い、**MIT License** で扱います。詳細はリポジトリ直下の `LICENSE` を参照してください。
 
 第三者データには上記それぞれの利用条件・ライセンスが適用されます。
+### タイムゾーン・サマータイム
+
+Place time用のコンパクトな時刻データは、IANA Time Zone Database（tzdb）およびオープンソースの **countries-and-timezones** を参考に作成しています。
+
+- IANA Time Zone Database / tz repository  
+  https://github.com/eggert/tz
+- 同リポジトリのtz code/dataは、特記があるファイルを除き public domain
+- manuelmhtr / countries-and-timezones  
+  https://github.com/manuelmhtr/countries-and-timezones
+- ライセンス: **MIT License**  
+  https://github.com/manuelmhtr/countries-and-timezones/blob/master/LICENSE
+
+orbitは完全なtzdbを収録・実行するのではなく、orbitに収録した地名について、標準UTC差と共通DSTルールIDを小さな表として保持し、Place time表示時にorbit内部で現地日時を計算します。
+
+タイムゾーンやDST制度は各国・地域の政策によって変更されることがあります。そのため、このPlace timeデータは静的な近似データであり、制度変更時には更新が必要になる場合があります。法的に厳密な時刻や安全上重要な用途には使用しないでください。
 
 ### 作者
 
-onishi(R8/9/21)
+onishi
