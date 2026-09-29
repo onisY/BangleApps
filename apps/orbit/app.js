@@ -25,8 +25,6 @@
     var ds=isFinite(cfg.dateSize)?(cfg.dateSize|0):22,ts=isFinite(cfg.timeSize)?(cfg.timeSize|0):22;
     set("datePos",Math.max(0,Math.min(2,dp)));set("timePos",Math.max(0,Math.min(2,tp)));
     set("dateSize",Math.max(12,Math.min(30,ds)));set("timeSize",Math.max(12,Math.min(30,ts)));
-    /* Bangle time remains the default. Place time is opt-in. */
-    set("timeSource",(cfg.timeSource===1||cfg.timeSource==="1")?1:0);
 
     var lat,lon;
     if(cfg.coordVersion!==2){
@@ -86,9 +84,6 @@
   var TESTLON=Math.max(-180,Math.min(180,+cfg.manualLon));
   var VIEW_SOUTH=!!cfg.viewSide;
   var DATEPOS=cfg.datePos|0,TIMEPOS=cfg.timePos|0,DATESIZE=cfg.dateSize|0,TIMESIZE=cfg.timeSize|0;
-  var TIMESOURCE=cfg.timeSource===1?1:0;
-  var PLACETZ=isFinite(cfg.tzBase)?+cfg.tzBase:NaN;
-  var PLACEDST=isFinite(cfg.tzRule)?(cfg.tzRule|0):0;
   /* Copy only location fields needed by the clock; place tables stay unloaded.
      The saved label is also used as a recovery cue for older/stale source flags. */
   var savedLocName=cfg.locName||"",savedLocPref=cfg.locPref||"";
@@ -167,110 +162,6 @@
   function virtualNowMs(){return Date.now()+selectedDayOffset*86400000;}
   function virtualDate(){return new Date(virtualNowMs());}
 
-  /* Espruino's Date local getters obey the Bangle timezone/DST setting.
-     Astronomical calculations must not, so UTC parts are parsed from ISO,
-     whose Espruino representation is always GMT. */
-  function utcParts(ms){
-    var z=new Date(ms).toISOString();
-    return {y:+z.substr(0,4),m:+z.substr(5,2),d:+z.substr(8,2),
-      h:+z.substr(11,2),mi:+z.substr(14,2),s:+z.substr(17,2)};
-  }
-  function localParts(ms){
-    var d=new Date(ms);
-    return {y:d.getFullYear(),m:d.getMonth()+1,d:d.getDate(),
-      h:d.getHours(),mi:d.getMinutes(),s:d.getSeconds()};
-  }
-  function daysInMonth(y,m){
-    if(m===2)return ((y%4===0&&y%100!==0)||y%400===0)?29:28;
-    return [31,0,31,30,31,30,31,31,30,31,30,31][m-1];
-  }
-  function utcMs(y,m,d,h,mi){
-    return Date.parse(y+"-"+pad(m)+"-"+pad(d)+"T"+pad(h||0)+":"+pad(mi||0)+":00Z");
-  }
-  function weekdayUTC(y,m,d){
-    var w=(Math.floor(utcMs(y,m,d,0,0)/86400000)+4)%7;
-    return w<0?w+7:w;
-  }
-  function nthDow(y,m,dow,n){
-    return 1+((dow-weekdayUTC(y,m,1)+7)%7)+7*(n-1);
-  }
-  function lastDow(y,m,dow){
-    var d=daysInMonth(y,m);
-    return d-((weekdayUTC(y,m,d)-dow+7)%7);
-  }
-  function localTransition(y,m,d,h,mi,offsetMin){
-    return utcMs(y,m,d,h,mi)-offsetMin*60000;
-  }
-
-  /* Compact civil-time rules used only by Place time.
-     Rule ids are stored in orbittz; astronomy never calls this function. */
-  function placeOffset(ms){
-    var base=PLACETZ,rule=PLACEDST;
-    if(!isFinite(base))return 0;
-    if(!rule)return base;
-    var y=utcParts(ms).y,start=0,end=0,day;
-
-    if(rule===1){ /* Europe: last Sun Mar/Oct, 01:00 UTC */
-      start=utcMs(y,3,lastDow(y,3,0),1,0);
-      end=utcMs(y,10,lastDow(y,10,0),1,0);
-    }else if(rule===2){ /* US/Canada: local 02:00 */
-      start=localTransition(y,3,nthDow(y,3,0,2),2,0,base);
-      end=localTransition(y,11,nthDow(y,11,0,1),2,0,base+60);
-    }else if(rule===3){ /* SE Australia */
-      start=localTransition(y,10,nthDow(y,10,0,1),2,0,base);
-      end=localTransition(y,4,nthDow(y,4,0,1),3,0,base+60);
-    }else if(rule===4){ /* New Zealand */
-      start=localTransition(y,9,lastDow(y,9,0),2,0,base);
-      end=localTransition(y,4,nthDow(y,4,0,1),3,0,base+60);
-    }else if(rule===5){ /* Cuba */
-      start=localTransition(y,3,nthDow(y,3,0,2),0,0,base);
-      end=localTransition(y,11,nthDow(y,11,0,1),1,0,base+60);
-    }else if(rule===6){ /* Chile: midnight after first Sat */
-      day=nthDow(y,9,6,1);
-      start=localTransition(y,9,day,0,0,base)+86400000;
-      day=nthDow(y,4,6,1);
-      end=localTransition(y,4,day,0,0,base+60)+86400000;
-    }else if(rule===7){ /* Egypt: last Fri Apr to midnight after last Thu Oct */
-      start=localTransition(y,4,lastDow(y,4,5),0,0,base);
-      day=lastDow(y,10,4);
-      end=localTransition(y,10,day,0,0,base+60)+86400000;
-    }else if(rule===8){ /* Israel */
-      day=lastDow(y,3,0)-2;
-      start=localTransition(y,3,day,2,0,base);
-      end=localTransition(y,10,lastDow(y,10,0),2,0,base+60);
-    }else if(rule===9){ /* Palestine */
-      start=localTransition(y,3,lastDow(y,3,6),2,0,base);
-      end=localTransition(y,10,lastDow(y,10,6),2,0,base+60);
-    }else if(rule===10){ /* Lebanon */
-      start=localTransition(y,3,lastDow(y,3,0),0,0,base);
-      end=localTransition(y,10,lastDow(y,10,0),0,0,base+60);
-    }else if(rule===11){ /* Morocco: UTC+1 except Ramadan suspension.
-                            tzdb-projected transition windows, 2025-2036. */
-      var mr=[
-        [2025,2,23,2025,4,6],[2026,2,15,2026,3,22],[2027,2,7,2027,3,14],
-        [2028,1,23,2028,3,5],[2029,1,14,2029,2,18],[2029,12,30,2030,2,10],
-        [2030,12,22,2031,1,26],[2031,12,14,2032,1,18],[2032,11,28,2033,1,9],
-        [2033,11,20,2033,12,25],[2034,11,5,2034,12,17],
-        [2035,10,28,2035,12,9],[2036,10,19,2036,11,23]
-      ];
-      for(var k=0;k<mr.length;k++){
-        var q=mr[k],a=utcMs(q[0],q[1],q[2],2,0),b=utcMs(q[3],q[4],q[5],2,0);
-        if(ms>=a&&ms<b)return 0;
-      }
-      return base;
-    }else return base;
-
-    /* Southern-hemisphere rules cross New Year. */
-    var active=start<end?(ms>=start&&ms<end):(ms>=start||ms<end);
-    return base+(active?60:0);
-  }
-
-  function displayParts(ms){
-    if(TIMESOURCE===1&&LOCMODE===0&&isFinite(PLACETZ))
-      return utcParts(ms+placeOffset(ms)*60000);
-    return localParts(ms);
-  }
-
   function layoutBodies(){
     /* Place the Moon envelope tangent to the left and bottom screen edges. */
     var env=MOONORBIT+MOONR;
@@ -283,25 +174,26 @@
     SUNY=24+sunOuter;
   }
 
-  function dayOfYearUTC(p){
+  function dayOfYear(d){
     var md=[0,31,59,90,120,151,181,212,243,273,304,334];
-    var n=md[p.m-1]+p.d;
-    if(p.m>2&&((p.y%4===0&&p.y%100!==0)||p.y%400===0))n++;
+    var n=md[d.getMonth()]+d.getDate();
+    var y=d.getFullYear();
+    if(d.getMonth()>1 && ((y%4===0 && y%100!==0)||y%400===0))n++;
     return n;
   }
 
-  function solarPosition(ms,lat,lon){
-    var p=utcParts(ms);
-    var n=dayOfYearUTC(p);
-    var hour=p.h+p.mi/60+p.s/3600;
+  function solarPosition(d,lat,lon){
+    var n=dayOfYear(d);
+    var hour=d.getHours()+d.getMinutes()/60+d.getSeconds()/3600;
     var g0=2*Math.PI/365*(n-1+(hour-12)/24);
     var eq=229.18*(0.000075+0.001868*Math.cos(g0)-0.032077*Math.sin(g0)
       -0.014615*Math.cos(2*g0)-0.040849*Math.sin(2*g0));
     var dec=0.006918-0.399912*Math.cos(g0)+0.070257*Math.sin(g0)
       -0.006758*Math.cos(2*g0)+0.000907*Math.sin(2*g0)
       -0.002697*Math.cos(3*g0)+0.00148*Math.sin(3*g0);
-    /* UTC solar time: no Bangle timezone or DST enters this path. */
-    var tst=hour*60+eq+4*lon;
+    var tz=0;
+    try{tz=-d.getTimezoneOffset()/60;}catch(e){}
+    var tst=hour*60+eq+4*lon-60*tz;
     while(tst<0)tst+=1440;
     while(tst>=1440)tst-=1440;
     var ha=rad(tst/4-180),la=rad(lat);
@@ -316,7 +208,7 @@
   }
 
   function safeSolar(){
-    try{return solarPosition(virtualNowMs(),TESTLAT,TESTLON);}
+    try{return solarPosition(virtualDate(),TESTLAT,TESTLON);}
     catch(e){return {az:0,el:-99,ha:0,dec:0};}
   }
 
@@ -481,7 +373,7 @@
   function drawHeaderClock(){
     if(killed||mode!=="orbit"||(DATEPOS!==0&&TIMEPOS!==0))return;
     var gap=topFreeGap();if(!gap)return;
-    var d=displayParts(virtualNowMs()),date=pad(d.m)+pad(d.d),time=pad(d.h)+pad(d.mi);
+    var d=virtualDate(),date=pad(d.getMonth()+1)+pad(d.getDate()),time=pad(d.getHours())+pad(d.getMinutes());
     var size=20,showDate=DATEPOS===0,showTime=TIMEPOS===0,space=(showDate&&showTime)?" ":"";
     var txt=(showDate?date:"")+space+(showTime?time:"");
     var maxW=Math.max(1,gap[1]-gap[0]-2);
@@ -498,7 +390,7 @@
   function screenGroup(pos,m){
     var hasDate=DATEPOS===pos,hasTime=TIMEPOS===pos;
     if(!hasDate&&!hasTime)return;
-    var d=displayParts(virtualNowMs()),date=pad(d.m)+pad(d.d),time=pad(d.h)+pad(d.mi);
+    var d=virtualDate(),date=pad(d.getMonth()+1)+pad(d.getDate()),time=pad(d.getHours())+pad(d.getMinutes());
     g.setFont("Vector",DATESIZE);var dw=hasDate?g.stringWidth(date):0;
     g.setFont("Vector",TIMESIZE);var tw=hasTime?g.stringWidth(time):0;
     var w=Math.max(dw,tw),h=(hasDate?DATESIZE+1:0)+(hasDate&&hasTime?2:0)+(hasTime?TIMESIZE+1:0);
