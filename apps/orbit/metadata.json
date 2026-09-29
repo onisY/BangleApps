@@ -31,10 +31,6 @@
       "url": "locations.js"
     },
     {
-      "name": "orbittz",
-      "url": "timezone.js"
-    },
-    {
       "name": "orbitjp.dat",
       "url": "japan-municipalities.dat"
     },
