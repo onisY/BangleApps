@@ -1,4 +1,4 @@
-/* orbit 0.05 stable: settings and editable event data. */
+/* tenkyugi 0.06: settings and editable event data. */
 (function(back){
   var Storage=require("Storage");
   var C,P,JPI;
@@ -71,6 +71,8 @@
     if(!isFinite(s.datePos))s.datePos=1;if(!isFinite(s.timePos))s.timePos=2;
     if(!isFinite(s.dateSize))s.dateSize=22;if(!isFinite(s.timeSize))s.timeSize=22;
     set("timeSource",(s.timeSource===1||s.timeSource==="1")?1:0);
+    set("orbitHourSize",Math.max(6,Math.min(12,isFinite(s.orbitHourSize)?s.orbitHourSize|0:8)));
+    set("orbitHourStep",[1,2,3,6].indexOf(s.orbitHourStep)>=0?s.orbitHourStep:1);
     s.sunSize=Math.max(6,Math.min(15,s.sunSize|0));
     s.earthSize=Math.max(40,Math.min(45,s.earthSize|0));
     s.moonSize=Math.max(14,Math.min(16,s.moonSize|0));
@@ -262,7 +264,7 @@
       if(fix.fix&&isFinite(fix.lat)&&isFinite(fix.lon)){
         applyGPS(s,fix);stopGPS();
         try{Bangle.buzz(300);}catch(e){}
-        E.showAlert("GPS location saved\n"+gpsLocationText(s),"orbit GPS").then(main);
+        E.showAlert("GPS location saved\n"+gpsLocationText(s),"tenkyugi GPS").then(main);
         return;
       }
       showGPSProgress(s,false);
@@ -271,7 +273,7 @@
     try{Bangle.setGPSPower(1,GPS_ID);}
     catch(e){
       stopGPS();
-      E.showAlert("Could not start GPS","orbit GPS").then(function(){gpsMenu(s);});
+      E.showAlert("Could not start GPS","tenkyugi GPS").then(function(){gpsMenu(s);});
       return;
     }
     showGPSProgress(s,true);
@@ -280,7 +282,7 @@
     var prefix=s.locationMode===0?(s.locPref||"Place"):(s.locationMode===2?"GPS":"Manual");
     E.showAlert(prefix+" / "+(s.locName||"")+
       "\nLat "+Number(s.manualLat).toFixed(3)+
-      "\nLon "+Number(s.manualLon).toFixed(3),"orbit location")
+      "\nLon "+Number(s.manualLon).toFixed(3),"tenkyugi location")
       .then(next||function(){locationMenu(s);});
   }
 
@@ -485,8 +487,8 @@
     var s=appCfg(),c=calCfg();
     var minOrbit=s.earthSize+s.moonSize+4;
     if(s.moonOrbit<minOrbit){s.moonOrbit=minOrbit;write(CFG,s);}
-    var m={"":{title:"orbit"},"< Back":leave,
-      "Exit to orbit":exitToOrbit,
+    var m={"":{title:"tenkyugi"},"< Back":leave,
+      "Exit to tenkyugi":exitToOrbit,
       "Location":function(){locationMenu(s);},
       "Time source":{value:s.timeSource,min:0,max:1,step:1,
         format:function(v){return v?"Place":"Bangle";},
@@ -510,6 +512,11 @@
       },
       "Date size":{value:s.dateSize,min:12,max:30,step:2,onchange:function(v){s.dateSize=v;write(CFG,s);}},
       "Time size":{value:s.timeSize,min:12,max:30,step:2,onchange:function(v){s.timeSize=v;write(CFG,s);}},
+      "Hour size":{value:s.orbitHourSize,min:6,max:12,step:1,onchange:function(v){s.orbitHourSize=v;write(CFG,s);}},
+      "Hour step":{value:[1,2,3,6].indexOf(s.orbitHourStep),min:0,max:3,step:1,
+        format:function(v){return [1,2,3,6][v]+" h";},
+        onchange:function(v){s.orbitHourStep=[1,2,3,6][v];write(CFG,s);}
+      },
       "Sun size":{value:s.sunSize,min:6,max:15,step:1,onchange:function(v){s.sunSize=v;write(CFG,s);}},
       "Earth size":{value:s.earthSize,min:40,max:45,step:1,onchange:function(v){
         s.earthSize=v;var mn=s.earthSize+s.moonSize+4;if(s.moonOrbit<mn)s.moonOrbit=mn;

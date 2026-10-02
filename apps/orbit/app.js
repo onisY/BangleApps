@@ -1,4 +1,4 @@
-/* orbit 0.05 stable */
+/* tenkyugi 0.06 (orbit-compatible storage) */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbit.json";
@@ -27,6 +27,8 @@
     set("dateSize",Math.max(12,Math.min(30,ds)));set("timeSize",Math.max(12,Math.min(30,ts)));
     /* Bangle time remains the default. Place time is opt-in. */
     set("timeSource",(cfg.timeSource===1||cfg.timeSource==="1")?1:0);
+    set("orbitHourSize",Math.max(6,Math.min(12,isFinite(cfg.orbitHourSize)?cfg.orbitHourSize|0:8)));
+    set("orbitHourStep",[1,2,3,6].indexOf(cfg.orbitHourStep)>=0?cfg.orbitHourStep:1);
 
     var lat,lon;
     if(cfg.coordVersion!==2){
@@ -87,6 +89,8 @@
   var VIEW_SOUTH=!!cfg.viewSide;
   var DATEPOS=cfg.datePos|0,TIMEPOS=cfg.timePos|0,DATESIZE=cfg.dateSize|0,TIMESIZE=cfg.timeSize|0;
   var TIMESOURCE=cfg.timeSource===1?1:0;
+  var HOURSIZE=cfg.orbitHourSize|0,HOURSTEP=cfg.orbitHourStep|0;
+  var ROMAN=["XII","I","II","III","IV","V","VI","VII","VIII","IX","X","XI"];
   var PLACETZ=isFinite(cfg.tzBase)?+cfg.tzBase:NaN;
   var PLACEDST=isFinite(cfg.tzRule)?(cfg.tzRule|0):0;
   /* Copy only location fields needed by the clock; place tables stay unloaded.
@@ -711,6 +715,23 @@
     return m;
   }
 
+
+  function drawOrbitHours(sol){
+    /* A revolution is 24 hours. Anchor civil hours to the observer's
+       zenith line, including the selected time source and DST. */
+    var p=displayParts(virtualNowMs());
+    var hour=p.h+p.mi/60+p.s/3600,dir=VIEW_SOUTH?1:-1;
+    var base=SUNANG+dir*(sol.ha-hour*Math.PI/12);
+    var radius=MOONORBIT+7;
+    g.setBgColor(BLACK).setColor(WHITE).setFont("Vector",HOURSIZE).setFontAlign(0,0);
+    for(var h=0;h<24;h+=HOURSTEP){
+      var a=base+dir*h*Math.PI/12;
+      var x=Math.round(EARTHX+radius*Math.cos(a));
+      var y=Math.round(EARTHY+radius*Math.sin(a));
+      g.drawString(ROMAN[h%12],x,y,true);
+    }
+  }
+
   function drawObserver(sol){
     var sunAng=Math.atan2(SUNY-EARTHY,SUNX-EARTHX);
     var rr=EARTHR*Math.cos(rad(TESTLAT));
@@ -838,6 +859,7 @@
     drawSun();
     var sol=safeSolar();
     drawEarth(sol);
+    drawOrbitHours(sol);
     drawObserver(sol);
     var moon=drawMoon();
     drawLocationStatus(moon);

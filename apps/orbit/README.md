@@ -1,8 +1,8 @@
 <!-- English -->
 
-# orbit
+# tenkyugi
 
-**orbit 0.05 stable**
+**tenkyugi 0.06**
 
 A clock app for Bangle.js 2 that lets you read the time, the phases of the Moon and related information from the relative positions of the Sun, Earth and Moon.
 
@@ -74,6 +74,16 @@ Changing **Time source** never changes the Sun / Earth / Moon geometry. The astr
 Place time is available only for **Place name** locations. Manual and GPS locations do not contain enough information to determine a legal civil time zone reliably, so they fall back to Bangle time.
 
 orbit does not change the Bangle.js system time zone or DST setting when Place time is used. The conversion is performed only inside orbit.
+
+### Roman hour scale
+
+Roman numerals sit just outside the lunar orbit. A revolution represents 24 hours, so I–XII occur twice. The labels follow **Time source** (Bangle / Place) and align with the observer's zenith direction; XII is not necessarily on the Earth–Sun line because civil noon differs from apparent solar noon.
+
+- **Hour size**: 6–12 pixels (default 8).
+- **Hour step**: Show every 1, 2, 3 or 6 hours (default 1).
+- The Moon and status/date/time overlays take priority where they overlap the scale. Large orbit/font settings can hide some labels at the screen or widget boundary.
+
+The display name is tenkyugi. The internal app ID and storage filenames remain `orbit` so existing settings, locations and events are retained.
 
 ### Other settings
 
@@ -207,9 +217,9 @@ onisY
 
 <!-- 日本語 -->
 
-# orbit
+# tenkyugi
 
-**orbit 0.05 stable**
+**tenkyugi 0.06**
 
 Bangle.js 2 用の、太陽・地球・月の位置関係から時刻、月の満ち欠け等を読み取る時計アプリです。
 
@@ -282,6 +292,16 @@ orbitが文字として表示する日付・時刻は、天体配置の計算と
 Place timeを利用できるのは **Place name** で地点を選択した場合です。Manual/GPSの緯度・経度だけから法的なタイムゾーン境界を正確に特定することはできないため、Manual/GPSではBangle timeへフォールバックします。
 
 Place timeを使用しても、Bangle.js本体のタイムゾーン設定やDST設定は変更しません。現地時刻への変換はorbitの内部だけで行います。
+
+### ローマ数字の時刻目盛り
+
+月の軌道の少し外側にローマ数字を表示します。一周が24時間に対応するため、Ⅰ〜Ⅻを午前・午後の2回配置します。数字の位置は **Time source**（Bangle / Place）に従い、設定地点の天頂線に対応します。標準時と真太陽時には差があるため、Ⅻが太陽方向と一致するとは限りません。
+
+- **Hour size**：文字サイズ6〜12ピクセル（初期値8）。
+- **Hour step**：1・2・3・6時間おきに表示（初期値1）。
+- 月・地名・日付・時刻を優先して描画します。軌道や文字を大きくすると、一部の数字が画面端やウィジェットに隠れる場合があります。
+
+表示名はtenkyugiですが、内部IDと保存ファイル名は `orbit` を維持し、既存の設定・地名・イベントを引き継ぎます。
 
 ### その他の設定
 
