@@ -1,7 +1,17 @@
-/* tenkyugi 0.06 (orbit-compatible storage) */
+/* tenkyugi 0.06 (tenkyugi storage) */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
-  var Storage=require("Storage"),CFGFILE="orbit.json";
+  var Storage=require("Storage"),CFGFILE="tenkyugi.json";
+  /* Copy legacy user data only when this app has no corresponding file. */
+  (function(){
+    ["json","cal.json","events.json"].forEach(function(suffix){
+      var target="tenkyugi."+suffix;
+      if(Storage.read(target)!==undefined)return;
+      var legacy=Storage.read("orbit."+suffix);
+      if(legacy!==undefined)Storage.write(target,legacy);
+    });
+  })();
+
   var cfg=Storage.readJSON(CFGFILE,1)||{};
   var sysCfg=Storage.readJSON("setting.json",1)||{};
   var VIEWLIGHT_MS=isFinite(sysCfg.timeout)?Math.max(0,+sysCfg.timeout)*1000:10000;
@@ -58,16 +68,16 @@
     if(changed)try{Storage.writeJSON(CFGFILE,cfg);}catch(e){}
   })();
   /* GPS is settings-only; release any stale settings-owned request. */
-  try{Bangle.setGPSPower(0,"orbitsettings");}catch(e){}
+  try{Bangle.setGPSPower(0,"tenkyugisettings");}catch(e){}
   var calModule,calendar;
   try{
-    var calSource=Storage.read("orbit.cal.js");
+    var calSource=Storage.read("tenkyugi.cal.js");
     if(calSource){calModule=eval(calSource);calendar=calModule.create();}
     calSource=undefined;
   }catch(calErr){calModule=undefined;calendar=undefined;}
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800,GREEN=0x04C0;
   var busy=false,killed=false,minuteTimer,timeTimer,idleTimer,tapTimer;
-  var mode="orbit",interactive=true,tapCount=0,resetOnWake=false;
+  var mode="tenkyugi",interactive=true,tapCount=0,resetOnWake=false;
   var selectedDayOffset=0,hasSelectedDate=false;
   var nativeDrawWidgets,widgetDrawWrapper;
   var SUNR=Math.max(6,Math.min(15,cfg.sunSize|0));
@@ -207,7 +217,7 @@
   }
 
   /* Compact civil-time rules used only by Place time.
-     Rule ids are stored in orbittz; astronomy never calls this function. */
+     Rule ids are stored in tenkyugitz; astronomy never calls this function. */
   function placeOffset(ms){
     var base=PLACETZ,rule=PLACEDST;
     if(!isFinite(base))return 0;
@@ -483,7 +493,7 @@
   }
 
   function drawHeaderClock(){
-    if(killed||mode!=="orbit"||(DATEPOS!==0&&TIMEPOS!==0))return;
+    if(killed||mode!=="tenkyugi"||(DATEPOS!==0&&TIMEPOS!==0))return;
     var gap=topFreeGap();if(!gap)return;
     var d=displayParts(virtualNowMs()),date=pad(d.m)+pad(d.d),time=pad(d.h)+pad(d.mi);
     var size=20,showDate=DATEPOS===0,showTime=TIMEPOS===0,space=(showDate&&showTime)?" ":"";
@@ -535,7 +545,7 @@
     clear(timeTimer);
     timeTimer=setTimeout(function(){
       timeTimer=undefined;
-      if(!killed&&mode==="orbit"){
+      if(!killed&&mode==="tenkyugi"){
         if(TIMEPOS===0)drawHeaderClock();else screenGroup(TIMEPOS,MOON_CACHE_DATA);
         try{g.flip();}catch(e){}
         armTime();
@@ -896,12 +906,12 @@
 
   function armIdle(){
     clear(idleTimer);
-    if(mode!=="orbit"||!interactive)return;
+    if(mode!=="tenkyugi"||!interactive)return;
     if(VIEWLIGHT_MS>0)idleTimer=setTimeout(goIdle,VIEWLIGHT_MS);
   }
 
   function startInteraction(){
-    if(killed||mode!=="orbit")return;
+    if(killed||mode!=="tenkyugi")return;
     interactive=true;
     try{Bangle.setLocked(false);}catch(e){}
     try{if(!Bangle.isLCDOn())Bangle.setLCDPower(1);}catch(e){}
@@ -922,7 +932,7 @@
   function startOrbit(keepInteractive){
     if(killed)return;
     if(calendar&&calendar.isActive())calendar.stop();
-    mode="orbit";
+    mode="tenkyugi";
     busy=false;
     drawBase();
     armMinute();
@@ -950,7 +960,7 @@
 
 
   function openCalendar(){
-    if(killed||mode!=="orbit")return;
+    if(killed||mode!=="tenkyugi")return;
     stopOrbitTimers();
     mode="calendar";
     interactive=false;
@@ -986,24 +996,24 @@
         }
       });
     }catch(e){
-      mode="orbit";
+      mode="tenkyugi";
       busy=false;
       startOrbit(true);
     }
   }
 
   function openSettings(){
-    if(killed||mode!=="orbit")return;
+    if(killed||mode!=="tenkyugi")return;
     stopOrbitTimers();
-    var src=Storage.read("orbit.settings.js");
+    var src=Storage.read("tenkyugi.settings.js");
     if(!src){startOrbit(true);return;}
     cleanup();
     try{
       var fn=eval(src);
-      if(typeof fn==="function")fn(function(){load("orbit.app.js");});
-      else load("orbit.app.js");
+      if(typeof fn==="function")fn(function(){load("tenkyugi.app.js");});
+      else load("tenkyugi.app.js");
     }catch(e){
-      load("orbit.app.js");
+      load("tenkyugi.app.js");
     }
   }
 
@@ -1013,7 +1023,7 @@
       if(calendar)calendar.touch(xy);
       return;
     }
-    if(mode!=="orbit"||busy)return;
+    if(mode!=="tenkyugi"||busy)return;
     try{if(!Bangle.isLCDOn())return;}catch(e){}
 
     tapCount++;
@@ -1021,7 +1031,7 @@
       clear(tapTimer);
       tapTimer=setTimeout(function(){
         tapTimer=undefined;
-        if(killed||mode!=="orbit")return;
+        if(killed||mode!=="tenkyugi")return;
         tapCount=0;
         openCalendar();
       },400);
@@ -1039,11 +1049,11 @@
   }
 
   function onFaceUp(up){
-    if(up&&mode==="orbit")startInteraction();
+    if(up&&mode==="tenkyugi")startInteraction();
   }
 
   function onTwist(){
-    if(mode==="orbit")startInteraction();
+    if(mode==="tenkyugi")startInteraction();
   }
 
   function onLCD(on){
@@ -1053,7 +1063,7 @@
       interactive=false;
 
       if(mode==="calendar"&&calendar)calendar.stop();
-      if(mode!=="orbit"){
+      if(mode!=="tenkyugi"){
         /* Preserve the selected calendar date across LCD power cycles. */
         resetOnWake=true;
       }
@@ -1064,7 +1074,7 @@
       resetOnWake=false;
       startOrbit(false);
     }
-    if(mode==="orbit"){
+    if(mode==="tenkyugi"){
       interactive=true;
       try{Bangle.setBacklight(true);}catch(e){}
       armIdle();
@@ -1081,7 +1091,7 @@
     clear(minuteTimer);
     minuteTimer=setTimeout(function(){
       minuteTimer=undefined;
-      if(!killed&&mode==="orbit"){drawBase();armMinute();}
+      if(!killed&&mode==="tenkyugi"){drawBase();armMinute();}
     },60000-(Date.now()%60000)+25);
   }
 

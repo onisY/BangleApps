@@ -1,10 +1,20 @@
 /* tenkyugi 0.06: settings and editable event data. */
 (function(back){
   var Storage=require("Storage");
+  /* Copy legacy user data only when this app has no corresponding file. */
+  (function(){
+    ["json","cal.json","events.json"].forEach(function(suffix){
+      var target="tenkyugi."+suffix;
+      if(Storage.read(target)!==undefined)return;
+      var legacy=Storage.read("orbit."+suffix);
+      if(legacy!==undefined)Storage.write(target,legacy);
+    });
+  })();
+
   var C,P,JPI;
-  var JPFILE="orbitjp.dat",jpPrefCache=-1,jpMunicipalities;
-  var CFG="orbit.json",CAL="orbit.cal.json",EVENTS="orbit.events.json";
-  var GPS_ID="orbitsettings";
+  var JPFILE="tenkyugijp.dat",jpPrefCache=-1,jpMunicipalities;
+  var CFG="tenkyugi.json",CAL="tenkyugi.cal.json",EVENTS="tenkyugi.events.json";
+  var GPS_ID="tenkyugisettings";
   var COLORS=["red","yellow","green","blue","cyan","magenta","orange","white","gray","black"];
   var TYPES=["holiday","family","birthday","custom"];
   var TYPE_NAMES=["Holiday","Anniversary","Birthday","Other"];
@@ -18,7 +28,7 @@
   /* Load place tables lazily and release them when location editing ends. */
   function loadPlaceIndex(){
     if(C&&P)return;
-    var d=require("orbitloc");
+    var d=require("tenkyugiloc");
     C=d.countries;P=d.prefs;JPI=d.jpidx||[];
     d=undefined;
   }
@@ -32,8 +42,8 @@
     try{
       if(typeof Modules!=="undefined"&&Modules.getCached){
         var mc=Modules.getCached();
-        if(mc.includes("orbitloc"))Modules.removeCached("orbitloc");
-        if(mc.includes("orbittz"))Modules.removeCached("orbittz");
+        if(mc.includes("tenkyugiloc"))Modules.removeCached("tenkyugiloc");
+        if(mc.includes("tenkyugitz"))Modules.removeCached("tenkyugitz");
       }
     }catch(e){}
   }
@@ -178,7 +188,7 @@
   function placeTimeData(q){
     var t;
     try{
-      var z=require("orbittz");
+      var z=require("tenkyugitz");
       t=z.get(q.ci,q.pi);
       z=undefined;
     }catch(e){t=undefined;}
@@ -375,16 +385,16 @@
   // ---------- Holiday cache ----------
   function cacheInfo(){
     var out={jp:0,ew:0,sc:0,ni:0,total:0};
-    Storage.list(/^orh[0-9]+(jp|ew|sc|ni)[0-9][0-9][0-9][0-9]$/).forEach(function(f){
-      var m=/^orh[0-9]+(jp|ew|sc|ni)[0-9][0-9][0-9][0-9]$/.exec(f);
+    Storage.list(/^tenh[0-9]+(jp|ew|sc|ni)[0-9][0-9][0-9][0-9]$/).forEach(function(f){
+      var m=/^tenh[0-9]+(jp|ew|sc|ni)[0-9][0-9][0-9][0-9]$/.exec(f);
       if(m){out[m[1]]++;out.total++;}
     });
     return out;
   }
   function clearCache(region,cb){
     var n=0;
-    Storage.list(/^orh[0-9]+(jp|ew|sc|ni)[0-9][0-9][0-9][0-9]$/).forEach(function(f){
-      var m=/^orh[0-9]+(jp|ew|sc|ni)[0-9][0-9][0-9][0-9]$/.exec(f);
+    Storage.list(/^tenh[0-9]+(jp|ew|sc|ni)[0-9][0-9][0-9][0-9]$/).forEach(function(f){
+      var m=/^tenh[0-9]+(jp|ew|sc|ni)[0-9][0-9][0-9][0-9]$/.exec(f);
       if(m&&(!region||m[1]===region)){Storage.erase(f);n++;}
     });
     E.showAlert("Deleted "+n,"Holiday cache").then(cb);
@@ -478,7 +488,7 @@
   function exitToOrbit(){
     stopGPS();releasePlaceData();
     try{E.removeListener("kill",onKill);}catch(e){}
-    load("orbit.app.js");
+    load("tenkyugi.app.js");
   }
   function onKill(){stopGPS();releasePlaceData();}
 

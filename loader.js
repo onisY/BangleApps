@@ -374,34 +374,65 @@ window.addEventListener('load', (event) => {
 });
 
 function onAppJSONLoaded() {
-  // Personal fork production safeguard.  If a browser somehow receives an
-  // older generated apps.json, keep the new production orbit installable.
-  if (!appJSON.find(a => a.id === "orbit")) {
+  // Keep stale cached lists consistent with the renamed app.
+  appJSON = appJSON.filter(a => a.id !== "orbit");
+  if (!appJSON.find(a => a.id === "tenkyugi")) {
     appJSON.push({
-      id:"orbit",
-      name:"orbit",
-      shortName:"orbit",
-      version:"0.032",
-      author:"onisY",
-      description:"Sun-Earth-Moon clock with North/South view, calendar, explicit Place/Manual/GPS settings, and bottom-right location-source display.",
-      icon:"app.png",
-      type:"clock",
-      tags:"clock,science,astronomy,calendar,moon",
-      supports:["BANGLEJS2"],
-      readme:"README.md",
-      allow_emulator:true,
-      storage:[
-        {name:"orbit.app.js",url:"app.js"},
-        {name:"orbit.cal.js",url:"calendar.js"},
-        {name:"orbit.settings.js",url:"settings.js"},
-        {name:"orbitloc",url:"locations.js"},
-        {name:"orbitjp.dat",url:"japan-municipalities.dat"},
-        {name:"orbit.img",url:"app-icon.js",evaluate:true}
+      "id": "tenkyugi",
+      "name": "tenkyugi",
+      "shortName": "tenkyugi",
+      "version": "0.06",
+      "author": "onisY",
+      "description": "Sun-Earth-Moon clock with integrated calendar and configurable Roman hour scale.",
+      "icon": "app.png",
+      "type": "clock",
+      "tags": "clock,science,astronomy,calendar,moon",
+      "supports": [
+        "BANGLEJS2"
       ],
-      data:[
-        {name:"orbit.json"},
-        {name:"orbit.cal.json"},
-        {name:"orbit.events.json"}
+      "readme": "README.md",
+      "allow_emulator": true,
+      "storage": [
+        {
+          "name": "tenkyugi.app.js",
+          "url": "app.js"
+        },
+        {
+          "name": "tenkyugi.cal.js",
+          "url": "calendar.js"
+        },
+        {
+          "name": "tenkyugi.settings.js",
+          "url": "settings.js"
+        },
+        {
+          "name": "tenkyugiloc",
+          "url": "locations.js"
+        },
+        {
+          "name": "tenkyugitz",
+          "url": "timezone.js"
+        },
+        {
+          "name": "tenkyugijp.dat",
+          "url": "japan-municipalities.dat"
+        },
+        {
+          "name": "tenkyugi.img",
+          "url": "app-icon.js",
+          "evaluate": true
+        }
+      ],
+      "data": [
+        {
+          "name": "tenkyugi.json"
+        },
+        {
+          "name": "tenkyugi.cal.json"
+        },
+        {
+          "name": "tenkyugi.events.json"
+        }
       ]
     });
   }

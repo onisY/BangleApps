@@ -1,5 +1,5 @@
 {
-  "id": "orbit",
+  "id": "tenkyugi",
   "name": "tenkyugi",
   "shortName": "tenkyugi",
   "version": "0.06",
@@ -15,44 +15,44 @@
   "allow_emulator": true,
   "storage": [
     {
-      "name": "orbit.app.js",
+      "name": "tenkyugi.app.js",
       "url": "app.js"
     },
     {
-      "name": "orbit.cal.js",
+      "name": "tenkyugi.cal.js",
       "url": "calendar.js"
     },
     {
-      "name": "orbit.settings.js",
+      "name": "tenkyugi.settings.js",
       "url": "settings.js"
     },
     {
-      "name": "orbitloc",
+      "name": "tenkyugiloc",
       "url": "locations.js"
     },
     {
-      "name": "orbittz",
+      "name": "tenkyugitz",
       "url": "timezone.js"
     },
     {
-      "name": "orbitjp.dat",
+      "name": "tenkyugijp.dat",
       "url": "japan-municipalities.dat"
     },
     {
-      "name": "orbit.img",
+      "name": "tenkyugi.img",
       "url": "app-icon.js",
       "evaluate": true
     }
   ],
   "data": [
     {
-      "name": "orbit.json"
+      "name": "tenkyugi.json"
     },
     {
-      "name": "orbit.cal.json"
+      "name": "tenkyugi.cal.json"
     },
     {
-      "name": "orbit.events.json"
+      "name": "tenkyugi.events.json"
     }
   ]
 }
