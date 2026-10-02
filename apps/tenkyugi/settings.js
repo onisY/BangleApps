@@ -1,4 +1,4 @@
-/* tenkyugi 0.06: settings and editable event data. */
+/* tenkyugi 0.01: settings and editable event data. */
 (function(back){
   var Storage=require("Storage");
   /* Copy legacy user data only when this app has no corresponding file. */

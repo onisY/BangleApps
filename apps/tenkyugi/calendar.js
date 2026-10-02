@@ -1,4 +1,4 @@
-/* orbit 0.04 stable: integrated five-week calendar module. */
+/* tenkyugi 0.01 stable: integrated five-week calendar module. */
 (function(){
   var Storage=require("Storage");
   var CFG_FILE="tenkyugi.cal.json";

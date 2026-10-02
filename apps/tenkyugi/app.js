@@ -1,4 +1,4 @@
-/* tenkyugi 0.06 (tenkyugi storage) */
+/* tenkyugi 0.01 (tenkyugi storage) */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="tenkyugi.json";

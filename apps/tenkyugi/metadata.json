@@ -2,7 +2,7 @@
   "id": "tenkyugi",
   "name": "tenkyugi",
   "shortName": "tenkyugi",
-  "version": "0.06",
+  "version": "0.01",
   "author": "onisY",
   "description": "Sun-Earth-Moon clock with integrated calendar and configurable Roman hour scale.",
   "icon": "app.png",
