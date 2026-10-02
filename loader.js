@@ -375,12 +375,12 @@ window.addEventListener('load', (event) => {
 
 function onAppJSONLoaded() {
   // Keep stale cached lists consistent with the renamed app.
-  appJSON = appJSON.filter(a => a.id !== "orbit");
-  if (!appJSON.find(a => a.id === "tenkyugi")) {
+  appJSON = appJSON.filter(a => a.id !== "orbit" && a.id !== "tenkyugi");
+  if (!appJSON.find(a => a.id === "tenkyu")) {
     appJSON.push({
-      "id": "tenkyugi",
-      "name": "tenkyugi",
-      "shortName": "tenkyugi",
+      "id": "tenkyu",
+      "name": "tenkyu",
+      "shortName": "tenkyu",
       "version": "0.01",
       "author": "onisY",
       "description": "Sun-Earth-Moon clock with integrated calendar and configurable Roman hour scale.",
@@ -394,44 +394,44 @@ function onAppJSONLoaded() {
       "allow_emulator": true,
       "storage": [
         {
-          "name": "tenkyugi.app.js",
+          "name": "tenkyu.app.js",
           "url": "app.js"
         },
         {
-          "name": "tenkyugi.cal.js",
+          "name": "tenkyu.cal.js",
           "url": "calendar.js"
         },
         {
-          "name": "tenkyugi.settings.js",
+          "name": "tenkyu.settings.js",
           "url": "settings.js"
         },
         {
-          "name": "tenkyugiloc",
+          "name": "tenkyuloc",
           "url": "locations.js"
         },
         {
-          "name": "tenkyugitz",
+          "name": "tenkyutz",
           "url": "timezone.js"
         },
         {
-          "name": "tenkyugijp.dat",
+          "name": "tenkyujp.dat",
           "url": "japan-municipalities.dat"
         },
         {
-          "name": "tenkyugi.img",
+          "name": "tenkyu.img",
           "url": "app-icon.js",
           "evaluate": true
         }
       ],
       "data": [
         {
-          "name": "tenkyugi.json"
+          "name": "tenkyu.json"
         },
         {
-          "name": "tenkyugi.cal.json"
+          "name": "tenkyu.cal.json"
         },
         {
-          "name": "tenkyugi.events.json"
+          "name": "tenkyu.events.json"
         }
       ]
     });

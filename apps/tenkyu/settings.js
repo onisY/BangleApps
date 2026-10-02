@@ -1,20 +1,25 @@
-/* tenkyugi 0.01: settings and editable event data. */
+/* tenkyu 0.01: settings and editable event data. */
 (function(back){
   var Storage=require("Storage");
-  /* Copy legacy user data only when this app has no corresponding file. */
+  /* Prefer tenkyugi data, then Orbit; never overwrite tenkyu data. */
   (function(){
     ["json","cal.json","events.json"].forEach(function(suffix){
-      var target="tenkyugi."+suffix;
+      var target="tenkyu."+suffix;
       if(Storage.read(target)!==undefined)return;
-      var legacy=Storage.read("orbit."+suffix);
+      var legacy=Storage.read("tenkyugi."+suffix);
+      if(legacy===undefined)legacy=Storage.read("orbit."+suffix);
       if(legacy!==undefined)Storage.write(target,legacy);
     });
+    var system=Storage.readJSON("setting.json",1);
+    if(system&&(system.clock==="orbit.app.js"||system.clock==="tenkyugi.app.js")){
+      system.clock="tenkyu.app.js";Storage.writeJSON("setting.json",system);
+    }
   })();
 
   var C,P,JPI;
-  var JPFILE="tenkyugijp.dat",jpPrefCache=-1,jpMunicipalities;
-  var CFG="tenkyugi.json",CAL="tenkyugi.cal.json",EVENTS="tenkyugi.events.json";
-  var GPS_ID="tenkyugisettings";
+  var JPFILE="tenkyujp.dat",jpPrefCache=-1,jpMunicipalities;
+  var CFG="tenkyu.json",CAL="tenkyu.cal.json",EVENTS="tenkyu.events.json";
+  var GPS_ID="tenkyusettings";
   var COLORS=["red","yellow","green","blue","cyan","magenta","orange","white","gray","black"];
   var TYPES=["holiday","family","birthday","custom"];
   var TYPE_NAMES=["Holiday","Anniversary","Birthday","Other"];
@@ -28,7 +33,7 @@
   /* Load place tables lazily and release them when location editing ends. */
   function loadPlaceIndex(){
     if(C&&P)return;
-    var d=require("tenkyugiloc");
+    var d=require("tenkyuloc");
     C=d.countries;P=d.prefs;JPI=d.jpidx||[];
     d=undefined;
   }
@@ -42,8 +47,8 @@
     try{
       if(typeof Modules!=="undefined"&&Modules.getCached){
         var mc=Modules.getCached();
-        if(mc.includes("tenkyugiloc"))Modules.removeCached("tenkyugiloc");
-        if(mc.includes("tenkyugitz"))Modules.removeCached("tenkyugitz");
+        if(mc.includes("tenkyuloc"))Modules.removeCached("tenkyuloc");
+        if(mc.includes("tenkyutz"))Modules.removeCached("tenkyutz");
       }
     }catch(e){}
   }
@@ -188,7 +193,7 @@
   function placeTimeData(q){
     var t;
     try{
-      var z=require("tenkyugitz");
+      var z=require("tenkyutz");
       t=z.get(q.ci,q.pi);
       z=undefined;
     }catch(e){t=undefined;}
@@ -274,7 +279,7 @@
       if(fix.fix&&isFinite(fix.lat)&&isFinite(fix.lon)){
         applyGPS(s,fix);stopGPS();
         try{Bangle.buzz(300);}catch(e){}
-        E.showAlert("GPS location saved\n"+gpsLocationText(s),"tenkyugi GPS").then(main);
+        E.showAlert("GPS location saved\n"+gpsLocationText(s),"tenkyu GPS").then(main);
         return;
       }
       showGPSProgress(s,false);
@@ -283,7 +288,7 @@
     try{Bangle.setGPSPower(1,GPS_ID);}
     catch(e){
       stopGPS();
-      E.showAlert("Could not start GPS","tenkyugi GPS").then(function(){gpsMenu(s);});
+      E.showAlert("Could not start GPS","tenkyu GPS").then(function(){gpsMenu(s);});
       return;
     }
     showGPSProgress(s,true);
@@ -292,7 +297,7 @@
     var prefix=s.locationMode===0?(s.locPref||"Place"):(s.locationMode===2?"GPS":"Manual");
     E.showAlert(prefix+" / "+(s.locName||"")+
       "\nLat "+Number(s.manualLat).toFixed(3)+
-      "\nLon "+Number(s.manualLon).toFixed(3),"tenkyugi location")
+      "\nLon "+Number(s.manualLon).toFixed(3),"tenkyu location")
       .then(next||function(){locationMenu(s);});
   }
 
@@ -488,7 +493,7 @@
   function exitToOrbit(){
     stopGPS();releasePlaceData();
     try{E.removeListener("kill",onKill);}catch(e){}
-    load("tenkyugi.app.js");
+    load("tenkyu.app.js");
   }
   function onKill(){stopGPS();releasePlaceData();}
 
@@ -497,8 +502,8 @@
     var s=appCfg(),c=calCfg();
     var minOrbit=s.earthSize+s.moonSize+4;
     if(s.moonOrbit<minOrbit){s.moonOrbit=minOrbit;write(CFG,s);}
-    var m={"":{title:"tenkyugi"},"< Back":leave,
-      "Exit to tenkyugi":exitToOrbit,
+    var m={"":{title:"tenkyu"},"< Back":leave,
+      "Exit to tenkyu":exitToOrbit,
       "Location":function(){locationMenu(s);},
       "Time source":{value:s.timeSource,min:0,max:1,step:1,
         format:function(v){return v?"Place":"Bangle";},

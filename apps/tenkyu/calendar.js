@@ -1,8 +1,8 @@
-/* tenkyugi 0.01 stable: integrated five-week calendar module. */
+/* tenkyu 0.01 stable: integrated five-week calendar module. */
 (function(){
   var Storage=require("Storage");
-  var CFG_FILE="tenkyugi.cal.json";
-  var EVENT_FILE="tenkyugi.events.json";
+  var CFG_FILE="tenkyu.cal.json";
+  var EVENT_FILE="tenkyu.events.json";
   var HOL_CACHE_VER=1,HOL_BYTES=46,HOL_RAM_MAX=2;
   function cacheFileParts(f){
     var m=/^tenh([0-9]+)(jp|ew|sc|ni)([0-9][0-9][0-9][0-9])$/.exec(f);
@@ -560,7 +560,7 @@
       g.setColor(GRAY).drawRect(q.x1,q.y1,q.x2,q.y2);
     }
     function selectedIndex(){if(!selected)return -1;var n=dayNumber(selected)-dayNumber(pageStart);return n>=0&&n<35?n:-1;}
-    function logCalError(stage,e){try{Storage.write("tenkyugi.err","calendar "+stage+": "+e);}catch(x){}}
+    function logCalError(stage,e){try{Storage.write("tenkyu.err","calendar "+stage+": "+e);}catch(x){}}
     function redrawSelected(){var i=selectedIndex();if(i>=0)drawCell(i);}
     function drawSelectedCell(on){
       var i=selectedIndex();if(i<0)return;
