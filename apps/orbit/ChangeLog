@@ -1,2 +1,2 @@
-0.02: Color the observer zenith line green by day and yellow by night; add offline total-eclipse shadow-center markers for six total eclipses in 2021-2030. Refresh at minute boundaries for day/night transitions and eclipse windows.
+0.02: Color the observer zenith line green by day and yellow by night; check color transitions each minute.
 0.01: Release tenkyu under the existing orbit app ID using the refined tenkyu implementation, reorganized settings, configurable Roman hour scale, updated sunrise/sunset rays, reduced display refresh frequency and the new 48x48 globe-and-Moon icon. Default to hidden Roman numerals, date below the Sun, time in the header and Japan / Tokyo / Chiyoda-ku. Use orbit storage/module names without importing standalone tenkyu settings.
