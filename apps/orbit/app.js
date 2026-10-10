@@ -751,6 +751,53 @@
     }
   }
 
+  /* Eclipse Predictions by Fred Espenak, NASA's GSFC.
+     Total-only events, 2021-2030; TDT epoch, deltaT seconds, tan(f2),
+     cubic x/y/d/l2/mu coefficients. See README for source URLs.
+     Unlisted/annular/partial events are omitted. */
+  var ECLIPSES=[[1638604800000,69.8,0.0047198,[0.025194,0.5683012,0.00004,-0.0000092],[-0.983559,-0.1315136,0.0002212,0.0000024],[-22.27472,-0.005178,0.000006,0],[-0.008292,-0.000016,-0.0000131,0],[302.45218,14.997278,0,0]],[1712599200000,70.6,0.004645,[-0.318157,0.5117105,0.0000326,-0.0000085],[0.219747,0.2709586,-0.0000594,-0.0000047],[7.5862,0.014844,-0.000002,0],[-0.010274,0.0000615,-0.0000127,0],[89.59122,15.004084,0,0]],[1786557600000,71.4,0.0045911,[0.475593,0.5189288,-0.0000773,-0.0000088],[0.771161,-0.2301664,-0.0001245,0.0000037],[14.79667,-0.012065,-0.000003,0],[-0.008142,0.0000935,-0.0000121,0],[88.74776,15.003093,0,0]],[1817200800000,71.7,0.0045834,[-0.019645,0.5447105,-0.0000444,-0.0000091],[0.160063,-0.2111569,-0.0001217,0.0000037],[17.76247,-0.010181,-0.000004,0],[-0.015464,0.0000137,-0.0000128,0],[328.42249,15.002093,0,0]],[1847847600000,72.1,0.0045786,[-0.1543,0.5449941,-0.0000226,-0.0000095],[-0.58638,-0.1746077,-0.0001022,0.0000029],[20.18231,-0.007974,-0.000005,0],[-0.010847,-0.0000854,-0.0000122,0],[223.37866,15.001018,0,0]],[1921820400000,77.3,0.0047125,[0.0442,0.5787731,0.0000157,-0.0000099],[-0.392726,-0.0551896,0.0001744,8e-7],[-20.761,-0.007989,0.000005,0],[-0.007886,-0.0000377,-0.000013,0],[288.27457,14.99836,0,0]]];
+  var lastObserverDay,lastEclipseWindow=false;
+  function eclipseWindow(ms){
+    for(var i=0;i<ECLIPSES.length;i++)
+      if(Math.abs(ms+ECLIPSES[i][1]*1000-ECLIPSES[i][0])<=10800000)return ECLIPSES[i];
+  }
+  function eclipseShadow(ms){
+    var e=eclipseWindow(ms);
+    if(!e)return;
+    var t=(ms+e[1]*1000-e[0])/3600000;
+    function poly(c){return ((c[3]*t+c[2])*t+c[1])*t+c[0];}
+    var x=poly(e[3]),y=poly(e[4]),d=rad(poly(e[5]));
+    var sd=Math.sin(d),cd=Math.cos(d),k=1-0.00669438;
+    /* Intersect shadow axis with sun-facing WGS84 ellipsoid. */
+    var aa=cd*cd+sd*sd/k,bb=2*y*sd*cd*(1/k-1);
+    var cc=x*x+y*y*(sd*sd+cd*cd/k)-1;
+    var disc=bb*bb-4*aa*cc;
+    if(disc<0)return;
+    var z=(-bb+Math.sqrt(disc))/(2*aa);
+    var u=z*cd-y*sd,v=y*cd+z*sd;
+    var radius=z*e[2]-poly(e[6]);
+    if(radius<=0)return;
+    var lat=deg(Math.atan2(v/k,Math.sqrt(x*x+u*u)));
+    var lon=deg(Math.atan2(x,u))-poly(e[7])+e[1]*360/86400*1.0027379;
+    lon=((lon+180)%360+360)%360-180;
+    return {lat:lat,lon:lon,radius:radius};
+  }
+  function drawEclipseShadow(sol){
+    var shadow=eclipseShadow(virtualNowMs());
+    if(!shadow||(VIEW_SOUTH?shadow.lat>0:shadow.lat<0))return;
+    var rr=EARTHR*Math.cos(rad(shadow.lat));
+    var a=SUNANG+(VIEW_SOUTH?1:-1)*(sol.ha+rad(shadow.lon-TESTLON));
+    var x=Math.round(EARTHX+rr*Math.cos(a)),y=Math.round(EARTHY+rr*Math.sin(a));
+    /* Minimum 2 px marker; not a physical-scale totality boundary. */
+    var r=Math.max(2,Math.round(EARTHR*shadow.radius));
+    g.setColor(BLACK);
+    for(var dx=-r;dx<=r;dx++)for(var dy=-r;dy<=r;dy++){
+      var ex=x+dx-EARTHX,ey=y+dy-EARTHY;
+      if(dx*dx+dy*dy<=r*r&&ex*ex+ey*ey<=EARTHR*EARTHR)
+        g.setPixel(x+dx,y+dy);
+    }
+  }
+
   function drawObserver(sol){
     var sunAng=Math.atan2(SUNY-EARTHY,SUNX-EARTHX);
     var rr=EARTHR*Math.cos(rad(TESTLAT));
@@ -782,7 +829,8 @@
     /* Draw the 5 px-wide zenith line as one filled quadrilateral. */
     var hw=2;
     var qx=-uy*hw,qy=ux*hw;
-    g.setColor(0x07E0).fillPoly([
+    lastObserverDay=sol.el>=0;
+    g.setColor(lastObserverDay?0x07E0:YELLOW).fillPoly([
       Math.round(x+qx),Math.round(y+qy),
       Math.round(zx+qx),Math.round(zy+qy),
       Math.round(zx-qx),Math.round(zy-qy),
@@ -882,6 +930,8 @@
     drawSun();
     var sol=safeSolar();
     drawEarth(sol);
+    drawEclipseShadow(sol);
+    lastEclipseWindow=!!eclipseWindow(virtualNowMs());
     drawObserver(sol);
     var moon=drawMoon();
     /* Keep hour numerals visible over both sides of the Moon. */
@@ -1107,7 +1157,9 @@
     minuteTimer=setTimeout(function(){
       minuteTimer=undefined;
       if(!killed&&mode==="tenkyu"){
-        if(Math.floor(Date.now()/300000)!==lastBaseBucket)drawBase();
+        if(Math.floor(Date.now()/300000)!==lastBaseBucket ||
+           (safeSolar().el>=0)!==lastObserverDay ||
+           lastEclipseWindow || eclipseWindow(virtualNowMs()))drawBase();
         else{drawTimeOnly();try{g.flip();}catch(e){}}
         armMinute();
       }
