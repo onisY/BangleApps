@@ -2,7 +2,7 @@
 
 # tenkyu
 
-**tenkyu 0.01**
+**tenkyu 0.02**
 
 A clock app for Bangle.js 2 that lets you read the time, the phases of the Moon and related information from the relative positions of the Sun, Earth and Moon.
 
@@ -231,7 +231,7 @@ onisY
 
 # tenkyu
 
-**tenkyu 0.01**
+**tenkyu 0.02**
 
 Bangle.js 2 用の、太陽・地球・月の位置関係から時刻、月の満ち欠け等を読み取る時計アプリです。
 
@@ -457,28 +457,10 @@ tenkyuは完全なtzdbを収録・実行するのではなく、orbitに収録�
 
 onishi
 
-## Day/night line and total-eclipse shadow (0.02)
+## Day/night observer line (0.02)
 
-The observer's zenith line is green while the solar center is at or above the geometric horizon, and yellow below it, matching the existing geometric sunrise/sunset rays. The color is checked each minute, including polar day/night. Atmospheric refraction is not included.
+The line extending from the red observer dot is green when the solar center is at or above the geometric horizon, and yellow when below it. This matches the existing geometric sunrise/sunset definition, without atmospheric refraction. Color transitions are checked each minute, including polar day/night.
 
-A black circular marker overlays the Earth at the lunar umbra's center for the six total eclipses in 2021-2030 (2021-12-04, 2024-04-08, 2026-08-12, 2027-08-02, 2028-07-22, 2030-11-25). It uses offline NASA Besselian elements, their published delta-T, and a WGS84 ellipsoid intersection. Show it only on the displayed North/South hemisphere and only while the central shadow axis intersects Earth. Tiny contact-edge intervals with only an off-axis part of the umbra intersecting Earth are not represented. Partial, annular and hybrid eclipses, and dates outside this dataset, are omitted. The Moon drawing still uses the existing mean-phase model.
+### 位置の赤点から伸びる線の昼夜色（0.02）
 
-The dot is at least 2 pixels in radius for visibility: it marks the center, not the actual outline, width or local visibility of totality. Eclipse windows refresh each minute; normal full redraws remain every five minutes. No network access or new sensors are used. Calendar-selected dates use the same virtual UTC time as the clock.
-
-### 日中・夜間の線と皆既日食の影（0.02）
-
-位置の赤点から伸びる線は、太陽中心が幾何学的な地平線以上なら緑、下なら黄色です。従来の日の出・日の入り線と同じ基準で、毎分確認します。大気差は含みません。
-
-2021〜2030年の6回の皆既日食を収録しました。表示中の北／南半球に本影の中心がある時だけ、地球に黒い丸点を重ねます。NASAの予測データから影の中心位置を計算し、通信・追加センサーは使いません。点は見やすくするため半径2ピクセル以上とし、実際の影の輪郭・幅や、その場所で日食が見える範囲を表すものではありません。影の中心軸が地球から外れる接触端の短い区間、部分日食・金環日食・金環皆既日食、収録期間外は表示しません。月の描画自体は従来の平均月相モデルです。日食の計算時間帯のみ地球を毎分再描画します。
-
-### Data attribution
-
-Eclipse Predictions by Fred Espenak, NASA's GSFC.
-The source pages grant reproduction with acknowledgment. Published polynomial validity windows and delta-T estimates are retained. This is a small-screen approximate display, not an observing tool.
-
-https://eclipse.gsfc.nasa.gov/SEbeselm/SEbeselm2001/SE2021Dec04Tbeselm.html
-https://eclipse.gsfc.nasa.gov/SEbeselm/SEbeselm2001/SE2024Apr08Tbeselm.html
-https://eclipse.gsfc.nasa.gov/SEbeselm/SEbeselm2001/SE2026Aug12Tbeselm.html
-https://eclipse.gsfc.nasa.gov/SEbeselm/SEbeselm2001/SE2027Aug02Tbeselm.html
-https://eclipse.gsfc.nasa.gov/SEbeselm/SEbeselm2001/SE2028Jul22Tbeselm.html
-https://eclipse.gsfc.nasa.gov/SEbeselm/SEbeselm2001/SE2030Nov25Tbeselm.html
+太陽中心が幾何学的な地平線以上なら緑、下なら黄色です。従来の日の出・日の入り線と同じ基準で、大気差は含みません。白夜・極夜を含め毎分色の切り替えを確認します。
