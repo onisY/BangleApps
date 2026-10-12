@@ -2,7 +2,7 @@
 
 # tenkyu
 
-**tenkyu 0.02**
+**tenkyu 0.03**
 
 A clock app for Bangle.js 2 that lets you read the time, the phases of the Moon and related information from the relative positions of the Sun, Earth and Moon.
 
@@ -231,7 +231,7 @@ onisY
 
 # tenkyu
 
-**tenkyu 0.02**
+**tenkyu 0.03**
 
 Bangle.js 2 用の、太陽・地球・月の位置関係から時刻、月の満ち欠け等を読み取る時計アプリです。
 
@@ -464,3 +464,31 @@ The line extending from the red observer dot is green when the solar center is a
 ### 位置の赤点から伸びる線の昼夜色（0.02）
 
 太陽中心が幾何学的な地平線以上なら緑、下なら黄色です。従来の日の出・日の入り線と同じ基準で、大気差は含みません。白夜・極夜を含め毎分色の切り替えを確認します。
+
+
+## Solar eclipse shading (0.03)
+
+Settings → **Solar eclipse → Enabled** turns calculation and shading on or off (default On).
+At the displayed absolute date/time, the Moon's umbra is black. The surrounding penumbra
+reduces average surface brightness using black ordered dithering proportional to the
+fraction of the Sun covered. This is a geometric illustration, not a simulation of
+atmospheric illumination. The red observer dot and its green/yellow line are drawn above
+the shadow. Annular eclipses darken the center without treating it as a total shadow.
+
+Eclipse state and shading update every **30 seconds** during an eclipse. Ordinary dates
+use cheap screening and retain the existing five-minute base redraw. The option Off
+avoids loading eclipse code/data. No GPS, Bluetooth or Internet requests are added.
+A subpixel total shadow has a one-pixel black center marker. Only the hemisphere selected
+in Bodies → View side is shown. Actual watch runtime and battery use remain unmeasured.
+
+### 日食の影（0.03）
+
+設定の **Solar eclipse → Enabled** で計算・表示をオン／オフにできます（初期値オン）。
+表示対象の絶対日時における本影を黒で、半影を太陽の隠れる割合に応じた黒い点描で重ねます。
+大気による散乱光を含む実際の地表照明の再現ではなく、幾何学的な表示です。
+赤い位置点と緑／黄色の線分は、月影より上に描きます。金環日食の中心は部分的に暗くなります。
+
+日食の計算・影の表示は **30秒間隔**です。日食のない日時は軽い判定で詳細計算を省き、
+従来の5分間隔の地球再描画を維持します。オフ時は日食コード・係数を読み込みません。
+GPS・Bluetooth・通信は追加しません。1画素より小さい皆既の影には中心の黒い1画素を表示します。
+Bodies → View sideで選んだ半球だけが表示対象です。実機での計算時間・電池消費は未測定です。
