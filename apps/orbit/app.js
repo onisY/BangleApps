@@ -1,4 +1,4 @@
-/* tenkyu 0.01 (orbit storage) */
+/* tenkyu 0.03 (orbit storage) */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbit.json";
@@ -81,6 +81,8 @@
     calSource=undefined;
   }catch(calErr){calModule=undefined;calendar=undefined;}
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800,GREEN=0x04C0;
+  var ECLIPSE_ENABLED=cfg.eclipseEnabled===undefined?true:cfg.eclipseEnabled!==false;
+  var ECLIPSE_UPDATE_MS=30000,eclipseDisplay,eclipseActive=false,lastClockMinute=-1;
   var busy=false,killed=false,minuteTimer,idleTimer,tapTimer;
   var mode="tenkyu",interactive=true,tapCount=0,resetOnWake=false;
   var selectedDayOffset=0,hasSelectedDate=false;
@@ -877,13 +879,39 @@
     }
   }
 
+  /* Load eclipse modules only when enabled; numeric lunar tables are lazy. */
+  function loadEclipseModule(name){
+    var source=Storage.read(name);
+    if(!source)throw new Error("Missing "+name);
+    var exports={};(new Function("exports",source))(exports);return exports;
+  }
+  function updateEclipse(){
+    if(!ECLIPSE_ENABLED)return false;
+    if(!eclipseDisplay){
+      var engine=loadEclipseModule("orbit.eclipse");
+      var renderer=loadEclipseModule("orbit.ecldraw");
+      eclipseDisplay=renderer.create(engine);
+      ECLIPSE_UPDATE_MS=renderer.UPDATE_MS;
+    }
+    return eclipseDisplay.update(new Date(virtualNowMs()));
+  }
+  function drawEclipse(sol){
+    if(!eclipseActive||!eclipseDisplay)return;
+    eclipseDisplay.draw(g,{radiusPx:EARTHR,cx:EARTHX,cy:EARTHY,
+      longitudeDeg:TESTLON,south:VIEW_SOUTH,
+      rotationRad:SUNANG+(VIEW_SOUTH?sol.ha:-sol.ha)});
+  }
+
   function drawBase(){
     TIMEBOX=undefined;
+    eclipseActive=updateEclipse();
+    lastClockMinute=Math.floor(Date.now()/60000);
     lastBaseBucket=Math.floor(Date.now()/300000);
     g.reset().setBgColor(BLACK).setColor(BLACK).clear();
     drawSun();
     var sol=safeSolar();
     drawEarth(sol);
+    drawEclipse(sol); // Before observer: preserve the red dot and day/night line.
     drawObserver(sol);
     var moon=drawMoon();
     /* Keep hour numerals visible over both sides of the Moon. */
@@ -1106,21 +1134,31 @@
 
   function armMinute(){
     clear(minuteTimer);
+    var tick=ECLIPSE_ENABLED?ECLIPSE_UPDATE_MS:60000;
     minuteTimer=setTimeout(function(){
       minuteTimer=undefined;
       if(!killed&&mode==="tenkyu"){
-        if(Math.floor(Date.now()/300000)!==lastBaseBucket ||
+        var wasActive=eclipseActive;
+        eclipseActive=updateEclipse();
+        /* Rebuild Earth when shadow moves/disappears: no accumulated black trail.
+           Far from eclipse, keep the original five-minute base refresh. */
+        if(wasActive||eclipseActive||Math.floor(Date.now()/300000)!==lastBaseBucket||
            (safeSolar().el>=0)!==lastObserverDay)drawBase();
-        else{drawTimeOnly();try{g.flip();}catch(e){}}
+        else if(Math.floor(Date.now()/60000)!==lastClockMinute){
+          lastClockMinute=Math.floor(Date.now()/60000);
+          drawTimeOnly();try{g.flip();}catch(e){}
+        }
         armMinute();
       }
-    },60000-(Date.now()%60000)+25);
+    },tick-(Date.now()%tick)+25);
   }
 
   function cleanup(){
     if(killed)return;
     killed=true;
     stopOrbitTimers();
+    if(eclipseDisplay)eclipseDisplay.reset();
+    eclipseDisplay=undefined;
     if(calendar)calendar.stop();
     removeWidgetRedrawHook();
     try{Bangle.setUI();}catch(e){}
@@ -1147,3 +1185,4 @@
   drawBase();
   armMinute();
 })();
+
