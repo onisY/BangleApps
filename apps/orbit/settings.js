@@ -1,4 +1,4 @@
-/* tenkyu 0.01: settings and editable event data. */
+/* tenkyu 0.03: settings and editable event data. */
 (function(back){
   var Storage=require("Storage");
   var C,P,JPI;
@@ -84,6 +84,7 @@
     if(!isFinite(s.moonOrbit))s.moonOrbit=62;
     if(!isFinite(s.datePos))set("datePos",2);if(!isFinite(s.timePos))set("timePos",0);
     if(!isFinite(s.dateSize))s.dateSize=22;if(!isFinite(s.timeSize))s.timeSize=22;
+    set("eclipseEnabled",s.eclipseEnabled===undefined?true:s.eclipseEnabled!==false);
     set("timeSource",(s.timeSource===1||s.timeSource==="1")?1:0);
     set("orbitHourSize",Math.max(6,Math.min(12,isFinite(s.orbitHourSize)?s.orbitHourSize|0:8)));
     set("orbitHourStep",[1,2,3,6].indexOf(s.orbitHourStep)>=0?s.orbitHourStep:1);
@@ -543,6 +544,13 @@
     });
   }
 
+  function eclipseMenu(s){
+    E.showMenu({"":{title:"Solar eclipse"},"< Back":main,
+      "Enabled":{value:s.eclipseEnabled,format:function(v){return v?"On":"Off";},
+        onchange:function(v){s.eclipseEnabled=v;write(CFG,s);}}
+    });
+  }
+
   function digitalMenu(s){
     E.showMenu({"":{title:"Digital clock"},"< Back":main,
       "Date pos":{value:s.datePos,min:0,max:2,step:1,
@@ -575,6 +583,7 @@
       "Location":function(){locationMenu(s);},
       "Date/time":function(){dateTimeMenu(s);},
       "Bodies":function(){bodiesMenu(s);},
+      "Solar eclipse":function(){eclipseMenu(s);},
       "Dial":function(){dialMenu(s);},
       "Digital clock":function(){digitalMenu(s);},
       "Calendar":calendarMenu
@@ -586,3 +595,4 @@
   E.on("kill",onKill);
   main();
 })
+

@@ -2,7 +2,7 @@
   "id": "orbit",
   "name": "tenkyu",
   "shortName": "tenkyu",
-  "version": "0.01",
+  "version": "0.03",
   "author": "onisY",
   "description": "Sun-Earth-Moon clock with integrated calendar and configurable Roman hour scale.",
   "icon": "app.png",
@@ -42,6 +42,22 @@
       "name": "orbit.img",
       "url": "app-icon.js",
       "evaluate": true
+    },
+    {
+      "name": "orbit.eclipse",
+      "url": "eclipse.js"
+    },
+    {
+      "name": "orbit.ecldata",
+      "url": "eclipse-terms.js"
+    },
+    {
+      "name": "orbit.ecldraw",
+      "url": "eclipse-render.js"
+    },
+    {
+      "name": "orbit.eclsun",
+      "url": "eclipse-sun-terms.js"
     }
   ],
   "data": [
