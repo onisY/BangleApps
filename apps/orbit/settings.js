@@ -1,4 +1,4 @@
-/* tenkyu 0.03: settings and editable event data. */
+/* tenkyu 0.04: settings and editable event data. */
 (function(back){
   var Storage=require("Storage");
   var C,P,JPI;
@@ -85,6 +85,9 @@
     if(!isFinite(s.datePos))set("datePos",2);if(!isFinite(s.timePos))set("timePos",0);
     if(!isFinite(s.dateSize))s.dateSize=22;if(!isFinite(s.timeSize))s.timeSize=22;
     set("eclipseEnabled",s.eclipseEnabled===undefined?true:s.eclipseEnabled!==false);
+    set("restEnabled",s.restEnabled!==false);
+    set("restBarHeight",Math.max(1,Math.min(14,isFinite(s.restBarHeight)?s.restBarHeight|0:10)));
+    set("restThreshold",Math.max(0.01,Math.min(0.10,isFinite(s.restThreshold)?+s.restThreshold:0.03)));
     set("timeSource",(s.timeSource===1||s.timeSource==="1")?1:0);
     set("orbitHourSize",Math.max(6,Math.min(12,isFinite(s.orbitHourSize)?s.orbitHourSize|0:8)));
     set("orbitHourStep",[1,2,3,6].indexOf(s.orbitHourStep)>=0?s.orbitHourStep:1);
@@ -551,6 +554,25 @@
     });
   }
 
+  function applyRest(s){
+    write(CFG,s);
+    if(!Bangle.orbitRest&&s.restEnabled){
+      var source=Storage.read("orbit.rest");
+      if(source){var exports={};(new Function("exports",source))(exports);exports.install(Bangle,Storage,E);}
+    }
+    if(Bangle.orbitRest)Bangle.orbitRest.configure(s);
+  }
+  function restMenu(s){
+    E.showMenu({"":{title:"Rest graph"},"< Back":main,
+      "Enabled":{value:s.restEnabled,onchange:function(v){s.restEnabled=!!v;applyRest(s);}},
+      "Level 5 height":{value:s.restBarHeight,min:1,max:14,step:1,
+        format:function(v){return v+" px";},onchange:function(v){s.restBarHeight=v;write(CFG,s);}},
+      "Quiet threshold":{value:Math.round(s.restThreshold*100),min:1,max:10,step:1,
+        format:function(v){return (v/100).toFixed(2)+" g";},
+        onchange:function(v){s.restThreshold=v/100;applyRest(s);}}
+    });
+  }
+
   function digitalMenu(s){
     E.showMenu({"":{title:"Digital clock"},"< Back":main,
       "Date pos":{value:s.datePos,min:0,max:2,step:1,
@@ -584,6 +606,7 @@
       "Date/time":function(){dateTimeMenu(s);},
       "Bodies":function(){bodiesMenu(s);},
       "Solar eclipse":function(){eclipseMenu(s);},
+      "Rest graph":function(){restMenu(s);},
       "Dial":function(){dialMenu(s);},
       "Digital clock":function(){digitalMenu(s);},
       "Calendar":calendarMenu

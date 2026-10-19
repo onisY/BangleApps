@@ -1,4 +1,4 @@
-/* tenkyu 0.03 (orbit storage) */
+/* tenkyu 0.04 (orbit storage) */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbit.json";
@@ -83,6 +83,9 @@
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800,GREEN=0x04C0;
   var ECLIPSE_ENABLED=cfg.eclipseEnabled===undefined?true:cfg.eclipseEnabled!==false;
   var ECLIPSE_UPDATE_MS=30000,eclipseDisplay,eclipseActive=false,lastClockMinute=-1;
+  var REST_ENABLED=cfg.restEnabled!==false;
+  var REST_MAX_HEIGHT=Math.max(1,Math.min(14,isFinite(cfg.restBarHeight)?cfg.restBarHeight|0:10));
+  var restService;
   var busy=false,killed=false,minuteTimer,idleTimer,tapTimer;
   var mode="tenkyu",interactive=true,tapCount=0,resetOnWake=false;
   var selectedDayOffset=0,hasSelectedDate=false;
@@ -902,6 +905,26 @@
       rotationRad:SUNANG+(VIEW_SOUTH?sol.ha:-sol.ha)});
   }
 
+  function initRest(){
+    if(!REST_ENABLED)return;
+    restService=Bangle.orbitRest;
+    if(!restService){
+      var source=Storage.read("orbit.rest");
+      if(!source)return;
+      var exports={};(new Function("exports",source))(exports);
+      restService=exports.install(Bangle,Storage,E);
+    }
+    restService.configure(Storage.readJSON(CFGFILE,1)||{});
+  }
+  function drawRest(sol){
+    // The ring is a real 24-hour recorder, not a future-date prediction.
+    if(!restService||selectedDayOffset!==0)return;
+    var now=Date.now();restService.sync(now);
+    restService.draw(g,{nowMs:now,radiusPx:MOONORBIT,
+      maxHeightPx:REST_MAX_HEIGHT,cx:EARTHX,cy:EARTHY,south:VIEW_SOUTH,
+      currentAngleRad:SUNANG+(VIEW_SOUTH?sol.ha:-sol.ha)});
+  }
+
   function drawBase(){
     TIMEBOX=undefined;
     eclipseActive=updateEclipse();
@@ -912,6 +935,7 @@
     var sol=safeSolar();
     drawEarth(sol);
     drawEclipse(sol); // Before observer: preserve the red dot and day/night line.
+    drawRest(sol); // Outward bars underneath observer, Moon, labels and widgets.
     drawObserver(sol);
     var moon=drawMoon();
     /* Keep hour numerals visible over both sides of the Moon. */
@@ -1158,6 +1182,8 @@
     killed=true;
     stopOrbitTimers();
     if(eclipseDisplay)eclipseDisplay.reset();
+    // The boot-owned recorder keeps running in menus and other apps.
+    restService=undefined;
     eclipseDisplay=undefined;
     if(calendar)calendar.stop();
     removeWidgetRedrawHook();
@@ -1173,6 +1199,7 @@
   buildLightingCache();
   buildEarthMapCache();
   buildMoonCache();
+  initRest();
   try{Bangle.setUI({mode:"custom",clock:1,touch:onTouch,swipe:onSwipe,btn:onButton});}catch(e){}
   /* Load widgets only after setUI, as required for clock/widget state tracking. */
   try{if(typeof WIDGETS==="undefined")Bangle.loadWidgets();}catch(e){}

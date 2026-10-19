@@ -122,6 +122,14 @@ The approximate solar-position formulae are based on NOAA's **General Solar Posi
 
 `solarPosition()` calculates the fractional year, equation of time, solar declination, true solar time, hour angle, and solar elevation / azimuth.
 
+### 24-hour rest graph
+
+Five-minute motion-rest levels are shown as cyan bars extending **outward from the lunar orbit**. There are 288 positions per 24 hours; each new completed interval replaces the one from 24 hours earlier. The Moon and observer remain above the graph.
+
+A quiet acceleration change and a magnitude close to gravity (default tolerance **0.03 g**) must continue for **10 seconds** before rest time is counted. The rest fraction in each five-minute interval maps to levels **1-5** in 20-percentage-point bands. Missing measurements receive no bar; a stationary unworn watch also counts as quiet.
+
+**Rest graph** settings: **Enabled**, **Level 5 height** (1-14 pixels, default 10), and **Quiet threshold** (0.01-0.10 g). Recording continues with the LCD off and in other apps. Completed history survives app changes and restarts. A different date selected in the calendar hides the real-time graph. Daytime observer lines remain green and nighttime lines yellow.
+
 ### Moon phase
 
 Moon-phase display uses the mean synodic month.
@@ -354,6 +362,14 @@ Place timeを使用しても、Bangle.js本体のタイムゾーン設定やDST�
   https://gml.noaa.gov/grad/solcalc/solareqns.PDF
 
 `solarPosition()` では fractional year、equation of time、solar declination、true solar time、hour angle、solar elevation / azimuth を求めています。
+
+### 24時間の安静度グラフ
+
+月の軌道から**外向き**に伸びる水色の棒で、5分ごとの安静度を表示します。5分×288区間で24時間を一周し、新しい記録で24時間前の記録を置き換えます。月、赤点、昼夜の線分は棒グラフより上に描きます。
+
+加速度の変化量が小さく、加速度の大きさも重力の1gに近い状態（初期閾値 **0.03g**）が**10秒間**続くと安静時間の積算を始めます。確認の10秒間は遡って加算しません。5分間の観測時間に占める安静時間の割合を、20%刻みで**1〜5段階**にします。270秒未満しか観測できなかった区間は棒を表示しません。腕から外して静置した時計も安静に含まれます。
+
+設定の **Rest graph** で、**Enabled**（計測・表示のオン／オフ）、**Level 5 height**（最大値5の棒の高さ：1〜14画素、初期値10画素）、**Quiet threshold**（閾値：0.01〜0.10g）を変更できます。画面消灯中や他のアプリの使用中も記録し、アプリ切り替えや再起動後も履歴を引き継ぎます。カレンダーで別の日を表示している間は、実時間の棒グラフを隠します。赤点からの線分は日の出から日の入りまで緑、夜間は黄色です。
 
 ### 月相
 
