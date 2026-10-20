@@ -98,7 +98,7 @@
     set("restThreshold",REST_THRESHOLDS[thresholdIndex(s.restThreshold)]);
     set("restWearEnabled",s.restWearEnabled!==false);
     set("restWearThreshold",REST_THRESHOLDS[thresholdIndex(s.restWearThreshold===undefined?0.009:s.restWearThreshold)]);
-    [["restConfirmSeconds",1,60,10],["restProbeSeconds",10,60,30],
+    [["restProbeSeconds",10,60,30],
       ["restPulseConfidence",1,100,90],["restPulseMin",20,100,40],["restPulseMax",120,240,200]].forEach(function(q){
       set(q[0],Math.max(q[1],Math.min(q[2],isFinite(s[q[0]])?+s[q[0]]:q[3])));
     });
@@ -596,11 +596,9 @@
   function restMenu(s){
     E.showMenu({"":{title:"Rest graph"},"< Back":main,
       "Enabled":{value:s.restEnabled,onchange:function(v){s.restEnabled=!!v;applyRest(s);}},
-      "Level 5 height":{value:s.restBarHeight,min:1,max:14,step:1,
+      "Max bar height":{value:s.restBarHeight,min:1,max:14,step:1,
         format:function(v){return v+" px";},onchange:function(v){s.restBarHeight=v;write(CFG,s);}},
-      "Quiet threshold":thresholdMenu(s,"restThreshold"),
-      "Quiet seconds":{value:s.restConfirmSeconds,min:1,max:60,step:1,
-        onchange:function(v){s.restConfirmSeconds=v;applyRest(s);}},
+      "Peak threshold":thresholdMenu(s,"restThreshold"),
       "Non-wear":function(){wearMenu(s);}
     });
   }
