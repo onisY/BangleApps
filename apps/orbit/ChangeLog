@@ -1,3 +1,4 @@
+0.06: Seven motion thresholds (0.001 g x3); configurable five-minute Z-range and periodic pulse checks hide non-wear rest bars.
 0.05: Color each rest graph bar green by day and yellow by night, using the configured location and the five-minute interval end time with the observer ray's sunrise/sunset criterion.
 0.04: Add a boot-owned accelerometer rest recorder, 10-second quiet confirmation, five-minute levels and a rolling 24-hour outward radial graph on the lunar orbit; configurable level-5 height (1-14 px), quiet threshold and enable switch. Preserve green daytime/yellow nighttime observer line.
 0.03: Add optional 30-second solar-eclipse shading: black umbra, dithered penumbra, observer above shadow; separate ephemeris/render modules with lazy tables and conservative screening.

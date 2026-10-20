@@ -1,6 +1,14 @@
-/* tenkyu 0.04: settings and editable event data. */
+/* tenkyu 0.06: settings and editable event data. */
 (function(back){
   var Storage=require("Storage");
+  var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
+  function thresholdIndex(v){
+    if(!isFinite(v)||v<=0)return 3;
+    var best=0;
+    for(var i=1;i<7;i++)if(Math.abs(Math.log(v/REST_THRESHOLDS[i]))<Math.abs(Math.log(v/REST_THRESHOLDS[best])))best=i;
+    return best;
+  }
+
   var C,P,JPI;
   var JPFILE="orbitjp.dat",jpPrefCache=-1,jpMunicipalities;
   var CFG="orbit.json",CAL="orbit.cal.json",EVENTS="orbit.events.json";
@@ -87,7 +95,13 @@
     set("eclipseEnabled",s.eclipseEnabled===undefined?true:s.eclipseEnabled!==false);
     set("restEnabled",s.restEnabled!==false);
     set("restBarHeight",Math.max(1,Math.min(14,isFinite(s.restBarHeight)?s.restBarHeight|0:10)));
-    set("restThreshold",Math.max(0.01,Math.min(0.10,isFinite(s.restThreshold)?+s.restThreshold:0.03)));
+    set("restThreshold",REST_THRESHOLDS[thresholdIndex(s.restThreshold)]);
+    set("restWearEnabled",s.restWearEnabled!==false);
+    set("restWearThreshold",REST_THRESHOLDS[thresholdIndex(s.restWearThreshold===undefined?0.009:s.restWearThreshold)]);
+    [["restConfirmSeconds",1,60,10],["restProbeSeconds",10,60,30],
+      ["restPulseConfidence",1,100,90],["restPulseMin",20,100,40],["restPulseMax",120,240,200]].forEach(function(q){
+      set(q[0],Math.max(q[1],Math.min(q[2],isFinite(s[q[0]])?+s[q[0]]:q[3])));
+    });
     set("timeSource",(s.timeSource===1||s.timeSource==="1")?1:0);
     set("orbitHourSize",Math.max(6,Math.min(12,isFinite(s.orbitHourSize)?s.orbitHourSize|0:8)));
     set("orbitHourStep",[1,2,3,6].indexOf(s.orbitHourStep)>=0?s.orbitHourStep:1);
@@ -562,14 +576,32 @@
     }
     if(Bangle.orbitRest)Bangle.orbitRest.configure(s);
   }
+  function thresholdMenu(s,key){return {value:thresholdIndex(s[key]),min:0,max:6,step:1,
+    format:function(v){return REST_THRESHOLDS[v].toFixed(3)+" g";},
+    onchange:function(v){s[key]=REST_THRESHOLDS[v];applyRest(s);}};}
+  function wearMenu(s){
+    E.showMenu({"":{title:"Non-wear"},"< Back":function(){restMenu(s);},
+      "Enabled":{value:s.restWearEnabled,onchange:function(v){s.restWearEnabled=!!v;applyRest(s);}},
+      "Z range":thresholdMenu(s,"restWearThreshold"),
+      "Probe seconds":{value:s.restProbeSeconds,min:10,max:60,step:5,
+        onchange:function(v){s.restProbeSeconds=v;applyRest(s);}},
+      "Pulse confidence":{value:s.restPulseConfidence,min:1,max:100,step:1,
+        format:function(v){return v+" %";},onchange:function(v){s.restPulseConfidence=v;applyRest(s);}},
+      "Min pulse BPM":{value:s.restPulseMin,min:20,max:100,step:5,
+        onchange:function(v){s.restPulseMin=v;applyRest(s);}},
+      "Max pulse BPM":{value:s.restPulseMax,min:120,max:240,step:5,
+        onchange:function(v){s.restPulseMax=v;applyRest(s);}}
+    });
+  }
   function restMenu(s){
     E.showMenu({"":{title:"Rest graph"},"< Back":main,
       "Enabled":{value:s.restEnabled,onchange:function(v){s.restEnabled=!!v;applyRest(s);}},
       "Level 5 height":{value:s.restBarHeight,min:1,max:14,step:1,
         format:function(v){return v+" px";},onchange:function(v){s.restBarHeight=v;write(CFG,s);}},
-      "Quiet threshold":{value:Math.round(s.restThreshold*100),min:1,max:10,step:1,
-        format:function(v){return (v/100).toFixed(2)+" g";},
-        onchange:function(v){s.restThreshold=v/100;applyRest(s);}}
+      "Quiet threshold":thresholdMenu(s,"restThreshold"),
+      "Quiet seconds":{value:s.restConfirmSeconds,min:1,max:60,step:1,
+        onchange:function(v){s.restConfirmSeconds=v;applyRest(s);}},
+      "Non-wear":function(){wearMenu(s);}
     });
   }
 
@@ -618,4 +650,5 @@
   E.on("kill",onKill);
   main();
 })
+
 
