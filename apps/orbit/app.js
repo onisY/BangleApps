@@ -922,7 +922,8 @@
     var now=Date.now();restService.sync(now);
     restService.draw(g,{nowMs:now,radiusPx:MOONORBIT,
       maxHeightPx:REST_MAX_HEIGHT,cx:EARTHX,cy:EARTHY,south:VIEW_SOUTH,
-      currentAngleRad:SUNANG+(VIEW_SOUTH?sol.ha:-sol.ha)});
+      currentAngleRad:SUNANG+(VIEW_SOUTH?sol.ha:-sol.ha),
+      isDayAt:function(ms){return solarPosition(ms,TESTLAT,TESTLON).el>=0;}});
   }
 
   function drawBase(){
@@ -1212,4 +1213,5 @@
   drawBase();
   armMinute();
 })();
+
 

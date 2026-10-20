@@ -119,12 +119,13 @@ function draw(graphics,engine,map){
   // Outward bars stay inside the existing Moon envelope (Moon radius >=14 px).
   var r=map.radiusPx,height=Math.max(1,Math.min(map.maxHeightPx,14));
   var dir=map.south?1:-1,now=map.nowMs;
-  graphics.setColor(0x07FF);
   engine.visit(now,function(bucket,value){
     // Plot at the interval END: a completed bar expires exactly 24 h later.
-    var age=now-(bucket+1)*SLOT_MS;
+    var endMs=(bucket+1)*SLOT_MS,age=now-endMs;
     var a=map.currentAngleRad-dir*age*2*Math.PI/DAY_MS;
     var ca=Math.cos(a),sa=Math.sin(a),outer=r+height*value/5;
+    // Match the observer ray's geometric sunrise/sunset at this bar's time.
+    graphics.setColor(map.isDayAt&&map.isDayAt(endMs)?0x07E0:0xFFE0);
     graphics.drawLine(Math.round(map.cx+r*ca),Math.round(map.cy+r*sa),
       Math.round(map.cx+outer*ca),Math.round(map.cy+outer*sa));
   });
@@ -134,3 +135,4 @@ exports.install=install;
 exports.draw=draw;
 exports.levelFor=levelFor;
 exports.constants={slotMs:SLOT_MS,count:COUNT,confirmMs:CONFIRM_MS,maxGapMs:MAX_GAP_MS,minCoverageMs:MIN_COVERAGE_MS};
+

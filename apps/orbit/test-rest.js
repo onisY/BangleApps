@@ -57,6 +57,14 @@ function single(now,south=false,height=10){const a=[];r.draw({setColor:()=>{},dr
   {nowMs:now,radiusPx:70,maxHeightPx:height,cx:85,cy:90,south,currentAngleRad:0});return a[0];}
 assert.deepStrictEqual(single(base+S),single(base+S+86400000));
 assert(Math.hypot(single(base+S,false,14)[2]-85,single(base+S,false,14)[3]-90)>83);
+// The exact interval end controls color, including the sunrise boundary.
+const colors=[],times=[];
+r.draw({setColor:c=>colors.push(c),drawLine:()=>{}},
+  {visit:(ms,fn)=>{fn(base/S-1,5);fn(base/S,5);}},
+  {nowMs:base+S,radiusPx:70,maxHeightPx:10,cx:85,cy:90,
+    currentAngleRad:0,isDayAt:ms=>{times.push(ms);return ms>=base+S;}});
+assert.deepStrictEqual(times,[base,base+S]);
+assert.deepStrictEqual(colors,[0xffe0,0x07e0]);
 
 function environment(start,config={},data){
   let now=start,color=0,serial=0,writes=0;
@@ -87,7 +95,7 @@ app.execute("app.js");assert.strictEqual(app.b.listenerCount("accel"),1); // no 
 const initialWrites=app.writes();
 app.feed(base+S);app.b.orbitRest.sync(base+S);assert.strictEqual(app.writes()-initialWrites,1);
 app.log.length=0;app.b.emit("lcdPower",true);
-const graph=app.log.findIndex(x=>x.op==="drawLine"&&x.color===0x07ff);
+const graph=app.log.findIndex(x=>x.op==="drawLine"&&x.color===0x07e0);
 const observer=app.log.findIndex(x=>x.op==="fillCircle"&&x.color===0xf800&&x.args[2]===2);
 assert(graph>=0&&observer>graph);
 const bar=app.log[graph].args;assert(Math.hypot(bar[2]-bar[0],bar[3]-bar[1])>=9);
@@ -112,6 +120,17 @@ menus.at(-1)["Enabled"].onchange(true);assert.strictEqual(app.b.listenerCount("a
 menus.at(-1)["Quiet threshold"].onchange(5);assert.strictEqual(app.cfg.restThreshold,0.05);
 assert.strictEqual(app.b.listenerCount("accel"),1);
 // Existing geometric sunrise/sunset criterion: green day, yellow night.
+// Full-day history must retain both colors, independent of the current time.
+for(const [iso,expected] of [["2026-10-19T18:00:00Z",0x07e0],["2026-10-19T06:00:00Z",0xffe0]]){
+  const now=Date.parse(iso),end=Math.floor(now/S);
+  const h=environment(now,{}, {"orbit.rest.json":{v:1,end:end-1,
+    levels:"5".repeat(288),active:{bucket:end,covered:0,rest:0}}});
+  h.execute("boot.js");h.execute("app.js");
+  const bars=h.log.filter(x=>x.op==="drawLine"&&(x.color===0x07e0||x.color===0xffe0));
+  assert.strictEqual(bars.length,288);
+  assert(bars.some(x=>x.color===0x07e0)&&bars.some(x=>x.color===0xffe0));
+  assert.strictEqual(bars.at(-1).color,expected);
+}
 for(const [iso,color] of [["2026-10-19T18:00:00Z",0x07e0],["2026-10-19T06:00:00Z",0xffe0]]){
   const h=environment(Date.parse(iso),{restEnabled:false});h.execute("app.js");
   const index=h.log.findIndex(x=>x.op==="fillCircle"&&x.color===0xf800&&x.args[2]===2);
@@ -126,3 +145,4 @@ if(process.argv[2]==="--preview"){
   const h=environment(base,{restBarHeight:14},data);h.execute("boot.js");h.execute("app.js");
   fs.writeFileSync(process.argv[3],JSON.stringify(h.log));
 }
+
