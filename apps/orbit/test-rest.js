@@ -1,3 +1,4 @@
+/* global Map, Proxy, __dirname */
 /* node apps/orbit/test-rest.js -- five-minute screen-normal motion-peak ratios. */
 const assert=require("assert"),fs=require("fs"),vm=require("vm"),path=require("path");
 const EventEmitter=require("events"),r=require("./rest.js"),S=r.constants.slotMs;
