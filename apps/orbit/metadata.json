@@ -2,9 +2,9 @@
   "id": "orbit",
   "name": "tenkyu",
   "shortName": "tenkyu",
-  "version": "0.06",
+  "version": "0.061",
   "author": "onisY",
-  "description": "Sun-Earth-Moon clock with calendar, eclipse shading and a 24-hour outward radial rest graph with five-minute rest levels and adjustable bar height.",
+  "description": "Sun-Earth-Moon clock, calendar, eclipse and a 24-hour radial rest graph: five-minute ratios of screen-normal acceleration peaks below threshold.",
   "icon": "app.png",
   "type": "clock",
   "tags": "clock,science,astronomy,calendar,moon",
@@ -83,4 +83,3 @@
     }
   ]
 }
-

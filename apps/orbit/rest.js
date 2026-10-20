@@ -1,12 +1,10 @@
-/* tenkyu motion-rest recorder and 24-hour radial plot. MIT.
- * Time: absolute UTC milliseconds; bins: 300 s, 288 slots = exactly 24 h.
- * Bangle accel.diff is the vector change in g, accel.mag includes gravity.
- * A quiet sample requires diff <= threshold and abs(mag - 1 g) <= threshold.
- * See https://www.espruino.com/Reference#l_Bangle_accel .
- * Uses existing accel events and a short HRM probe every five minutes.
+/* tenkyu screen-normal (Z) acceleration peak-rest recorder; MIT.
+ * For every observed 5-minute interval, bar height equals the percentage
+ * of local |high-pass(Z)| peaks that do not exceed the selected threshold.
+ * Non-wear still uses whole-bin Z range and a periodic HRM probe.
  */
 var SLOT_MS=300000,COUNT=288,DAY_MS=SLOT_MS*COUNT;
-var CONFIRM_MS=10000,MAX_GAP_MS=2500,MIN_COVERAGE_MS=270000;
+var MAX_GAP_MS=2500,MIN_COVERAGE_MS=270000;
 var THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
 function thresholdG(v){
   if(!isFinite(v)||v<=0)return 0.027;
@@ -20,32 +18,39 @@ function wearConfig(s){return {enabled:s.restWearEnabled!==false,
   seconds:limit(s.restProbeSeconds,10,60,30),confidence:limit(s.restPulseConfidence,1,100,90),
   min:limit(s.restPulseMin,20,100,40),max:limit(s.restPulseMax,120,240,200)};}
 
-function levelFor(restMs,coveredMs){
-  if(coveredMs<MIN_COVERAGE_MS)return 0; // 0 = missing, not level 1.
-  return Math.max(1,Math.min(5,Math.ceil(5*restMs/coveredMs)));
+
+/* Streamed five-minute Z-axis motion-peak ratio.
+ * One local maximum of |high-pass(z)| counts as one peak; no arrays of samples.
+ * Thresholds are in g, and history stores integer percentages (0..100).
+ */
+function percentFor(quietPeaks,peakCount,coveredMs){
+  if(coveredMs<MIN_COVERAGE_MS)return 0; // missing coverage
+  if(peakCount===0)return 100; // no movement peaks in an observed, worn interval
+  return Math.max(0,Math.min(100,Math.round(100*quietPeaks/peakCount)));
 }
 function create(options){
   options=options||{};
   var levels=new Uint8Array(COUNT),stamps=new Uint32Array(COUNT);
   var threshold=thresholdG(options.thresholdG),save=options.onCommit;
-  var confirmMs=limit(options.confirmSeconds,1,60,10)*1000;
   var wearG=thresholdG(options.wearThresholdG===undefined?0.009:options.wearThresholdG);
   var zMin=Infinity,zMax=-Infinity,zFirst,zLast,zBad=false,noPulse=false;
   var closedBucket=-1,closedStill=false;
-  var current=-1,covered=0,rest=0,lastMs,lastQuiet=false,lastValid=false,quietSince;
+  var current=-1,covered=0,peaks=0,quietPeaks=0,lastMs,lastValid=false;
+  var zBase,ampOlder,ampPrevious;
   var old=options.saved,i,b,v;
-  if(old&&old.v===1&&isFinite(old.end)&&typeof old.levels==="string"&&old.levels.length===COUNT){
+  if(old&&old.v===2&&isFinite(old.end)&&typeof old.levels==="string"&&old.levels.length===COUNT*2){
     for(i=0;i<COUNT;i++){
-      b=old.end-COUNT+1+i;v=+old.levels.charAt(i);
-      if(b>=0&&v>=1&&v<=5){stamps[b%COUNT]=b;levels[b%COUNT]=v;}
+      b=old.end-COUNT+1+i;v=parseInt(old.levels.substr(2*i,2),16);
+      if(b>=0&&isFinite(v)&&v>=0&&v<=100){stamps[b%COUNT]=b;levels[b%COUNT]=v;}
     }
-    // App switches preserve accumulated coverage, but never bridge an unseen gap.
     if(old.active&&old.active.bucket===Math.floor(options.nowMs/SLOT_MS)){
       current=old.active.bucket;
       covered=Math.max(0,Math.min(SLOT_MS,+old.active.covered||0));
-      rest=Math.max(0,Math.min(covered,+old.active.rest||0));
+      peaks=Math.max(0,+old.active.peaks||0);
+      quietPeaks=Math.max(0,Math.min(peaks,+old.active.quietPeaks||0));
     }
   }
+  function resetPeak(){zBase=undefined;ampOlder=undefined;ampPrevious=undefined;}
   function roll(ms){
     var target=Math.floor(ms/SLOT_MS),changed=false;
     if(target===current)return false;
@@ -54,54 +59,55 @@ function create(options){
       closedStill=!zBad&&zFirst!==undefined&&zFirst-current*SLOT_MS<=MAX_GAP_MS&&
         (current+1)*SLOT_MS-zLast<=MAX_GAP_MS&&zMax-zMin<=wearG;
       i=current%COUNT;stamps[i]=current;
-      levels[i]=noPulse&&closedStill?0:levelFor(rest,covered);changed=true;
+      levels[i]=noPulse&&closedStill?0:percentFor(quietPeaks,peaks,covered);changed=true;
     }else if(current>=0&&target<current){
-      // Clock correction: discard future bins so they cannot reappear later.
       for(i=0;i<COUNT;i++)if(stamps[i]>=target){stamps[i]=0;levels[i]=0;}
-      quietSince=undefined;lastQuiet=false;closedBucket=-1;changed=true;
+      closedBucket=-1;changed=true;
     }
-    current=target;covered=0;rest=0;
+    current=target;covered=0;peaks=0;quietPeaks=0;resetPeak();
     zMin=Infinity;zMax=-Infinity;zFirst=undefined;zLast=undefined;zBad=false;noPulse=false;
     if(changed&&save)save();
     return changed;
   }
+  function detectPeak(z,dt){
+    // IIR removes gravity and changes of orientation without extra sensor reads.
+    if(zBase===undefined)zBase=z;
+    else zBase+=(dt/(2000+dt))*(z-zBase);
+    var amp=Math.abs(z-zBase);
+    // Detect a positive local maximum. Flat tops count once, negative Z included.
+    if(ampOlder!==undefined&&ampPrevious!==undefined&&
+       ampPrevious>ampOlder&&ampPrevious>=amp&&ampPrevious>0){
+      peaks++;
+      if(ampPrevious<=threshold)quietPeaks++;
+    }
+    ampOlder=ampPrevious;ampPrevious=amp;
+  }
   function sample(a,ms){
     if(!isFinite(ms)||ms<0)return;
-    var mag=a&&a.mag;
-    if(!isFinite(mag)&&a&&isFinite(a.x)&&isFinite(a.y)&&isFinite(a.z))
-      mag=Math.sqrt(a.x*a.x+a.y*a.y+a.z*a.z);
-    var valid=a&&isFinite(a.diff)&&isFinite(mag);
-    var quiet=!!(valid&&a.diff>=0&&a.diff<=threshold&&Math.abs(mag-1)<=threshold);
-    var dt=lastMs===undefined?0:ms-lastMs;
-    if(lastMs===undefined||dt<=0||dt>MAX_GAP_MS||!valid||!lastValid){
-      roll(ms);quietSince=quiet?ms:undefined;
-    }else{
-      var start=lastMs,end,eligible=Infinity;
-      if(quiet&&lastQuiet&&quietSince!==undefined)eligible=quietSince+confirmMs;
-      else quietSince=quiet?ms:undefined;
+    var z=a&&a.z,valid=isFinite(z),dt=lastMs===undefined?0:ms-lastMs;
+    var continuous=lastValid&&valid&&dt>0&&dt<=MAX_GAP_MS;
+    if(!continuous){roll(ms);resetPeak();}
+    else{
+      var start=lastMs,end;
       while(start<ms){
         roll(start);end=Math.min(ms,(current+1)*SLOT_MS);
         covered+=end-start;
-        rest+=Math.max(0,end-Math.max(start,eligible));
         start=end;
       }
       roll(ms);
     }
-    // Track the whole-bin Z range, not just adjacent differences (slow drift counts).
-    if(!a||!isFinite(a.z))zBad=true;
+    if(!valid)zBad=true;
     else{
       if(zFirst===undefined)zFirst=ms;
       if(zLast!==undefined&&(ms-zLast>MAX_GAP_MS||ms<=zLast))zBad=true;
-      zLast=ms;zMin=Math.min(zMin,a.z);zMax=Math.max(zMax,a.z);
+      zLast=ms;zMin=Math.min(zMin,z);zMax=Math.max(zMax,z);
+      detectPeak(z,continuous?dt:0);
     }
-    lastMs=ms;lastQuiet=quiet;lastValid=!!valid;
+    lastMs=ms;lastValid=!!valid;
   }
   function sync(ms){
-    // A drawing timer can fire just before the next accel event. Do not invent
-    // samples for that last fraction of a second or for an LCD/app outage.
     if(Math.floor(ms/SLOT_MS)!==current){
-      if(lastMs===undefined||ms-lastMs>MAX_GAP_MS){quietSince=undefined;lastQuiet=false;}
-      roll(ms);lastMs=ms;
+      roll(ms);lastMs=ms;lastValid=false;
     }
   }
   function absentPulse(bucket){
@@ -116,13 +122,17 @@ function create(options){
     for(b=end-COUNT+1;b<=end;b++)if(b>=0){var value=level(b);if(value)fn(b,value);}
   }
   function snapshot(){
-    var end=current-1,out="",b;
-    for(b=end-COUNT+1;b<=end;b++)out+=b>=0?level(b):0;
-    return {v:1,end:end,levels:out,active:{bucket:current,covered:covered,rest:rest}};
+    var end=current-1,out="",b,v;
+    for(b=end-COUNT+1;b<=end;b++){
+      v=b>=0?level(b):0;
+      out+=("0"+v.toString(16)).slice(-2);
+    }
+    return {v:2,end:end,levels:out,
+      active:{bucket:current,covered:covered,peaks:peaks,quietPeaks:quietPeaks}};
   }
   return {sample:sample,sync:sync,absentPulse:absentPulse,visit:visit,snapshot:snapshot,level:level,
-    getLive:function(){return {bucket:current,covered:covered,rest:rest,
-      quiet:quietSince!==undefined&&lastMs-quietSince>=confirmMs};}};
+    getLive:function(){return {bucket:current,covered:covered,peaks:peaks,
+      quietPeaks:quietPeaks,rate:percentFor(quietPeaks,peaks,covered)};}};
 }
 function install(bangle,storage,events,clock){
   clock=clock||function(){return Date.now();};
@@ -166,13 +176,13 @@ function install(bangle,storage,events,clock){
   }
   function configure(s){
     var on=s.restEnabled!==false,t=thresholdG(s.restThreshold),w=wearConfig(s);
-    var seconds=limit(s.restConfirmSeconds,1,60,10),key=JSON.stringify([t,seconds,w]);
+    var key=JSON.stringify([t,w]);
     if(on===enabled&&(!on||key===configKey))return;
     stopProbe();
     if(enabled){bangle.removeListener("accel",onAccel);persist();}
     enabled=on;configKey=key;wear=w;
     if(on){
-      engine=create({thresholdG:t,confirmSeconds:seconds,wearThresholdG:w.z,
+      engine=create({thresholdG:t,wearThresholdG:w.z,
         nowMs:clock(),saved:storage.readJSON("orbit.rest.json",1),onCommit:persist});
       bangle.on("accel",onAccel);scheduleProbe();
     }else engine=undefined;
@@ -194,7 +204,7 @@ function draw(graphics,engine,map){
     // Plot at the interval END: a completed bar expires exactly 24 h later.
     var endMs=(bucket+1)*SLOT_MS,age=now-endMs;
     var a=map.currentAngleRad-dir*age*2*Math.PI/DAY_MS;
-    var ca=Math.cos(a),sa=Math.sin(a),outer=r+height*value/5;
+    var ca=Math.cos(a),sa=Math.sin(a),outer=r+height*value/100;
     // Match the observer ray's geometric sunrise/sunset at this bar's time.
     graphics.setColor(map.isDayAt&&map.isDayAt(endMs)?0x07E0:0xFFE0);
     graphics.drawLine(Math.round(map.cx+r*ca),Math.round(map.cy+r*sa),
@@ -204,8 +214,8 @@ function draw(graphics,engine,map){
 exports.create=create;
 exports.install=install;
 exports.draw=draw;
-exports.levelFor=levelFor;
-exports.constants={slotMs:SLOT_MS,count:COUNT,confirmMs:CONFIRM_MS,maxGapMs:MAX_GAP_MS,minCoverageMs:MIN_COVERAGE_MS};
+exports.percentFor=percentFor;
+exports.constants={slotMs:SLOT_MS,count:COUNT,maxGapMs:MAX_GAP_MS,minCoverageMs:MIN_COVERAGE_MS};
 
 
 exports.thresholdG=thresholdG;

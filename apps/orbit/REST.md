@@ -1,84 +1,74 @@
-# Motion-rest graph (tenkyu 0.04)
+# Screen-normal acceleration peak rest graph (tenkyu 0.061)
 
-## Definition and settings
+## Definition
 
-The accelerometer measures gravity even when stationary. A sample is quiet when
-both the change between acceleration vectors (`diff`) and `abs(mag - 1 g)` are
-at most the threshold. Default: **0.03 g**; `Rest graph / Quiet threshold`:
-0.01-0.10 g. This measures wrist motion; a stationary unworn watch also qualifies.
-Reference: https://www.espruino.com/Reference#l_Bangle_accel .
+Each 5-minute interval is represented by one outward radial bar. The height is
+the percentage of **local Z-axis acceleration peaks** whose amplitude is
+less than or equal to the configured threshold (g):
 
-Quiet must continue for **10 seconds** before rest time begins accumulating.
-The initial confirmation time is not backdated. Moving again ends the quiet run.
-Time is integrated using sample timestamps, not a fixed number of samples.
-Gaps over 2.5 seconds and invalid samples break confirmation and are not counted
-as observed time. Native 80 ms / 800 ms sensor power saving is left unchanged.
+    rest_percent = 100 * below_threshold_peaks / all_peaks
 
-Every five-minute UTC interval receives a completed level:
+Bangle.js 2 `accel.z` is the axis in/out of the watch screen. The recorder
+tracks `abs(z - baseline)`, using a lightweight 2-second time-constant
+exponential baseline to suppress static gravity and slowly changing watch
+orientation. A local maximum is found from consecutive samples and counted
+only once on a flat-top peak. Positive and negative Z variations both count.
+The `diff` vector and `mag - 1` old quiet-test are no longer used.
 
-| Rest / observed time | Level |
-|---|---:|
-| 0-20% | 1 |
-| >20-40% | 2 |
-| >40-60% | 3 |
-| >60-80% | 4 |
-| >80-100% | 5 |
+The rest thresholds remain selectable in seven steps:
+`0.001 / 0.003 / 0.009 / 0.027 / 0.081 / 0.243 / 0.729 g`.
+The setting is now **Rest graph / Peak threshold**. The previous
+"Quiet seconds" setting is removed because there is no ten-second confirmation
+in this definition.
 
-At least **270 of 300 seconds** must be observed. Otherwise the interval is
-missing and has **no bar**. The unfinished current interval is not rated yet.
-This also prevents a few seconds after installation from receiving a full-bin
-rating. On an app switch the current accumulated totals are saved, but the quiet
-run must be confirmed again after loading.
+If no movement peak occurs in an otherwise fully observed and worn interval,
+the percentage is 100%. The percentage is stored as an integer 0–100.
+0% means no visible bar, 50% means half the configured maximum bar height,
+and 100% means the full maximum height. **Rest graph / Max bar height**
+sets that height from 1 to 14 pixels (default 10 pixels).
 
-## Display
+At least 270 of the 300 seconds must have consecutive valid Z samples with
+no intervening gap longer than 2.5 seconds. Missing data produces no bar.
+These are proportions *of detected peaks*, not the fraction of time resting.
+A high frequency of small noise peaks may bias the proportion; available
+peaks are limited by the sensor's actual sampling rate.
 
-There are **288 five-minute positions** around the lunar orbit: one complete
-turn is **24 hours**, independently of the Moon's 29.53-day movement. Each cyan
-bar extends **outward** from the orbit. Its length is `level / 5 * maximum`.
-`Rest graph / Level 5 height` sets the maximum from **1 to 14 pixels**, default
-**10 pixels**. Rasterization rounds endpoints to whole pixels; very short bars
-can coincide with the orbit. A 14-pixel limit fits the existing Moon envelope.
+## Non-wear classification and colors
 
-Bars are positioned at each interval's **end time**, using the same 24-hour
-orientation as the observer/dial. The newest completed bar starts at the
-observer's zenith direction; previous bars follow around the circle. North and
-south views reverse direction consistently. A slot is overwritten by the new
-value exactly 24 hours after the old slot was completed. Old lines are erased
-by the existing full redraw before the current history is drawn.
+Non-wear uses the existing 5-minute optical heart-rate check together with
+the whole-bin Z range, which is independently threshold-configurable.
+If there is no valid pulse and Z variation stayed below that range threshold,
+the bin is drawn black (no bar). For an observed, worn, motionless watch,
+there are no peaks, so the rest ratio is 100%.
 
-The Moon, red location dot, green/yellow zenith line, Roman numerals, labels and
-widgets are drawn above the bars. Widgets can hide the top of the ring. History
-is hidden when the calendar selects a different date; the real-time recorder
-continues recording. It is not a simulated future/past rest prediction.
+Bars are green from sunrise to sunset and yellow at night, evaluated at the
+end of each five-minute interval, as before. They extend outward from the
+lunar orbit without changing the Moon, red observer dot or other overlay order.
 
-## Lifecycle and power
+## Storage, power and compatibility
 
-`orbit.boot.js` installs the recorder for every app session. It listens to the
-already-running accelerometer, including with the LCD off and in other apps.
-It requests no GPS/heart-rate power and changes no sensor polling settings.
-There is no added sampling or drawing timer: per-event work is constant-time
-arithmetic; drawing uses the clock's existing five-minute refresh (30 seconds
-during an eclipse). A frame reuses the boot service rather than parsing a second
-copy of the module. `Enabled: Off` removes the listener immediately.
+The recording uses existing accelerometer events, does not raise polling rates,
+and does not retain raw accelerometer samples. Only the peak counts, baseline,
+three-point extrema state, time coverage and non-wear extrema are maintained.
+Memory and computation per event are constant. The radial history is 288
+five-minute bins (24 hours). Completed percentages are stored as two hex
+digits per bin, for 576 characters in `orbit.rest.json` (`v:2`).
+Current-bin counts are saved at app exits and at the five-minute rollover.
 
-Levels use 288 bytes and epoch stamps 1152 bytes. No raw samples are retained.
-Completed levels are serialized as 288 digits in `orbit.rest.json`; writes occur
-once per completed interval and on app exit or recording configuration changes,
-never per sample. App restarts restore history and the current-bin totals.
-An app/render timer crossing a bin boundary may omit the last sub-second sensor
-interval; it never extrapolates rest into an unobserved period. Long pauses
-remain missing. Backward clock corrections discard future bins.
+Old `v:1` rest-level history is intentionally not interpreted as v2 data:
+10-second quiet-duration levels and peak-ratio percentages have different
+definitions. A new graph will build up over 24 hours after upgrade; configuration,
+non-wear options and other app state are unchanged. The previous data file
+is overwritten on a completed bin, app exit, or other recorder persistence
+event.
 
-The initial release's green-by-day/yellow-by-night line is retained. Its boundary
-is geometric solar-center altitude zero, consistently with sunrise/sunset rays.
-
-Actual CPU time, sensor noise and battery impact require measurement on a watch.
+Sensor noise and power behavior need checking on a real Bangle.js 2. The
+energy cost is primarily event processing with the existing sampling frequency
+plus the unchanged periodic short HRM probe.
 
 ## Verification
 
 Run `node apps/orbit/test-rest.js` and `node apps/orbit/test.js`.
-The new synthetic tests cover confirmation, level boundaries, gravity handling,
-invalid/gapped samples, native sensor rates, five-minute boundaries, app/reboot
-persistence, 24-hour rollover, clock corrections, outward geometry and adjustable
-height, boot/off/LCD lifecycle, plot layering and daytime/nighttime line colors.
-The existing eclipse/clock tests remain unchanged and pass.
+Test both low and high peaks, mixed ratios, uninterrupted stillness, sparse
+sampling, insufficient coverage, device non-wear, midnight and clock
+corrections, persistence, layering and day/night colors.
