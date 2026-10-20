@@ -124,11 +124,11 @@ The approximate solar-position formulae are based on NOAA's **General Solar Posi
 
 ### 24-hour rest graph
 
-Five-minute motion-rest levels are shown as cyan bars extending **outward from the lunar orbit**. There are 288 positions per 24 hours; each new completed interval replaces the one from 24 hours earlier. The Moon and observer remain above the graph.
+Five-minute **peak-based rest percentages** are shown as bars extending **outward from the lunar orbit**. There are 288 positions per 24 hours; each completed interval replaces the one from 24 hours earlier. Bars are **green during the day and yellow at night**; the Moon and observer remain above them.
 
-A quiet acceleration change and a magnitude close to gravity (default tolerance **0.03 g**) must continue for **10 seconds** before rest time is counted. The rest fraction in each five-minute interval maps to levels **1-5** in 20-percentage-point bands. Missing measurements receive no bar; a stationary unworn watch also counts as quiet.
+The accelerometer's screen-normal **Z axis** is high-pass filtered to remove gravity and slow orientation changes. Both directions of motion are counted as peaks in the **absolute value** of the filtered signal. Each interval's bar height equals the **percentage of detected peaks at or below the configured threshold**. An otherwise valid and worn interval with no peaks is 100%; incomplete data (under 270 s coverage) gets no bar. A short optical pulse probe and full-interval Z stability check exclude non-wear.
 
-**Rest graph** settings: **Enabled**, **Level 5 height** (1-14 pixels, default 10), and **Quiet threshold** (0.01-0.10 g). Recording continues with the LCD off and in other apps. Completed history survives app changes and restarts. A different date selected in the calendar hides the real-time graph. Daytime observer lines remain green and nighttime lines yellow.
+**Rest graph** settings: **Enabled**, **Max bar height** (1-14 pixels, default 10), **Peak threshold** (seven choices from 0.001 to 0.729 g), and **Non-wear** options. Recording continues with the LCD off and in other apps. History survives restarts. The new percentage history format replaces old 1–5 rest levels without converting them; recording a new 24-hour history begins on upgrade. A different date selected in the calendar hides the real-time graph.
 
 ### Moon phase
 
@@ -365,11 +365,11 @@ Place timeを使用しても、Bangle.js本体のタイムゾーン設定やDST�
 
 ### 24時間の安静度グラフ
 
-月の軌道から**外向き**に伸びる水色の棒で、5分ごとの安静度を表示します。5分×288区間で24時間を一周し、新しい記録で24時間前の記録を置き換えます。月、赤点、昼夜の線分は棒グラフより上に描きます。
+月の軌道から**外向き**に伸びる棒の高さで、5分ごとの**安静率（加速度ピークのうち設定閾値以下だった割合）**を表します。5分×288区間で24時間を一周します。棒の色は**昼間が緑、夜間が黄色**で、月と赤い観測地点は棒より上に描画します。
 
-加速度の変化量が小さく、加速度の大きさも重力の1gに近い状態（初期閾値 **0.03g**）が**10秒間**続くと安静時間の積算を始めます。確認の10秒間は遡って加算しません。5分間の観測時間に占める安静時間の割合を、20%刻みで**1〜5段階**にします。270秒未満しか観測できなかった区間は棒を表示しません。腕から外して静置した時計も安静に含まれます。
+画面と垂直な**Z軸**の加速度から、重力・ゆっくりした時計の傾きの変化を引いた信号の**絶対値の局所ピーク**を全て抽出します。検出ピークのうち閾値以下だった個数の割合を0〜100%で計算し、棒の最大高さに比例させます。十分な記録があり装着中と判定され、ピークが1個もなければ100%です。観測時間が270秒未満なら棒なしです。5分ごとの脈拍試験とZ方向の変化範囲による非装着判定も継続します。
 
-設定の **Rest graph** で、**Enabled**（計測・表示のオン／オフ）、**Level 5 height**（最大値5の棒の高さ：1〜14画素、初期値10画素）、**Quiet threshold**（閾値：0.01〜0.10g）を変更できます。画面消灯中や他のアプリの使用中も記録し、アプリ切り替えや再起動後も履歴を引き継ぎます。カレンダーで別の日を表示している間は、実時間の棒グラフを隠します。赤点からの線分は日の出から日の入りまで緑、夜間は黄色です。
+設定 **Rest graph** の **Enabled**（オン／オフ）、**Max bar height**（最大の棒の高さ：1〜14画素、初期値10画素）、**Peak threshold**（0.001〜0.729gの7段階）、**Non-wear**（非装着判定）を調整できます。画面消灯中や他のアプリでも計測し、再起動後も記録を引き継ぎます。ただし旧式の1〜5段階の記録とは定義が異なるため、アップデート時に旧履歴は変換せず、新しい24時間の履歴を作ります。カレンダーで別の日を表示中は実時間の棒を隠します。
 
 ### 月相
 
