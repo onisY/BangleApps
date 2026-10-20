@@ -1,3 +1,4 @@
+/* global Map, Proxy, __dirname */
 /* Run: node apps/orbit/test.js. No dependency packages required.
  * NASA reference: SE2017Aug21Tbeselm.html / SE2024Apr08Tbeselm.html at
  * https://eclipse.gsfc.nasa.gov/SEbeselm/SEbeselm2001/ .
