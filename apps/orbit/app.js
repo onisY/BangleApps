@@ -4,7 +4,8 @@
   var Storage=require("Storage"),CFGFILE="orbit.json";
   var cfg=Storage.readJSON(CFGFILE,1)||{};
   var sysCfg=Storage.readJSON("setting.json",1)||{};
-  var VIEWLIGHT_MS=isFinite(sysCfg.timeout)?Math.max(0,+sysCfg.timeout)*1000:10000;
+  var VIEWLIGHT_MS=isFinite(sysCfg.timeout)&&sysCfg.timeout>0?
+    Math.max(1000,+sysCfg.timeout*1000):10000; // Never leave touch/backlight on indefinitely.
   sysCfg=undefined;
   /* Normalize persisted settings and migrate legacy coordinates once. */
   (function(){
@@ -83,6 +84,9 @@
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800,GREEN=0x04C0;
   var ECLIPSE_ENABLED=cfg.eclipseEnabled===undefined?true:cfg.eclipseEnabled!==false;
   var ECLIPSE_UPDATE_MS=30000,eclipseDisplay,eclipseActive=false,lastClockMinute=-1;
+  var nextEclipseCheck=0;
+  // Once per 5-minute slot, cache day/night for the 288 recorded bars.
+  var restDay=new Uint8Array(288),restDaySlot=new Uint32Array(288);
   var REST_ENABLED=cfg.restEnabled!==false;
   var REST_MAX_HEIGHT=Math.max(1,Math.min(14,isFinite(cfg.restBarHeight)?cfg.restBarHeight|0:10));
   var restService;
@@ -898,7 +902,9 @@
       eclipseDisplay=renderer.create(engine);
       ECLIPSE_UPDATE_MS=renderer.UPDATE_MS;
     }
-    return eclipseDisplay.update(new Date(virtualNowMs()));
+    var active=eclipseDisplay.update(new Date(virtualNowMs()));
+    nextEclipseCheck=Date.now()+(active?30000:300000);
+    return active;
   }
   function drawEclipse(sol){
     if(!eclipseActive||!eclipseDisplay)return;
@@ -918,6 +924,14 @@
     }
     restService.configure(Storage.readJSON(CFGFILE,1)||{});
   }
+  function restIsDayAt(ms){
+    var slot=Math.floor(ms/300000),index=slot%288;
+    if(restDaySlot[index]!==slot){
+      restDaySlot[index]=slot;
+      restDay[index]=solarPosition(ms,TESTLAT,TESTLON).el>=0?1:0;
+    }
+    return restDay[index]!==0;
+  }
   function drawRest(sol){
     // The ring is a real 24-hour recorder, not a future-date prediction.
     if(!restService||selectedDayOffset!==0)return;
@@ -925,7 +939,7 @@
     restService.draw(g,{nowMs:now,radiusPx:MOONORBIT,
       maxHeightPx:REST_MAX_HEIGHT,cx:EARTHX,cy:EARTHY,south:VIEW_SOUTH,
       currentAngleRad:SUNANG+(VIEW_SOUTH?sol.ha:-sol.ha),
-      isDayAt:function(ms){return solarPosition(ms,TESTLAT,TESTLON).el>=0;}});
+      isDayAt:restIsDayAt});
   }
 
   function drawBase(){
@@ -938,9 +952,9 @@
     var sol=safeSolar();
     drawEarth(sol);
     drawEclipse(sol); // Before observer: preserve the red dot and day/night line.
-    drawRest(sol); // Outward bars underneath observer, Moon, labels and widgets.
     drawObserver(sol);
     var moon=drawMoon();
+    drawRest(sol); // User requested rest bars above the Moon (and its red rim).
     /* Keep hour numerals visible over both sides of the Moon. */
     drawOrbitHours(sol);
     drawLocationStatus(moon);
@@ -997,6 +1011,7 @@
        Only switch the backlight off here. Forcing LCD power off bypasses the
        normal Q3 wake path because lcdPowerTimeout is intentionally zero. */
     try{Bangle.setBacklight(false);}catch(e){}
+    try{Bangle.setLocked(true);}catch(e){} // Keep LCD on, disable power-hungry touch.
   }
 
   function startOrbit(keepInteractive){
@@ -1012,7 +1027,7 @@
       try{Bangle.setBacklight(true);}catch(e){}
       armIdle();
     }else{
-      try{Bangle.setLocked(false);}catch(e){}
+      try{Bangle.setLocked(true);}catch(e){}
     }
   }
 
@@ -1127,6 +1142,7 @@
 
   function onLCD(on){
     if(!on){
+      try{Bangle.setLocked(true);}catch(e){}
       clear(minuteTimer);minuteTimer=undefined;
       clearTaps();
       clear(idleTimer);idleTimer=undefined;
@@ -1161,12 +1177,14 @@
 
   function armMinute(){
     clear(minuteTimer);
-    var tick=ECLIPSE_ENABLED?ECLIPSE_UPDATE_MS:60000;
+    // Normal minute clock updates are cheap. Eclipse ephemerides normally run
+    // every 5 minutes, and switch to 30-second tracking only during eclipses.
+    var tick=ECLIPSE_ENABLED&&eclipseActive?ECLIPSE_UPDATE_MS:60000;
     minuteTimer=setTimeout(function(){
       minuteTimer=undefined;
       if(!killed&&mode==="tenkyu"){
         var wasActive=eclipseActive;
-        eclipseActive=updateEclipse();
+        if(ECLIPSE_ENABLED&&Date.now()>=nextEclipseCheck)eclipseActive=updateEclipse();
         /* Rebuild Earth when shadow moves/disappears: no accumulated black trail.
            Far from eclipse, keep the original five-minute base refresh. */
         if(wasActive||eclipseActive||Math.floor(Date.now()/300000)!==lastBaseBucket||
@@ -1214,6 +1232,7 @@
   try{Bangle.setLocked(false);}catch(e){}
   drawBase();
   armMinute();
+  armIdle(); // Also enforce a finite timeout when the system timeout is zero.
 })();
 
 
