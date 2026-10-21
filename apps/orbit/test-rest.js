@@ -190,7 +190,14 @@ assert.strictEqual(killing.b.listenerCount("HRM"),0);
 assert.strictEqual(killing.timers.size,0);
 // Repeated 12.5 Hz accelerometer events should not allocate growing sample arrays.
 const perf=r.create({thresholdG:.027});
-for(let t=0;t<S;t+=80)perf.sample({z:1+(t%8000===80?.01:0)},base+t);
-perf.sync(base+S);assert.strictEqual(perf.snapshot().v,3);
+const benchStart=Date.now(),benchSamples=15000;
+for(let i=0;i<benchSamples;i++){
+  const t=i*80;
+  perf.sample({z:1+(t%8000===80?.01:0)},base+t);
+}
+perf.sync(base+benchSamples*80);
+assert.strictEqual(perf.snapshot().v,3);
+console.log("Accelerometer CPU benchmark: "+benchSamples+
+  " synthetic 12.5 Hz samples in "+(Date.now()-benchStart)+" ms (Node runtime; not watch power)");
 console.log("PASS: five-stage peak-ratio, v3 storage, non-wear, early HRM-off,");
 console.log("12.5Hz events, 24 h history, idle lock/wake, app drawing.");
