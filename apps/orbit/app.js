@@ -735,6 +735,8 @@
     g.setColor(YELLOW).fillPoly(MOON_CACHE_LIT);
     g.setColor(BLACK).fillPoly(MOON_CACHE_FAR);
     g.setColor(WHITE).drawPoly(MOON_CACHE_NEAR,false);
+    // Global eclipse alert: accent the outer lunar rim, not the phase boundary.
+    if(eclipseActive)g.setColor(RED).drawCircle(m.x,m.y,MOONR);
     return m;
   }
 
