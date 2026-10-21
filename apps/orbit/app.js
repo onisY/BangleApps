@@ -951,10 +951,10 @@
     drawSun();
     var sol=safeSolar();
     drawEarth(sol);
-    drawEclipse(sol); // Before observer: preserve the red dot and day/night line.
-    drawObserver(sol);
+    drawEclipse(sol); // Earth's shadow first.
     var moon=drawMoon();
-    drawRest(sol); // User requested rest bars above the Moon (and its red rim).
+    drawRest(sol); // Rest bars overwrite the Moon, as requested.
+    drawObserver(sol); // The red location point is still the topmost overlay.
     /* Keep hour numerals visible over both sides of the Moon. */
     drawOrbitHours(sol);
     drawLocationStatus(moon);
