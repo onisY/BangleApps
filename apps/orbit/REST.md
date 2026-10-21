@@ -1,74 +1,49 @@
-# Screen-normal acceleration peak rest graph (tenkyu 0.061)
+# Rest bar and power management (tenkyu v0.063)
 
-## Definition
+## Five-level bars
 
-Each 5-minute interval is represented by one outward radial bar. The height is
-the percentage of **local Z-axis acceleration peaks** whose amplitude is
-less than or equal to the configured threshold (g):
+The underlying five-minute measure is still the percentage of local maxima
+in the high-pass-filtered Z acceleration whose amplitude is no greater than the
+configured threshold (0.001–0.729 g, seven choices).
 
-    rest_percent = 100 * below_threshold_peaks / all_peaks
+Display stage: 0–19%=1, 20–39%=2, 40–59%=3, 60–79%=4, 80–100%=5.
+Worn, observed inactivity with zero peaks is 100% (stage 5). Worn,
+high-motion intervals that yield 0% quiet peaks still display stage 1.
+Non-wear = stage 0 and draws no bar. Missing coverage (<270 seconds)
+also draws no bar but is stored separately; no-data and non-wear must not
+be treated as the same physiological state.
 
-Bangle.js 2 `accel.z` is the axis in/out of the watch screen. The recorder
-tracks `abs(z - baseline)`, using a lightweight 2-second time-constant
-exponential baseline to suppress static gravity and slowly changing watch
-orientation. A local maximum is found from consecutive samples and counted
-only once on a flat-top peak. Positive and negative Z variations both count.
-The `diff` vector and `mag - 1` old quiet-test are no longer used.
+The goal is that sleep-like motionlessness maps approximately to 5,
+desk work to 3, and walking to 1; a Z-peak ratio alone does not guarantee
+those classes. Validate thresholds against actual Bangle.js 2 samples.
 
-The rest thresholds remain selectable in seven steps:
-`0.001 / 0.003 / 0.009 / 0.027 / 0.081 / 0.243 / 0.729 g`.
-The setting is now **Rest graph / Peak threshold**. The previous
-"Quiet seconds" setting is removed because there is no ten-second confirmation
-in this definition.
+Bars are drawn **after the Moon**, so they overwrite lunar pixels, and before
+the red observer point. Sunrise/sunset classification is cached by
+five-minute slot for 288 bins, reducing repeated astronomy calculations
+during full-screen redraw.
 
-If no movement peak occurs in an otherwise fully observed and worn interval,
-the percentage is 100%. The percentage is stored as an integer 0–100.
-0% means no visible bar, 50% means half the configured maximum bar height,
-and 100% means the full maximum height. **Rest graph / Max bar height**
-sets that height from 1 to 14 pixels (default 10 pixels).
+## Retained history
 
-At least 270 of the 300 seconds must have consecutive valid Z samples with
-no intervening gap longer than 2.5 seconds. Missing data produces no bar.
-These are proportions *of detected peaks*, not the fraction of time resting.
-A high frequency of small noise peaks may bias the proportion; available
-peaks are limited by the sensor's actual sampling rate.
+Save v3 with 288 hexadecimal bytes: 00–64 (0–100%) for observed data,
+FE for non-wear, FF for absent/insufficient data. Load v2 percentages for
+backward compatibility but reinterpret v2 zero (which could mean either zero
+activity or absent data) conservatively as missing. The previous v1
+duration-based levels remain incompatible.
 
-## Non-wear classification and colors
+## Power
 
-Non-wear uses the existing 5-minute optical heart-rate check together with
-the whole-bin Z range, which is independently threshold-configurable.
-If there is no valid pulse and Z variation stayed below that range threshold,
-the bin is drawn black (no bar). For an observed, worn, motionless watch,
-there are no peaks, so the rest ratio is 100%.
+* After the LCD/backlight timeout, turn off backlight and lock touch input;
+  leave the memory-in-pixel LCD displaying the clock. If system timeout=0,
+  use a 10-second fallback. Face-up/twist still unlock and light the watch.
+* For the 5-minute HRM wear probe, power down the LED immediately after the
+  first reliable pulse, otherwise continue up to the selected probe limit
+  (default 30s).
+* Preserve all existing accelerometer events for peak fidelity but avoid
+  unnecessary loops and array allocations in the typical sample path.
+* Evaluate eclipse approximately every five minutes when inactive; use the
+  existing 30-second precision path when active. The normal time display
+  remains updated each minute.
+* Cache 288 day/night results with per-slot stamps rather than recomputing
+  the full astronomical solar position for every bar on every redraw.
+* Real Bangle.js 2 power and wake behavior require a physical test.
 
-Bars are green from sunrise to sunset and yellow at night, evaluated at the
-end of each five-minute interval, as before. They extend outward from the
-lunar orbit without changing the Moon, red observer dot or other overlay order.
-
-## Storage, power and compatibility
-
-The recording uses existing accelerometer events, does not raise polling rates,
-and does not retain raw accelerometer samples. Only the peak counts, baseline,
-three-point extrema state, time coverage and non-wear extrema are maintained.
-Memory and computation per event are constant. The radial history is 288
-five-minute bins (24 hours). Completed percentages are stored as two hex
-digits per bin, for 576 characters in `orbit.rest.json` (`v:2`).
-Current-bin counts are saved at app exits and at the five-minute rollover.
-
-Old `v:1` rest-level history is intentionally not interpreted as v2 data:
-10-second quiet-duration levels and peak-ratio percentages have different
-definitions. A new graph will build up over 24 hours after upgrade; configuration,
-non-wear options and other app state are unchanged. The previous data file
-is overwritten on a completed bin, app exit, or other recorder persistence
-event.
-
-Sensor noise and power behavior need checking on a real Bangle.js 2. The
-energy cost is primarily event processing with the existing sampling frequency
-plus the unchanged periodic short HRM probe.
-
-## Verification
-
-Run `node apps/orbit/test-rest.js` and `node apps/orbit/test.js`.
-Test both low and high peaks, mixed ratios, uninterrupted stillness, sparse
-sampling, insufficient coverage, device non-wear, midnight and clock
-corrections, persistence, layering and day/night colors.
