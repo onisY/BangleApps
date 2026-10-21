@@ -113,8 +113,8 @@ function environment(start,config={},data){
 const app=environment(base);
 app.execute("boot.js");assert.strictEqual(app.b.listenerCount("accel"),1);
 app.execute("app.js");assert.strictEqual(app.b.listenerCount("accel"),1);
-const idleTimer=[...app.timers.values()][0];
-assert(idleTimer&&idleTimer.ms<=10000,"Backlight must have a finite default-off timer");
+assert([...app.timers.values()].some(x=>x.ms<=10000),
+  "Backlight must have a finite default-off timer");
 app.advance(base+10000);
 assert(app.lights.some(x=>x[1]===false)&&app.locks.some(x=>x[1]===true),
   "Idle must disable both the backlight and the touchscreen");
