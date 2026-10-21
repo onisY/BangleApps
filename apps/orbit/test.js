@@ -116,6 +116,14 @@ function appHarness(enabled,iso){
 }
 const app=appHarness(true,refs[1].date);
 assert(app.timers.size===1);
+// Red outer Moon rim must appear while an eclipse is active anywhere on Earth.
+function redMoonRims(a){
+  return a.log.filter(x=>x.op==="drawCircle"&&x.color===0xF800&&x.args[2]>=14&&x.args[2]<=16);
+}
+assert.strictEqual(redMoonRims(app).length,1);
+assert.strictEqual(redMoonRims(appHarness(true,"2025-03-29T10:47:00Z")).length,1); // partial only
+assert.strictEqual(redMoonRims(appHarness(true,"2024-04-23T12:00:00Z")).length,0); // no eclipse
+
 assert(app.reads.includes("orbit.ecldata"));
 const lastShadow=app.log.reduce((last,x,i)=>x.op==="setPixel"&&x.color===0?i:last,-1);
 const red=app.log.findIndex(x=>x.op==="fillCircle"&&x.color===0xF800&&x.args[2]===2);
@@ -125,6 +133,7 @@ const timer=[...app.timers.values()][0];assert(timer.ms<=30025);
 app.timers.clear();app.advance(30000);timer.f();assert(app.timers.size===1);
 app.events.lcdPower(false);assert(app.timers.size===0);
 const off=appHarness(false,refs[1].date);assert(!off.reads.some(n=>n.startsWith("orbit.ecl")));
+assert.strictEqual(redMoonRims(off).length,0);
 assert([...off.timers.values()][0].ms>30000);
 console.log("PASS: lunar example, NASA centers, partial/annular/night/full-Moon, shading/cache/layers/timer/off/LCD.");
 if(process.argv[2]==="--preview"){
