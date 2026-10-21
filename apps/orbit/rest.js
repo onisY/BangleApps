@@ -4,6 +4,7 @@
  * Non-wear still uses whole-bin Z range and a periodic HRM probe.
  */
 var SLOT_MS=300000,COUNT=288,DAY_MS=SLOT_MS*COUNT;
+var NOT_WORN=254,NO_DATA=255;
 var MAX_GAP_MS=2500,MIN_COVERAGE_MS=270000;
 var THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
 function thresholdG(v){
@@ -38,10 +39,13 @@ function create(options){
   var current=-1,covered=0,peaks=0,quietPeaks=0,lastMs,lastValid=false;
   var zBase,ampOlder,ampPrevious;
   var old=options.saved,i,b,v;
-  if(old&&old.v===2&&isFinite(old.end)&&typeof old.levels==="string"&&old.levels.length===COUNT*2){
+  if(old&&(old.v===2||old.v===3)&&isFinite(old.end)&&typeof old.levels==="string"&&old.levels.length===COUNT*2){
     for(i=0;i<COUNT;i++){
       b=old.end-COUNT+1+i;v=parseInt(old.levels.substr(2*i,2),16);
-      if(b>=0&&isFinite(v)&&v>=0&&v<=100){stamps[b%COUNT]=b;levels[b%COUNT]=v;}
+      if(b>=0&&isFinite(v)&&v>=0&&v<=255){
+        stamps[b%COUNT]=b;
+        levels[b%COUNT]=old.v===2&&v===0?NO_DATA:v;
+      }
     }
     if(old.active&&old.active.bucket===Math.floor(options.nowMs/SLOT_MS)){
       current=old.active.bucket;
@@ -59,7 +63,8 @@ function create(options){
       closedStill=!zBad&&zFirst!==undefined&&zFirst-current*SLOT_MS<=MAX_GAP_MS&&
         (current+1)*SLOT_MS-zLast<=MAX_GAP_MS&&zMax-zMin<=wearG;
       i=current%COUNT;stamps[i]=current;
-      levels[i]=noPulse&&closedStill?0:percentFor(quietPeaks,peaks,covered);changed=true;
+      levels[i]=covered<MIN_COVERAGE_MS?NO_DATA:
+        (noPulse&&closedStill?NOT_WORN:percentFor(quietPeaks,peaks,covered));changed=true;
     }else if(current>=0&&target<current){
       for(i=0;i<COUNT;i++)if(stamps[i]>=target){stamps[i]=0;levels[i]=0;}
       closedBucket=-1;changed=true;
@@ -86,21 +91,24 @@ function create(options){
     if(!isFinite(ms)||ms<0)return;
     var z=a&&a.z,valid=isFinite(z),dt=lastMs===undefined?0:ms-lastMs;
     var continuous=lastValid&&valid&&dt>0&&dt<=MAX_GAP_MS;
-    if(!continuous){roll(ms);resetPeak();}
-    else{
-      var start=lastMs,end;
-      while(start<ms){
-        roll(start);end=Math.min(ms,(current+1)*SLOT_MS);
-        covered+=end-start;
-        start=end;
-      }
+    var target=Math.floor(ms/SLOT_MS);
+    if(!continuous){
+      if(target!==current)roll(ms);
+      resetPeak();
+    }else if(target===current){
+      covered+=dt; // Common case: no rollover or extra loop per sensor event.
+    }else{
+      // A valid interval can cross only one 5-minute boundary (dt<=2.5 s).
+      var boundary=target*SLOT_MS;
+      if(current>=0&&target===current+1)covered+=boundary-lastMs;
       roll(ms);
+      covered+=ms-boundary;
     }
     if(!valid)zBad=true;
     else{
       if(zFirst===undefined)zFirst=ms;
       if(zLast!==undefined&&(ms-zLast>MAX_GAP_MS||ms<=zLast))zBad=true;
-      zLast=ms;zMin=Math.min(zMin,z);zMax=Math.max(zMax,z);
+      zLast=ms;zMin=z<zMin?z:zMin;zMax=z>zMax?z:zMax;
       detectPeak(z,continuous?dt:0);
     }
     lastMs=ms;lastValid=!!valid;
@@ -113,21 +121,27 @@ function create(options){
   function absentPulse(bucket){
     if(bucket===current){noPulse=true;return;}
     if(bucket===closedBucket&&closedStill&&stamps[bucket%COUNT]===bucket){
-      levels[bucket%COUNT]=0;if(save)save();
+      levels[bucket%COUNT]=NOT_WORN;if(save)save();
     }
   }
-  function level(bucket){return stamps[bucket%COUNT]===bucket?levels[bucket%COUNT]:0;}
+  function level(bucket){return stamps[bucket%COUNT]===bucket?
+    (levels[bucket%COUNT]>100?0:levels[bucket%COUNT]):0;}
   function visit(ms,fn){
-    var end=Math.floor(ms/SLOT_MS)-1,b;
-    for(b=end-COUNT+1;b<=end;b++)if(b>=0){var value=level(b);if(value)fn(b,value);}
+    var end=Math.floor(ms/SLOT_MS)-1,b,v;
+    for(b=end-COUNT+1;b<=end;b++)if(b>=0&&stamps[b%COUNT]===b){
+      v=levels[b%COUNT];
+      if(v<=100)fn(b,v); // 0%-quiet is a visible stage-1 bar.
+    }
   }
   function snapshot(){
     var end=current-1,out="",b,v;
     for(b=end-COUNT+1;b<=end;b++){
       v=b>=0?level(b):0;
+      if(stamps[b%COUNT]!==b)v=NO_DATA;
+      else v=levels[b%COUNT];
       out+=("0"+v.toString(16)).slice(-2);
     }
-    return {v:2,end:end,levels:out,
+    return {v:3,end:end,levels:out,
       active:{bucket:current,covered:covered,peaks:peaks,quietPeaks:quietPeaks}};
   }
   return {sample:sample,sync:sync,absentPulse:absentPulse,visit:visit,snapshot:snapshot,level:level,
@@ -143,7 +157,11 @@ function install(bangle,storage,events,clock){
   function onAccel(a){engine.sample(a,clock());}
   function onHRM(h){
     if(probe&&h&&isFinite(h.bpm)&&h.bpm>=wear.min&&h.bpm<=wear.max&&
-      isFinite(h.confidence)&&h.confidence>=wear.confidence)probe.pulse=true;
+      isFinite(h.confidence)&&h.confidence>=wear.confidence){
+      probe.pulse=true;
+      // Enough evidence of wear: turn the optical LED off immediately.
+      stopProbe();scheduleProbe();
+    }
   }
   function stopProbe(){
     if(timer!==undefined){clearTimeout(timer);timer=undefined;}
@@ -195,16 +213,20 @@ function install(bangle,storage,events,clock){
   configure(storage.readJSON("orbit.json",1)||{});
   return api;
 }
+function stageFor(percent){
+  // Five visible lengths for worn records. No-data / non-wear are not visited.
+  return Math.max(1,Math.min(5,1+Math.floor(Math.min(99,percent)/20)));
+}
 function draw(graphics,engine,map){
   if(!engine)return;
-  // Outward bars stay inside the existing Moon envelope (Moon radius >=14 px).
+  // The selected maximum is now the stage-5 height.
   var r=map.radiusPx,height=Math.max(1,Math.min(map.maxHeightPx,14));
   var dir=map.south?1:-1,now=map.nowMs;
   engine.visit(now,function(bucket,value){
     // Plot at the interval END: a completed bar expires exactly 24 h later.
     var endMs=(bucket+1)*SLOT_MS,age=now-endMs;
     var a=map.currentAngleRad-dir*age*2*Math.PI/DAY_MS;
-    var ca=Math.cos(a),sa=Math.sin(a),outer=r+height*value/100;
+    var ca=Math.cos(a),sa=Math.sin(a),outer=r+height*stageFor(value)/5;
     // Match the observer ray's geometric sunrise/sunset at this bar's time.
     graphics.setColor(map.isDayAt&&map.isDayAt(endMs)?0x07E0:0xFFE0);
     graphics.drawLine(Math.round(map.cx+r*ca),Math.round(map.cy+r*sa),
@@ -215,6 +237,7 @@ exports.create=create;
 exports.install=install;
 exports.draw=draw;
 exports.percentFor=percentFor;
+exports.stageFor=stageFor;
 exports.constants={slotMs:SLOT_MS,count:COUNT,maxGapMs:MAX_GAP_MS,minCoverageMs:MIN_COVERAGE_MS};
 
 

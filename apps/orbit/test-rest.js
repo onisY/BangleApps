@@ -24,11 +24,20 @@ const low=r.create({thresholdG:.027});pattern(low,.004);
 assert.strictEqual(low.level(base/S),100);
 const high=r.create({thresholdG:.027});pattern(high,.2);
 assert.strictEqual(high.level(base/S),0);
+const zeroBars=[];high.visit(base+S*2,(b,v)=>zeroBars.push([b,v]));
+assert.deepStrictEqual(zeroBars,[[base/S,0]]); // a worn, active bin still draws stage 1
+assert.deepStrictEqual([0,19,20,39,40,59,60,79,80,100].map(r.stageFor),
+ [1,1,2,2,3,3,4,4,5,5]);
+const stageAngles=[];
+r.draw({setColor:()=>{},drawLine:(...a)=>stageAngles.push(a)},high,
+ {nowMs:base+S*2,radiusPx:70,maxHeightPx:10,cx:85,cy:90,currentAngleRad:0});
+assert.strictEqual(stageAngles.length,1);
+assert(Math.abs(Math.hypot(stageAngles[0][2]-85,stageAngles[0][3]-90)-72)<1);
 const mixed=r.create({thresholdG:.027});pattern(mixed,k=>k%2?.2:.004);
 assert(Math.abs(mixed.level(base/S)-50)<=4);
 const still=r.create();feed(still,base,base+S);
 assert.strictEqual(still.level(base/S),100);
-assert.strictEqual(still.snapshot().v,2);
+assert.strictEqual(still.snapshot().v,3);
 assert.strictEqual(still.snapshot().levels.length,576);
 for(const step of [80,800]){
   const x=r.create();feed(x,base,base+S,quiet,step);x.sync(base+S);
@@ -36,6 +45,8 @@ for(const step of [80,800]){
 }
 const gap=r.create();feed(gap,base,base+20000);gap.sample(quiet,base+S);
 assert.strictEqual(gap.level(base/S),0);
+assert(gap.snapshot().levels.includes("ff")); // missing data is distinct from non-wear
+
 const partial=r.create();feed(partial,base,base+100000);
 const resumed=r.create({saved:partial.snapshot(),nowMs:base+101000});
 feed(resumed,base+101000,base+S);
@@ -78,9 +89,11 @@ function environment(start,config={},data){
   const g=new Proxy({getWidth:()=>176,getHeight:()=>176,stringWidth:s=>s.length*8,theme:{bg:0,fg:0xffff}},
     {get:(o,k)=>k in o?o[k]:k==="transformVertices"?undefined:(...args)=>{
       if(k==="setColor")color=args[0];log.push({op:k,args,color});return g;}});
-  const b=new EventEmitter(),events=new EventEmitter();
-  for(const n of ["setGPSPower","setUI","loadWidgets","drawWidgets","setLocked","setBacklight","showLauncher"])
+  const b=new EventEmitter(),events=new EventEmitter(),locks=[],lights=[];
+  for(const n of ["setGPSPower","setUI","loadWidgets","drawWidgets","showLauncher"])
     b[n]=()=>{};
+  b.setLocked=v=>locks.push([now,v]);
+  b.setBacklight=v=>lights.push([now,v]);
   const power=[];b.setHRMPower=(on,id)=>{power.push([now,on,id]);return !!on;};
   b.isLCDOn=()=>true;
   class Clock extends Date{constructor(...a){super(...(a.length?a:[now]));}static now(){return now;}}
@@ -92,7 +105,7 @@ function environment(start,config={},data){
       if(!due)break;timers.delete(due[0]);now=due[1].at;due[1].f();}
     now=t;
   }
-  return {b,events,log,timers,cfg,store,storage,execute,power,advance,writes:()=>writes,setNow:t=>now=t,
+  return {b,events,log,timers,cfg,store,storage,execute,power,locks,lights,advance,writes:()=>writes,setNow:t=>now=t,
     feed:(end,a=quiet)=>{for(let t=now;t<=end;t+=800){now=t;b.emit("accel",a);}now=end;}};
 }
 
@@ -100,6 +113,14 @@ function environment(start,config={},data){
 const app=environment(base);
 app.execute("boot.js");assert.strictEqual(app.b.listenerCount("accel"),1);
 app.execute("app.js");assert.strictEqual(app.b.listenerCount("accel"),1);
+const idleTimer=[...app.timers.values()][0];
+assert(idleTimer&&idleTimer.ms<=10000,"Backlight must have a finite default-off timer");
+app.advance(base+10000);
+assert(app.lights.some(x=>x[1]===false)&&app.locks.some(x=>x[1]===true),
+  "Idle must disable both the backlight and the touchscreen");
+app.b.emit("faceUp",true);
+assert.strictEqual(app.locks.at(-1)[1],false); // wrist raise wakes and unlocks
+assert.strictEqual(app.lights.at(-1)[1],true);
 const writes=app.writes();app.feed(base+S);app.b.orbitRest.sync(base+S);
 assert.strictEqual(app.writes()-writes,1);
 app.log.length=0;app.b.emit("lcdPower",true);
@@ -132,7 +153,7 @@ for(let i=0;i<7;i++){q.onchange(i);assert.strictEqual(app.cfg.restThreshold,r.th
 menus.at(-1)["Non-wear"]();
 menus.at(-1)["Z range"].onchange(0);
 assert.strictEqual(app.cfg.restWearThreshold,.001);
-// Day/night timestamps and v2 percentage history render through the real app.
+// Day/night timestamps and backward-compatible v2 percentage history render.
 for(const [iso,c] of [["2026-10-19T18:00:00Z",0x07e0],["2026-10-19T06:00:00Z",0xffe0]]){
   const now=Date.parse(iso),end=Math.floor(now/S);
   const h=environment(now,{},{"orbit.rest.json":{v:2,end:end-1,
@@ -154,9 +175,12 @@ function runWear(pulse,zAt=()=>1,cfg={}){
   return h;
 }
 const nw=runWear();assert.strictEqual(nw.b.orbitRest.getEngine().level(base/S),0);
+assert(nw.b.orbitRest.getEngine().snapshot().levels.endsWith("fe"));
 assert.deepStrictEqual(nw.power,[[base+270000,1,"orbitrest"],[base+S,0,"orbitrest"]]);
 assert.strictEqual(nw.b.listenerCount("HRM"),0);
-assert.strictEqual(runWear({bpm:60,confidence:90}).b.orbitRest.getEngine().level(base/S),100);
+const detected=runWear({bpm:60,confidence:90});
+assert.strictEqual(detected.b.orbitRest.getEngine().level(base/S),100);
+assert.deepStrictEqual(detected.power,[[base+270000,1,"orbitrest"],[base+280000,0,"orbitrest"]]);
 assert.strictEqual(runWear({bpm:60,confidence:89}).b.orbitRest.getEngine().level(base/S),0);
 assert.strictEqual(runWear(null,t=>1+t/S*.02).b.orbitRest.getEngine().level(base/S),100);
 const killing=environment(base,{restWearEnabled:true});
@@ -164,4 +188,16 @@ killing.execute("boot.js");killing.advance(base+270000);
 killing.events.emit("kill");
 assert.strictEqual(killing.b.listenerCount("HRM"),0);
 assert.strictEqual(killing.timers.size,0);
-console.log("PASS: Z peak-ratio, percentage storage, 24 h history, app and non-wear.");
+// Repeated 12.5 Hz accelerometer events should not allocate growing sample arrays.
+const perf=r.create({thresholdG:.027});
+const benchStart=Date.now(),benchSamples=15000;
+for(let i=0;i<benchSamples;i++){
+  const t=i*80;
+  perf.sample({z:1+(t%8000===80?.01:0)},base+t);
+}
+perf.sync(base+benchSamples*80);
+assert.strictEqual(perf.snapshot().v,3);
+console.log("Accelerometer CPU benchmark: "+benchSamples+
+  " synthetic 12.5 Hz samples in "+(Date.now()-benchStart)+" ms (Node runtime; not watch power)");
+console.log("PASS: five-stage peak-ratio, v3 storage, non-wear, early HRM-off,");
+console.log("12.5Hz events, 24 h history, idle lock/wake, app drawing.");
