@@ -495,7 +495,12 @@ Eclipse state and shading update every **30 seconds** during an eclipse. Ordinar
 use cheap screening and retain the existing five-minute base redraw. The option Off
 avoids loading eclipse code/data. No GPS, Bluetooth or Internet requests are added.
 A subpixel total shadow has a one-pixel black center marker. Only the hemisphere selected
-in Bodies → View side is shown. Actual watch runtime and battery use remain unmeasured.
+in Bodies → View side is shown. **During any globally detected eclipse, the Moon's outer
+rim is red**, even when its shadow is on the hemisphere not currently displayed.
+This does not change the Moon phase shading, and the rim returns to its normal
+appearance when the eclipse ends (or Solar eclipse is disabled). The existing
+30-second eclipse refresh handles the transitions without an extra timer.
+Actual watch runtime and battery use remain unmeasured.
 
 ### 日食の影（0.03）
 
@@ -507,4 +512,8 @@ in Bodies → View side is shown. Actual watch runtime and battery use remain un
 日食の計算・影の表示は **30秒間隔**です。日食のない日時は軽い判定で詳細計算を省き、
 従来の5分間隔の地球再描画を維持します。オフ時は日食コード・係数を読み込みません。
 GPS・Bluetooth・通信は追加しません。1画素より小さい皆既の影には中心の黒い1画素を表示します。
-Bodies → View sideで選んだ半球だけが表示対象です。実機での計算時間・電池消費は未測定です。
+Bodies → View sideで選んだ半球だけが表示対象です。ただし、**地球上のどこかで
+日食を検出している間は月の外周を赤色**にします。現在の表示半球に影が見えない場合も
+赤くなり、満ち欠けの塗り分けは従来どおりです。日食終了時（または日食表示オフ時）は
+通常の外観に戻ります。従来の30秒更新を利用し、追加タイマーは使いません。
+実機での計算時間・電池消費は未測定です。
