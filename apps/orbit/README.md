@@ -124,11 +124,11 @@ The approximate solar-position formulae are based on NOAA's **General Solar Posi
 
 ### 24-hour rest graph
 
-Five-minute **peak-based rest percentages** are shown as bars extending **outward from the lunar orbit**. There are 288 positions per 24 hours; each completed interval replaces the one from 24 hours earlier. Bars are **green during the day and yellow at night**; the Moon and observer remain above them.
+Every five minutes, a **five-stage rest bar** extends **outward from the lunar orbit**. There are 288 positions per 24 hours. Bars are **green by day and yellow by night**. The rest bars intentionally overwrite the Moon (foreground); the red observer point stays above them.
 
-The accelerometer's screen-normal **Z axis** is high-pass filtered to remove gravity and slow orientation changes. Both directions of motion are counted as peaks in the **absolute value** of the filtered signal. Each interval's bar height equals the **percentage of detected peaks at or below the configured threshold**. An otherwise valid and worn interval with no peaks is 100%; incomplete data (under 270 s coverage) gets no bar. A short optical pulse probe and full-interval Z stability check exclude non-wear.
+The accelerometer's screen-normal **Z axis** is high-pass filtered to remove gravity and slow orientation changes. Both directions of motion are counted as peaks in the **absolute value** of the filtered signal. Each interval first records the **percentage of detected peaks at or below the configured threshold**, then displays a five-stage height: 0–19% → 1, 20–39% → 2, 40–59% → 3, 60–79% → 4, 80–100% → 5. The goal is approximately **walking/high motion=1, desk work=3, sleep-like stillness=5**, but actual values depend on watch movement and peak threshold and must be validated on-device; this is not a sleep classifier. An otherwise valid and worn interval with no peaks is 100%. An incomplete interval (under 270 s coverage) has no bar. Non-wear, inferred from absent pulse plus low Z variation, also has **no bar (stage 0)**. Stage 1 remains visible even at 0% quiet peaks.
 
-**Rest graph** settings: **Enabled**, **Max bar height** (1-14 pixels, default 10), **Peak threshold** (seven choices from 0.001 to 0.729 g), and **Non-wear** options. Recording continues with the LCD off and in other apps. History survives restarts. The new percentage history format replaces old 1–5 rest levels without converting them; recording a new 24-hour history begins on upgrade. A different date selected in the calendar hides the real-time graph.
+**Rest graph** settings: **Enabled**, **Max bar height** (stage 5: 1–14 pixels, default 10), **Peak threshold** (seven choices from 0.001 to 0.729 g), and **Non-wear** options. Recording continues with the LCD off and in other apps. History survives restarts. Percentage data from v2 are read, and new v3 history distinctly stores missing and non-wear as separate codes; the incompatible v1 levels are not reused. A different date selected in the calendar hides the live graph. On a valid pulse, the HRM LED is switched off early; otherwise it runs up to the configured maximum. The 288 day/night bar colors are cached by five-minute slot, not recalculated for each redraw.
 
 ### Moon phase
 
@@ -365,11 +365,11 @@ Place timeを使用しても、Bangle.js本体のタイムゾーン設定やDST�
 
 ### 24時間の安静度グラフ
 
-月の軌道から**外向き**に伸びる棒の高さで、5分ごとの**安静率（加速度ピークのうち設定閾値以下だった割合）**を表します。5分×288区間で24時間を一周します。棒の色は**昼間が緑、夜間が黄色**で、月と赤い観測地点は棒より上に描画します。
+月の軌道から**外側に伸びる5段階の棒**で5分ごとの安静度を表します（24時間、288本）。**棒は月より手前に描画**し、赤い観測点はさらに前面に保持します。色は日の出～日の入りが緑、夜間が黄色です。
 
-画面と垂直な**Z軸**の加速度から、重力・ゆっくりした時計の傾きの変化を引いた信号の**絶対値の局所ピーク**を全て抽出します。検出ピークのうち閾値以下だった個数の割合を0〜100%で計算し、棒の最大高さに比例させます。十分な記録があり装着中と判定され、ピークが1個もなければ100%です。観測時間が270秒未満なら棒なしです。5分ごとの脈拍試験とZ方向の変化範囲による非装着判定も継続します。
+画面と垂直なZ軸の加速度を重力成分から分離し、その絶対値ピークのうち閾値以下の割合を記録します。棒の長さへの換算は **0〜19%=段階1、20〜39%=2、40〜59%=3、60〜79%=4、80〜100%=5** です。目安として**歩行=1、デスクワーク=3、睡眠時の無動=5**を目標にしますが、実際の動きや閾値に依存し、睡眠・活動状態を確定する分類器ではありません。完全に静止してピークがない装着区間は5、非装着と観測不足は棒なし（非装着の段階0）です。
 
-設定 **Rest graph** の **Enabled**（オン／オフ）、**Max bar height**（最大の棒の高さ：1〜14画素、初期値10画素）、**Peak threshold**（0.001〜0.729gの7段階）、**Non-wear**（非装着判定）を調整できます。画面消灯中や他のアプリでも計測し、再起動後も記録を引き継ぎます。ただし旧式の1〜5段階の記録とは定義が異なるため、アップデート時に旧履歴は変換せず、新しい24時間の履歴を作ります。カレンダーで別の日を表示中は実時間の棒を隠します。
+設定 **Rest graph** の **Enabled**、**Max bar height**（段階5の高さ：1〜14画素、初期値10画素）、**Peak threshold**（0.001〜0.729g、7段階）、**Non-wear**を調整できます。画面消灯中や他アプリでも加速度を記録します。5分ごとの心拍試験は有効な脈を検出した時点でLEDを消灯し、未検出なら最大設定秒数まで継続します。v0.063の記録形式（v3）では非装着と欠損を区別し、v2の割合データも引き継ぎます。v1の古い5段階データとは混在させません。描画時の288区間の昼夜判定はキャッシュして不要な再計算を抑えます。
 
 ### 月相
 
@@ -481,6 +481,25 @@ The line extending from the red observer dot is green when the solar center is a
 
 太陽中心が幾何学的な地平線以上なら緑、下なら黄色です。従来の日の出・日の入り線と同じ基準で、大気差は含みません。白夜・極夜を含め毎分色の切り替えを確認します。
 
+
+## Power management (0.063)
+
+The backlight and touchscreen lock after the configured display timeout; if the system
+timeout is 0 or unavailable, tenkyu uses a 10-second fallback. The low-power memory-in-pixel
+LCD remains on. Twist and face-up still wake and unlock the watch. Eclipse calculations
+are checked about every five minutes outside eclipses, but every 30 seconds when an
+eclipse is active, while the clock continues its minute updates. This saves CPU and
+touch-controller power without raising the accelerometer polling rate. Power draw and
+wrist-gesture behavior still need real-device measurements.
+
+### 省電力動作（0.063）
+
+設定された消灯時間後にバックライトを消し、タッチパネルもロックします。
+システムの時間設定が0または未指定なら、10秒を安全側の初期値とします。
+LCD自体は表示を保持し、TwistやFace Upで解除します。日食でない通常時は
+約5分ごとに日食判定し、発生中だけ30秒ごとに計算します。
+時計の時刻は従来どおり毎分更新し、加速度の取得周期も変更しません。
+実機での消費電流やジェスチャー動作の確認は未実施です。
 
 ## Solar eclipse shading (0.03)
 
