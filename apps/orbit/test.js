@@ -115,7 +115,7 @@ function appHarness(enabled,iso){
   return {timers,events,log,reads,advance:ms=>now+=ms};
 }
 const app=appHarness(true,refs[1].date);
-assert(app.timers.size===1);
+assert(app.timers.size>=2); // Clock timer plus finite idle/backlight timer.
 // Red outer Moon rim must appear while an eclipse is active anywhere on Earth.
 function redMoonRims(a){
   return a.log.filter(x=>x.op==="drawCircle"&&x.color===0xF800&&x.args[2]>=14&&x.args[2]<=16);
@@ -129,7 +129,8 @@ const lastShadow=app.log.reduce((last,x,i)=>x.op==="setPixel"&&x.color===0?i:las
 const red=app.log.findIndex(x=>x.op==="fillCircle"&&x.color===0xF800&&x.args[2]===2);
 assert(lastShadow>=0&&red>lastShadow);
 assert(app.log.slice(lastShadow+1,red).some(x=>x.op==="fillPoly"&&[0x07E0,0xFFE0].includes(x.color)));
-const timer=[...app.timers.values()][0];assert(timer.ms<=30025);
+const timer=[...app.timers.values()].find(t=>t.ms>10000);
+assert(timer&&timer.ms<=30025);
 app.timers.clear();app.advance(30000);timer.f();assert(app.timers.size===1);
 app.events.lcdPower(false);assert(app.timers.size===0);
 const off=appHarness(false,refs[1].date);assert(!off.reads.some(n=>n.startsWith("orbit.ecl")));
