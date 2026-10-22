@@ -1,4 +1,4 @@
-# Rest bar and power management (tenkyu v0.063)
+# Rest bar and power management (tenkyu v0.064)
 
 ## Five-level bars
 
@@ -47,3 +47,25 @@ duration-based levels remain incompatible.
   the full astronomical solar position for every bar on every redraw.
 * Real Bangle.js 2 power and wake behavior require a physical test.
 
+
+## Orientation-independent non-wear (v0.064)
+
+The rest *level* continues to derive from screen-normal Z-axis acceleration peaks.
+Only the **non-wear** motion gate now uses all three axes. Each accelerometer
+sample contributes to a one-second mean vector (X,Y,Z) in g. For a complete
+five-minute window, let a0 denote its first one-second mean, and let ai be
+subsequent one-second means. Define maximum drift D=max_i ||ai-a0||_2.
+A single user-selected threshold (0.001..0.729 g) applies to D, without
+axis-specific or orientation-dependent limits. The metric detects both
+rotation/tilt of the gravitational acceleration vector and translational
+acceleration; there is no expensive atan2/acos/normalization for each sample.
+The 1-second averaging suppresses brief outlier spikes (at the cost of
+ignoring brief excursions). For typical magnitude near 1g, a pure tilt
+of theta radians produces D approximately theta g; 0.009g is roughly 0.52°.
+
+The resulting low-drift condition is combined with a valid full-bin sensor
+coverage check and the established no-pulse HRM test. If either fails, the
+non-wear flag is not set; a quiet unworn watch may still be scored at rest
+stage 5 for unrelated HRM/coverage reasons, so diagnostics are valuable.
+The existing persisted `restWearThreshold` config key is retained to avoid
+resetting user preferences; its menu label changes from Z range to 3D drift.
