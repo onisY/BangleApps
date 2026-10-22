@@ -12,7 +12,7 @@ function pattern(e,amplitude,step=1000){
     const k=Math.floor(t/8000);
     const a=typeof amplitude==="function"?amplitude(k):amplitude;
     const z=t%8000===3000?1+a:1;
-    e.sample({z:z,mag:z,diff:Math.abs(z-1)},base+t);
+    e.sample({x:0,y:0,z:z,mag:z,diff:Math.abs(z-1)},base+t);
   }
   e.sync(base+S);
 }
@@ -151,7 +151,7 @@ const q=menus.at(-1)["Peak threshold"];
 assert.strictEqual(q.max,6);
 for(let i=0;i<7;i++){q.onchange(i);assert.strictEqual(app.cfg.restThreshold,r.thresholds[i]);}
 menus.at(-1)["Non-wear"]();
-menus.at(-1)["Z range"].onchange(0);
+menus.at(-1)["3D drift"].onchange(0);
 assert.strictEqual(app.cfg.restWearThreshold,.001);
 // Day/night timestamps and backward-compatible v2 percentage history render.
 for(const [iso,c] of [["2026-10-19T18:00:00Z",0x07e0],["2026-10-19T06:00:00Z",0xffe0]]){
@@ -169,7 +169,9 @@ function runWear(pulse,zAt=()=>1,cfg={}){
   const h=environment(base,Object.assign({restWearEnabled:true},cfg));
   h.execute("boot.js");
   for(let t=0;t<=S;t+=1000){
-    h.advance(base+t);h.b.emit("accel",{z:zAt(t),mag:1,diff:0});
+    h.advance(base+t);
+    const v=zAt(t),xyz=typeof v==="number"?{x:0,y:0,z:v}:v;
+    h.b.emit("accel",Object.assign({mag:1,diff:0},xyz));
     if(t===280000&&pulse)h.b.emit("HRM",pulse);
   }
   return h;
@@ -183,6 +185,48 @@ assert.strictEqual(detected.b.orbitRest.getEngine().level(base/S),100);
 assert.deepStrictEqual(detected.power,[[base+270000,1,"orbitrest"],[base+280000,0,"orbitrest"]]);
 assert.strictEqual(runWear({bpm:60,confidence:89}).b.orbitRest.getEngine().level(base/S),0);
 assert.strictEqual(runWear(null,t=>1+t/S*.02).b.orbitRest.getEngine().level(base/S),100);
+// Wristband may be vertical, sideways or tilted on a table: one shared 3D
+// vector-drift threshold must recognize all constant orientations as unworn.
+for(const vector of [
+  {x:0,y:0,z:1}, {x:1,y:0,z:0}, {x:0,y:-1,z:0},
+  {x:.6,y:.8,z:0}, {x:.3,y:.4,z:Math.sqrt(.75)}
+]){
+  const e=runWear(null,()=>vector).b.orbitRest.getEngine();
+  assert.strictEqual(e.snapshot().levels.slice(-2),"fe",
+    "Motionless watch must be unworn in any orientation");
+}
+// Changes in X or Y alone must disqualify the non-wear stillness condition;
+// the peak ratio remains at stage 5 unless the separate HRM criterion is met.
+for(const axis of ["x","y","z"]){
+  const e=runWear(null,t=>{
+    const a={x:.6,y:.8,z:0};
+    a[axis]+=.02*t/S;
+    return a;
+  }).b.orbitRest.getEngine();
+  assert.strictEqual(e.snapshot().levels.slice(-2),"64",
+    "3D movement on "+axis+" must be detected");
+}
+// The scalar is an orientation-independent g threshold, not per-axis thresholds.
+const relaxed=runWear(null,t=>({x:.6+t/S*.02,y:.8,z:0}),
+  {restWearThreshold:.027}).b.orbitRest.getEngine();
+assert.strictEqual(relaxed.snapshot().levels.slice(-2),"fe");
+// A single 40 mg impulse among fast 80ms samples should average out
+// over the 1s window instead of defeating the non-wear classification.
+const filtered=r.create({wearThresholdG:.009});
+for(let t=0;t<=S;t+=80){
+  filtered.sample({x:t===150040?.04:0,y:0,z:1},base+t);
+}
+filtered.absentPulse(base/S);
+filtered.sync(base+S);
+assert.strictEqual(filtered.snapshot().levels.slice(-2),"fe");
+// All axes must be present. A missing X/Y reading cannot masquerade as stillness.
+const badAxis=r.create();
+for(let t=0;t<=S;t+=1000){
+  const a=t===4000?{z:1}:{x:0,y:0,z:1};
+  badAxis.sample(a,base+t);
+}
+badAxis.absentPulse(base/S);badAxis.sync(base+S);
+assert.notStrictEqual(badAxis.snapshot().levels.slice(-2),"fe");
 const killing=environment(base,{restWearEnabled:true});
 killing.execute("boot.js");killing.advance(base+270000);
 killing.events.emit("kill");
@@ -193,11 +237,12 @@ const perf=r.create({thresholdG:.027});
 const benchStart=Date.now(),benchSamples=15000;
 for(let i=0;i<benchSamples;i++){
   const t=i*80;
-  perf.sample({z:1+(t%8000===80?.01:0)},base+t);
+  perf.sample({x:0,y:0,z:1+(t%8000===80?.01:0)},base+t);
 }
 perf.sync(base+benchSamples*80);
 assert.strictEqual(perf.snapshot().v,3);
 console.log("Accelerometer CPU benchmark: "+benchSamples+
   " synthetic 12.5 Hz samples in "+(Date.now()-benchStart)+" ms (Node runtime; not watch power)");
-console.log("PASS: five-stage peak-ratio, v3 storage, non-wear, early HRM-off,");
+console.log("PASS: orientation-independent 3-axis non-wear, 1s filtered vector deviation,");
+console.log("five-stage peak-ratio, v3 storage, early HRM-off,");
 console.log("12.5Hz events, 24 h history, idle lock/wake, app drawing.");
