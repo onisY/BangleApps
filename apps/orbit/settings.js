@@ -582,7 +582,7 @@
   function wearMenu(s){
     E.showMenu({"":{title:"Non-wear"},"< Back":function(){restMenu(s);},
       "Enabled":{value:s.restWearEnabled,onchange:function(v){s.restWearEnabled=!!v;applyRest(s);}},
-      "Z range":thresholdMenu(s,"restWearThreshold"),
+      "3D drift":thresholdMenu(s,"restWearThreshold"),
       "Probe seconds":{value:s.restProbeSeconds,min:10,max:60,step:5,
         onchange:function(v){s.restProbeSeconds=v;applyRest(s);}},
       "Pulse confidence":{value:s.restPulseConfidence,min:1,max:100,step:1,

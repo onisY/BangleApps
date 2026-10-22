@@ -1,7 +1,8 @@
 /* tenkyu screen-normal (Z) acceleration peak-rest recorder; MIT.
  * For every observed 5-minute interval, bar height equals the percentage
  * of local |high-pass(Z)| peaks that do not exceed the selected threshold.
- * Non-wear still uses whole-bin Z range and a periodic HRM probe.
+ * Non-wear uses one rotation-invariant 3-axis vector-deviation threshold
+ * and a periodic HRM probe; 1-second vector averages suppress sensor spikes.
  */
 var SLOT_MS=300000,COUNT=288,DAY_MS=SLOT_MS*COUNT;
 var NOT_WORN=254,NO_DATA=255;
@@ -34,7 +35,9 @@ function create(options){
   var levels=new Uint8Array(COUNT),stamps=new Uint32Array(COUNT);
   var threshold=thresholdG(options.thresholdG),save=options.onCommit;
   var wearG=thresholdG(options.wearThresholdG===undefined?0.009:options.wearThresholdG);
-  var zMin=Infinity,zMax=-Infinity,zFirst,zLast,zBad=false,noPulse=false;
+  var vecFirst,vecLast,vecBad=false,noPulse=false;
+  var vecSX=0,vecSY=0,vecSZ=0,vecCount=0,vecSecond=-1;
+  var vecRefX,vecRefY,vecRefZ,vecMaxD2=0;
   var closedBucket=-1,closedStill=false;
   var current=-1,covered=0,peaks=0,quietPeaks=0,lastMs,lastValid=false;
   var zBase,ampOlder,ampPrevious;
@@ -55,13 +58,38 @@ function create(options){
     }
   }
   function resetPeak(){zBase=undefined;ampOlder=undefined;ampPrevious=undefined;}
+  function flushVector(){
+    if(!vecCount)return;
+    var x=vecSX/vecCount,y=vecSY/vecCount,z=vecSZ/vecCount;
+    if(vecRefX===undefined){vecRefX=x;vecRefY=y;vecRefZ=z;}
+    else{
+      // Full 3D deviation from the starting acceleration vector in g.
+      // At ~1g, direction change theta gives 2*sin(theta/2) g deviation.
+      // Unlike unit-vector direction alone, translational motion counts too.
+      var dx=x-vecRefX,dy=y-vecRefY,dz=z-vecRefZ;
+      var d2=dx*dx+dy*dy+dz*dz;
+      if(d2>vecMaxD2)vecMaxD2=d2;
+    }
+    vecSX=0;vecSY=0;vecSZ=0;vecCount=0;
+  }
+  function resetVector(){
+    vecSX=0;vecSY=0;vecSZ=0;vecCount=0;vecSecond=-1;
+    vecRefX=undefined;vecRefY=undefined;vecRefZ=undefined;vecMaxD2=0;
+  }
+  function addVector(a,ms){
+    var second=Math.floor(ms/1000);
+    if(second!==vecSecond){flushVector();vecSecond=second;}
+    vecSX+=a.x;vecSY+=a.y;vecSZ+=a.z;vecCount++;
+  }
   function roll(ms){
     var target=Math.floor(ms/SLOT_MS),changed=false;
     if(target===current)return false;
     if(current>=0&&target>current){
+      flushVector();
       closedBucket=current;
-      closedStill=!zBad&&zFirst!==undefined&&zFirst-current*SLOT_MS<=MAX_GAP_MS&&
-        (current+1)*SLOT_MS-zLast<=MAX_GAP_MS&&zMax-zMin<=wearG;
+      closedStill=!vecBad&&vecRefX!==undefined&&vecFirst!==undefined&&
+        vecFirst-current*SLOT_MS<=MAX_GAP_MS&&
+        (current+1)*SLOT_MS-vecLast<=MAX_GAP_MS&&vecMaxD2<=wearG*wearG;
       i=current%COUNT;stamps[i]=current;
       levels[i]=covered<MIN_COVERAGE_MS?NO_DATA:
         (noPulse&&closedStill?NOT_WORN:percentFor(quietPeaks,peaks,covered));changed=true;
@@ -69,8 +97,8 @@ function create(options){
       for(i=0;i<COUNT;i++)if(stamps[i]>=target){stamps[i]=0;levels[i]=0;}
       closedBucket=-1;changed=true;
     }
-    current=target;covered=0;peaks=0;quietPeaks=0;resetPeak();
-    zMin=Infinity;zMax=-Infinity;zFirst=undefined;zLast=undefined;zBad=false;noPulse=false;
+    current=target;covered=0;peaks=0;quietPeaks=0;resetPeak();resetVector();
+    vecFirst=undefined;vecLast=undefined;vecBad=false;noPulse=false;
     if(changed&&save)save();
     return changed;
   }
@@ -89,7 +117,8 @@ function create(options){
   }
   function sample(a,ms){
     if(!isFinite(ms)||ms<0)return;
-    var z=a&&a.z,valid=isFinite(z),dt=lastMs===undefined?0:ms-lastMs;
+    var z=a&&a.z,valid=!!a&&isFinite(a.x)&&isFinite(a.y)&&isFinite(z),
+      dt=lastMs===undefined?0:ms-lastMs;
     var continuous=lastValid&&valid&&dt>0&&dt<=MAX_GAP_MS;
     var target=Math.floor(ms/SLOT_MS);
     if(!continuous){
@@ -104,11 +133,12 @@ function create(options){
       roll(ms);
       covered+=ms-boundary;
     }
-    if(!valid)zBad=true;
+    if(!valid)vecBad=true;
     else{
-      if(zFirst===undefined)zFirst=ms;
-      if(zLast!==undefined&&(ms-zLast>MAX_GAP_MS||ms<=zLast))zBad=true;
-      zLast=ms;zMin=z<zMin?z:zMin;zMax=z>zMax?z:zMax;
+      if(vecFirst===undefined)vecFirst=ms;
+      if(vecLast!==undefined&&(ms-vecLast>MAX_GAP_MS||ms<=vecLast))vecBad=true;
+      vecLast=ms;
+      addVector(a,ms);
       detectPeak(z,continuous?dt:0);
     }
     lastMs=ms;lastValid=!!valid;
