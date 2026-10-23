@@ -127,6 +127,8 @@ assert.strictEqual(app.lights.at(-1)[1],true);
 const writes=app.writes();app.feed(base+S);app.b.orbitRest.sync(base+S);
 assert.strictEqual(app.writes()-writes,1);
 app.log.length=0;app.b.emit("lcdPower",true);
+assert(app.log.some(x=>x.op==="drawString"&&x.args[0]==="Orbit..."));
+app.advance(base+S+1); // Complete the deferred clock redraw after first frame.
 const graph=app.log.findIndex(x=>x.op==="drawLine"&&x.color===0x07e0);
 const observer=app.log.findIndex(x=>x.op==="fillCircle"&&x.color===0xf800&&x.args[2]===2);
 assert(graph>=0&&observer>graph);
