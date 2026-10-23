@@ -86,20 +86,25 @@ function create(options){
     if(second!==vecSecond){flushVector();vecSecond=second;}
     vecSX+=a.x;vecSY+=a.y;vecSZ+=a.z;vecCount++;
   }
+  // Motion is enough evidence to plot the rest level; HRM is only needed
+  // to distinguish a motionless worn watch from one lying on a table.
   function chooseLevel(ok,still,motion,hr,percent){
     if(!ok)return NO_DATA;
-    if(!wearEnabled)return percent;
-    if(hr===HR_FOUND)return percent; // Positive wear evidence, independent of motion.
-    if(hr===HR_ABSENT&&still)return NOT_WORN;
-    // Missing/failed HRM, or no pulse with movement, cannot establish wear.
+    if(!wearEnabled||motion)return percent;
+    if(still)return hr===HR_FOUND?100:NOT_WORN;
     return NO_DATA;
   }
   function makeReason(ok,still,motion,hr){
     if(!ok)return "accel_missing";
     if(!wearEnabled)return "nonwear_disabled";
-    if(hr===HR_FOUND)return "pulse_detected";
-    if(hr===HR_ABSENT)return still?"nonwear":"no_pulse_moving";
-    return hr===HR_FAILED?"hrm_failed":"hrm_pending";
+    if(motion)return "motion";
+    if(still){
+      if(hr===HR_FOUND)return "pulse_detected_still";
+      if(hr===HR_FAILED)return "nonwear_hrm_failed";
+      if(hr===HR_PENDING)return "nonwear_hrm_unknown";
+      return "nonwear";
+    }
+    return "accel_uncertain";
   }
   function updateClosed(){
     if(closedBucket<0||stamps[closedBucket%COUNT]!==closedBucket)return;
