@@ -1169,16 +1169,19 @@
       return;
     }
 
-    var restarted=resetOnWake;
     if(resetOnWake){
       resetOnWake=false;
-      startOrbit(false);
+      queueTransition("Orbit...",function(){startOrbit(true);});
+      return;
     }
     if(mode==="tenkyu"){
-      if(!restarted){drawBase();armMinute();}
       interactive=true;
+      try{Bangle.setLocked(false);}catch(e){}
       try{Bangle.setBacklight(true);}catch(e){}
-      armIdle();
+      // Existing clock drawing may be expensive after LCD power restoration.
+      queueTransition("Orbit...",function(){
+        mode="tenkyu";drawBase();armMinute();armIdle();
+      });
     }
   }
 
