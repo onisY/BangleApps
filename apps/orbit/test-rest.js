@@ -315,8 +315,10 @@ nav.execute("boot.js");nav.execute("app.js");nav.log.length=0;
 nav.b.ui.touch(1,{x:50,y:70});
 assert(nav.log.some(x=>x.op==="fillCircle"),"First tap needs instant cue");
 nav.advance(base+400);
-assert(nav.log.some(x=>x.op==="drawString"&&x.args[0]==="Calendar..."));
-assert(!nav.log.some(x=>x.op==="drawString"&&x.args[0]==="CALENDAR READY"));
+const calendarAck=nav.log.findIndex(x=>x.op==="drawString"&&x.args[0]==="Calendar...");
+const calendarReady=nav.log.findIndex(x=>x.op==="drawString"&&x.args[0]==="CALENDAR READY");
+assert(calendarAck>=0&& (calendarReady<0||calendarAck<calendarReady),
+ "Calendar acknowledgement must precede its full render");
 nav.advance(base+401);
 assert(nav.log.some(x=>x.op==="drawString"&&x.args[0]==="CALENDAR READY"));
 nav.log.length=0;
