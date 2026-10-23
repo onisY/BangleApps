@@ -90,7 +90,7 @@
   var REST_ENABLED=cfg.restEnabled!==false;
   var REST_MAX_HEIGHT=Math.max(1,Math.min(14,isFinite(cfg.restBarHeight)?cfg.restBarHeight|0:10));
   var restService;
-  var busy=false,killed=false,minuteTimer,idleTimer,tapTimer;
+  var busy=false,killed=false,minuteTimer,idleTimer,tapTimer,transitionTimer;
   var mode="tenkyu",interactive=true,tapCount=0,resetOnWake=false;
   var selectedDayOffset=0,hasSelectedDate=false;
   var nativeDrawWidgets,widgetDrawWrapper;
@@ -987,6 +987,31 @@
     clear(idleTimer);idleTimer=undefined;
     clearTaps();
   }
+  // Draw a minimal first frame *before* performing expensive navigation.
+  // g.flip makes the input acknowledgement visible even on the MiP LCD.
+  function showTransition(label){
+    try{
+      var w=g.getWidth(),h=g.getHeight();
+      g.reset().setBgColor(BLACK).setColor(BLACK).fillRect(0,24,w-1,h-1);
+      g.setColor(WHITE).setFont("6x8",2).setFontAlign(0,0)
+        .drawString(label,w>>1,(h+24)>>1);
+      try{g.flip();}catch(e){}
+    }catch(e){}
+  }
+  function queueTransition(label,run){
+    if(killed)return;
+    stopOrbitTimers();
+    clear(transitionTimer);transitionTimer=undefined;
+    mode="transition";interactive=false;
+    try{Bangle.setLocked(false);}catch(e){}
+    try{Bangle.setBacklight(true);}catch(e){}
+    showTransition(label);
+    // Yield one event loop before the new screen's heavy drawing starts.
+    transitionTimer=setTimeout(function(){
+      transitionTimer=undefined;
+      if(!killed&&mode==="transition")run();
+    },0);
+  }
 
   function armIdle(){
     clear(idleTimer);
@@ -1045,60 +1070,45 @@
 
   function openCalendar(){
     if(killed||mode!=="tenkyu")return;
-    stopOrbitTimers();
-    mode="calendar";
-    interactive=false;
-    try{Bangle.setLocked(false);}catch(e){}
-    try{Bangle.setBacklight(true);}catch(e){}
-
-    if(!calendar){
-      startOrbit(true);
-      return;
-    }
-
-    var focus=hasSelectedDate?virtualDate():new Date();
-    try{
-      calendar.start({
-        focusDate:focus,
-        selectedDate:hasSelectedDate?focus:undefined,
-        onSelect:function(d,offset){
-          if(killed)return;
-          if(!d){
-            setDateFromCalendar(undefined);
-            return;
+    queueTransition("Calendar...",function(){
+      mode="calendar";
+      if(!calendar){startOrbit(true);return;}
+      var focus=hasSelectedDate?virtualDate():new Date();
+      try{
+        calendar.start({
+          focusDate:focus,
+          selectedDate:hasSelectedDate?focus:undefined,
+          onSelect:function(d,offset){
+            if(killed)return;
+            if(!d){setDateFromCalendar(undefined);return;}
+            if(typeof offset==="number"&&isFinite(offset)){
+              selectedDayOffset=offset|0;
+              hasSelectedDate=true;
+              MOON_CACHE_BUCKET=-1;
+            }else setDateFromCalendar(d);
+          },
+          onReturn:function(d){
+            if(killed)return;
+            setDateFromCalendar(d);
+            queueTransition("Orbit...",function(){startOrbit(true);});
           }
-          if(typeof offset==="number"&&isFinite(offset)){
-            selectedDayOffset=offset|0;
-            hasSelectedDate=true;
-            MOON_CACHE_BUCKET=-1;
-          }else setDateFromCalendar(d);
-        },
-        onReturn:function(d){
-          if(killed)return;
-          setDateFromCalendar(d);
-          startOrbit(true);
-        }
-      });
-    }catch(e){
-      mode="tenkyu";
-      busy=false;
-      startOrbit(true);
-    }
+        });
+      }catch(e){startOrbit(true);}
+    });
   }
 
   function openSettings(){
     if(killed||mode!=="tenkyu")return;
-    stopOrbitTimers();
-    var src=Storage.read("orbit.settings.js");
-    if(!src){startOrbit(true);return;}
-    cleanup();
-    try{
-      var fn=eval(src);
-      if(typeof fn==="function")fn(function(){load("orbit.app.js");});
-      else load("orbit.app.js");
-    }catch(e){
-      load("orbit.app.js");
-    }
+    queueTransition("Settings...",function(){
+      var src=Storage.read("orbit.settings.js");
+      if(!src){startOrbit(true);return;}
+      cleanup();
+      try{
+        var fn=eval(src);
+        if(typeof fn==="function")fn(function(){load("orbit.app.js");});
+        else load("orbit.app.js");
+      }catch(e){load("orbit.app.js");}
+    });
   }
 
   function onTouch(button,xy){
@@ -1112,6 +1122,8 @@
 
     tapCount++;
     if(tapCount===1){
+      // The 400ms single/double-tap disambiguation now has an immediate cue.
+      try{g.setColor(YELLOW).fillCircle(8,g.getHeight()-8,3);g.flip();}catch(e){}
       clear(tapTimer);
       tapTimer=setTimeout(function(){
         tapTimer=undefined;
@@ -1144,6 +1156,7 @@
     if(!on){
       try{Bangle.setLocked(true);}catch(e){}
       clear(minuteTimer);minuteTimer=undefined;
+      clear(transitionTimer);transitionTimer=undefined;
       clearTaps();
       clear(idleTimer);idleTimer=undefined;
       interactive=false;
@@ -1156,23 +1169,28 @@
       return;
     }
 
-    var restarted=resetOnWake;
     if(resetOnWake){
       resetOnWake=false;
-      startOrbit(false);
+      queueTransition("Orbit...",function(){startOrbit(true);});
+      return;
     }
     if(mode==="tenkyu"){
-      if(!restarted){drawBase();armMinute();}
       interactive=true;
+      try{Bangle.setLocked(false);}catch(e){}
       try{Bangle.setBacklight(true);}catch(e){}
-      armIdle();
+      // Existing clock drawing may be expensive after LCD power restoration.
+      queueTransition("Orbit...",function(){
+        mode="tenkyu";interactive=true;drawBase();armMinute();armIdle();
+      });
     }
   }
 
   function onButton(){
-    if(killed)return;
-    cleanup();
-    Bangle.showLauncher();
+    if(killed||mode==="transition")return;
+    queueTransition("Launcher...",function(){
+      cleanup();
+      Bangle.showLauncher();
+    });
   }
 
   function armMinute(){
@@ -1201,6 +1219,7 @@
   function cleanup(){
     if(killed)return;
     killed=true;
+    clear(transitionTimer);transitionTimer=undefined;
     stopOrbitTimers();
     if(eclipseDisplay)eclipseDisplay.reset();
     // The boot-owned recorder keeps running in menus and other apps.
