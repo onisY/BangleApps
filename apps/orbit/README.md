@@ -130,7 +130,9 @@ The accelerometer's screen-normal **Z axis** is high-pass filtered to remove gra
 
 **Rest graph** settings: **Enabled**, **Max bar height** (stage 5: 1–14 pixels, default 10), **Peak threshold** (seven choices from 0.001 to 0.729 g), and **Non-wear** options. Recording continues with the LCD off and in other apps. History survives restarts. Percentage data from v2 are read, and new v3 history distinctly stores missing and non-wear as separate codes; the incompatible v1 levels are not reused. A different date selected in the calendar hides the live graph. On a valid pulse, the HRM LED is switched off early; otherwise it runs up to the configured maximum. The 288 day/night bar colors are cached by five-minute slot, not recalculated for each redraw.
 
-Non-wear finalization (v0.065): 270 seconds of valid three-axis coverage in a five-minute bin plus 3D drift below the configured threshold and an HRM probe with no accepted pulse yields stage 0 (no bar). A detected pulse yields an ordinary 1–5 rest stage. A failed/missing HRM probe, or no pulse with significant motion, is **unknown (no bar)** instead of being mislabeled stage 5. Late probe completion updates the just-closed bin; a pulse found early stops its LED without scheduling another probe in the same bin. Use **Rest graph → Last check** to view the latest outcome, reason, HRM result, 3D drift (g), and covered seconds. Up to 12 five-minute diagnostic summaries are saved as `orbit.rest.json.diag`. Historical stage-5 records from earlier releases cannot be retroactively corrected and roll off after 24 hours.
+Previous behavior (v0.065) required pulse evidence for all rest bars.
+
+**Motion-first non-wear policy (v0.066):** first require 270 seconds of valid three-axis accelerometer coverage in the five-minute bin. If 3D vector drift is **above the selected threshold**, always draw the existing Z-peak-based **stage 1–5 bar regardless of heart-rate results**. If the drift is **at or below the threshold** (motionless), a valid detected heartbeat produces **stage 5**; an absent, failed, pending, or unavailable heartbeat produces **stage 0 (no bar)**. An insufficient accelerometer record is still unknown (no bar). This is the user-selected prioritization, not proof that the watch is truly off-wrist; e.g., an immobile sleeping wearer whose optical sensor cannot register a pulse will be shown as unworn. Probe results may update the last completed interval. In **Rest graph → Last check**, see the recent result, reason, HRM status, 3D drift and covered seconds. Historic recorded bars are not reclassified; they age out after 24 hours.
 
 ### Moon phase
 
@@ -373,7 +375,9 @@ Place timeを使用しても、Bangle.js本体のタイムゾーン設定やDST�
 
 設定 **Rest graph** の **Enabled**、**Max bar height**（段階5の高さ：1〜14画素、初期値10画素）、**Peak threshold**（0.001〜0.729g、7段階）、**Non-wear**を調整できます。画面消灯中や他アプリでも加速度を記録します。5分ごとの心拍試験は有効な脈を検出した時点でLEDを消灯し、未検出なら最大設定秒数まで継続します。v0.063の記録形式（v3）では非装着と欠損を区別し、v2の割合データも引き継ぎます。v1の古い5段階データとは混在させません。描画時の288区間の昼夜判定はキャッシュして不要な再計算を抑えます。
 
-非装着判定は、5分間の有効な3軸加速度データが270秒以上あり、ベクトル変動が設定閾値以下で、最後の心拍測定で有効な心拍が見つからないときに確定します。心拍計測が失敗・未実施の場合、または心拍が検出されず加速度が動いている場合は**判定不能（棒なし）**とし、誤って安静度5にはしません。心拍測定終了の通知が遅れても、直前の5分区間に結果を反映します。**Rest graph → Last check** に、最近の判定結果・理由・心拍状態・3D drift・データ取得秒数を表示します。診断履歴は直近12区間を `orbit.rest.json` に保存します。更新前に記録した過去の安静度5は自動補正されず、24時間以内に順次入れ替わります。
+以前のv0.065は、動いていても心拍を検出できなければ棒を非表示としていました。
+
+**v0.066の判定優先順位：**5分間に270秒以上の有効な3軸加速度記録があれば、まず**3軸加速度ベクトルの変動**を設定閾値と比較します。**変動が閾値を超えたら、心拍検出の有無・失敗に関係なくZ軸ピークから安静度1～5を描画**します。**変動が閾値以下なら、心拍検出が確認された場合だけ安静度5**、心拍が未検出・計測失敗・未実施・未確定なら**非装着0（棒なし）**です。有効な加速度記録が270秒未満のときだけ判定不能（棒なし）にします。静止して眠っている装着者で心拍センサーが脈を検知できなかった場合にも0になる可能性があります。診断画面 **Rest graph → Last check** には判定結果と理由、心拍状態、3D変動量、有効データ時間を表示します。過去の棒は再判定しないため、24時間以内に順次入れ替わります。
 
 ### 月相
 

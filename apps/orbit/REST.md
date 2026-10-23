@@ -1,4 +1,4 @@
-# Rest bar and power management (tenkyu v0.065)
+# Rest bar and power management (tenkyu v0.066)
 
 ## Five-level bars
 
@@ -79,14 +79,21 @@ probe was skipped, failed, or completed a little late. It also required a
 sample within 2.5 seconds of the beginning/end of each 5-minute slot, even
 when well over 270 seconds of data were available.
 
-The updated logic has distinct HRM states:
-0 = pending/unknown, 1 = pulse detected, 2 = no pulse detected during
-a successful probe, 3 = probe unavailable/failed. With non-wear enabled:
-- At least 270 seconds of continuous valid 3D data are required.
-- Detected pulse: classify as worn (rest bar stages 1–5).
-- No pulse and drift under the 3D threshold: stage 0, draw no bar (FE).
-- No pulse and movement above threshold: unknown, no bar (FF).
-- Pending/failed probe, incomplete sensor coverage: unknown, no bar (FF).
+The HRM status states are 0=pending/unknown, 1=pulse detected,
+2=no pulse detected in a completed probe, 3=probe unavailable/failed.
+From v0.066 the **motion-first** rule supersedes the v0.065 policy:
+- Insufficient valid 3-axis coverage (<270 s in 5 min): unknown, no bar (FF).
+- 3D drift *above* the chosen 3D drift threshold: render Z-peak-based rest
+  1–5 regardless of heartbeat presence, absence, failure or pending status.
+- 3D drift *at or below* the threshold + confirmed pulse: stage 5 (100% / 64).
+- 3D drift *at or below* the threshold + no pulse, failed, unavailable or
+  uncompleted HRM probe: stage 0, no bar (FE).
+- Non-wear Enabled=Off remains an explicit override: normal Z-peak rest bar
+  without 3-axis/HRM non-wear filtering.
+
+This intentional policy prioritizes observed motion and may incorrectly mark
+a worn, completely motionless user as unworn if optical pulse detection fails.
+3D drift threshold is configurable; it is not a medical determination.
 
 One late callback may finalize the immediately preceding five-minute bin.
 A detected pulse cancels the remainder of the optical test and schedules
@@ -101,3 +108,14 @@ These records are generated at existing five-minute save points. They are
 diagnostic estimates, not medically reliable wear or sleep detection.
 History from previous releases remains on the graph until it ages out
 after 24 hours, including any incorrectly classified stage-5 bars.
+
+## Motion-first classification (v0.066)
+
+The rest display no longer depends on HRM when 3-axis drift exceeds the
+single configurable threshold. A completed 5-minute record of actual motion
+retains the original Z-axis peak percentage / five-stage mapping even when the
+HRM probe is missing or failed. If the watch remains still, the optical pulse
+is the only positive wearing evidence: confirmed pulse => 5; otherwise
+non-wear => 0. Unknown/insufficient accel coverage remains distinct (FF).
+Diagnostics use `motion`, `pulse_detected_still`, `nonwear`,
+`nonwear_hrm_failed`, or `nonwear_hrm_unknown` where applicable.
