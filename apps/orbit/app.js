@@ -1180,7 +1180,7 @@
       try{Bangle.setBacklight(true);}catch(e){}
       // Existing clock drawing may be expensive after LCD power restoration.
       queueTransition("Orbit...",function(){
-        mode="tenkyu";drawBase();armMinute();armIdle();
+        mode="tenkyu";interactive=true;drawBase();armMinute();armIdle();
       });
     }
   }
