@@ -153,6 +153,14 @@ for(let i=0;i<7;i++){q.onchange(i);assert.strictEqual(app.cfg.restThreshold,r.th
 menus.at(-1)["Non-wear"]();
 menus.at(-1)["3D drift"].onchange(0);
 assert.strictEqual(app.cfg.restWearThreshold,.001);
+const alerts=[];
+app.events.showAlert=(message,title)=>{alerts.push({message,title});return {then:cb=>cb()};};
+menus.at(-1)["< Back"](); // Rest graph menu
+menus.at(-1)["Last check"]();
+assert.strictEqual(alerts.length,1);
+assert(alerts[0].message.includes("Reason:"));
+assert(alerts[0].message.includes("3D:"));
+assert(alerts[0].message.includes("Data:"));
 // Day/night timestamps and backward-compatible v2 percentage history render.
 for(const [iso,c] of [["2026-10-19T18:00:00Z",0x07e0],["2026-10-19T06:00:00Z",0xffe0]]){
   const now=Date.parse(iso),end=Math.floor(now/S);
@@ -198,6 +206,15 @@ feed(failed,base,base+S);
 failed.failedProbe(base/S);
 assert.strictEqual(failed.snapshot().levels.slice(-2),"ff");
 assert.strictEqual(failed.getDiagnostics().recent.at(-1).reason,"hrm_failed");
+const rejected=environment(base,{restWearEnabled:true});
+rejected.b.setHRMPower=(on)=>!on; // Hardware declines the HRM-power request.
+rejected.execute("boot.js");
+for(let t=0;t<=S;t+=1000){
+  rejected.advance(base+t);
+  rejected.b.emit("accel",{x:0,y:0,z:1});
+}
+assert.strictEqual(rejected.b.orbitRest.getEngine().snapshot().levels.slice(-2),"ff");
+assert.strictEqual(rejected.b.orbitRest.getDiagnostics().recent.at(-1).reason,"hrm_failed");
 // A late no-pulse callback still updates the just-closed five-minute bin.
 skipped.absentPulse(base/S);
 assert.strictEqual(skipped.snapshot().levels.slice(-2),"fe");
