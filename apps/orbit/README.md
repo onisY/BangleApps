@@ -130,6 +130,8 @@ The accelerometer's screen-normal **Z axis** is high-pass filtered to remove gra
 
 **Rest graph** settings: **Enabled**, **Max bar height** (stage 5: 1–14 pixels, default 10), **Peak threshold** (seven choices from 0.001 to 0.729 g), and **Non-wear** options. Recording continues with the LCD off and in other apps. History survives restarts. Percentage data from v2 are read, and new v3 history distinctly stores missing and non-wear as separate codes; the incompatible v1 levels are not reused. A different date selected in the calendar hides the live graph. On a valid pulse, the HRM LED is switched off early; otherwise it runs up to the configured maximum. The 288 day/night bar colors are cached by five-minute slot, not recalculated for each redraw.
 
+Non-wear finalization (v0.065): 270 seconds of valid three-axis coverage in a five-minute bin plus 3D drift below the configured threshold and an HRM probe with no accepted pulse yields stage 0 (no bar). A detected pulse yields an ordinary 1–5 rest stage. A failed/missing HRM probe, or no pulse with significant motion, is **unknown (no bar)** instead of being mislabeled stage 5. Late probe completion updates the just-closed bin; a pulse found early stops its LED without scheduling another probe in the same bin. Use **Rest graph → Last check** to view the latest outcome, reason, HRM result, 3D drift (g), and covered seconds. Up to 12 five-minute diagnostic summaries are saved as `orbit.rest.json.diag`. Historical stage-5 records from earlier releases cannot be retroactively corrected and roll off after 24 hours.
+
 ### Moon phase
 
 Moon-phase display uses the mean synodic month.
@@ -370,6 +372,8 @@ Place timeを使用しても、Bangle.js本体のタイムゾーン設定やDST�
 画面と垂直なZ軸の加速度を重力成分から分離し、その絶対値ピークのうち閾値以下の割合を記録します。棒の長さへの換算は **0〜19%=段階1、20〜39%=2、40〜59%=3、60〜79%=4、80〜100%=5** です。目安として**歩行=1、デスクワーク=3、睡眠時の無動=5**を目標にしますが、実際の動きや閾値に依存し、睡眠・活動状態を確定する分類器ではありません。完全に静止してピークがない装着区間は5、非装着と観測不足は棒なし（非装着の段階0）です。非装着判定はZ軸だけではなく、**X/Y/Zの3軸加速度ベクトル**を1秒ごとに平均し、区間冒頭の平均ベクトルからの距離で判定します。時計の置き方によらず同じ閾値（g単位）を使用し、姿勢方向の変化と加速度の大きさの変化を両方検出します。設定は **Non-wear → 3D drift** で、従来の7段階を引き継ぎます。安静度の5段階は従来どおりZ軸ピークで計算します。
 
 設定 **Rest graph** の **Enabled**、**Max bar height**（段階5の高さ：1〜14画素、初期値10画素）、**Peak threshold**（0.001〜0.729g、7段階）、**Non-wear**を調整できます。画面消灯中や他アプリでも加速度を記録します。5分ごとの心拍試験は有効な脈を検出した時点でLEDを消灯し、未検出なら最大設定秒数まで継続します。v0.063の記録形式（v3）では非装着と欠損を区別し、v2の割合データも引き継ぎます。v1の古い5段階データとは混在させません。描画時の288区間の昼夜判定はキャッシュして不要な再計算を抑えます。
+
+非装着判定は、5分間の有効な3軸加速度データが270秒以上あり、ベクトル変動が設定閾値以下で、最後の心拍測定で有効な心拍が見つからないときに確定します。心拍計測が失敗・未実施の場合、または心拍が検出されず加速度が動いている場合は**判定不能（棒なし）**とし、誤って安静度5にはしません。心拍測定終了の通知が遅れても、直前の5分区間に結果を反映します。**Rest graph → Last check** に、最近の判定結果・理由・心拍状態・3D drift・データ取得秒数を表示します。診断履歴は直近12区間を `orbit.rest.json` に保存します。更新前に記録した過去の安静度5は自動補正されず、24時間以内に順次入れ替わります。
 
 ### 月相
 

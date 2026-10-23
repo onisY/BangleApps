@@ -593,13 +593,26 @@
         onchange:function(v){s.restPulseMax=v;applyRest(s);}}
     });
   }
+  function showRestDiagnostics(s){
+    var api=Bangle.orbitRest,d=api&&api.getDiagnostics&&api.getDiagnostics();
+    var list=d&&d.recent,last=list&&list.length?list[list.length-1]:undefined;
+    var hr=["Pending","Detected","Absent","Failed"];
+    var value=!last?"N/A":last.result===254?"0 (unworn)":
+      last.result===255?"Unknown":"Rest "+(1+Math.min(4,Math.floor(Math.min(99,last.result)/20)));
+    var message=last?("Value: "+value+"\nReason: "+last.reason+
+      "\nPulse: "+(hr[last.pulse]||"?")+
+      "\n3D: "+last.driftG+"g"+
+      "\nData: "+last.coverageSec+"s"):"No complete 5-min bin yet";
+    E.showAlert(message,"Rest diagnostics").then(function(){restMenu(s);});
+  }
   function restMenu(s){
     E.showMenu({"":{title:"Rest graph"},"< Back":main,
       "Enabled":{value:s.restEnabled,onchange:function(v){s.restEnabled=!!v;applyRest(s);}},
       "Max bar height":{value:s.restBarHeight,min:1,max:14,step:1,
         format:function(v){return v+" px";},onchange:function(v){s.restBarHeight=v;write(CFG,s);}},
       "Peak threshold":thresholdMenu(s,"restThreshold"),
-      "Non-wear":function(){wearMenu(s);}
+      "Non-wear":function(){wearMenu(s);},
+      "Last check":function(){showRestDiagnostics(s);}
     });
   }
 

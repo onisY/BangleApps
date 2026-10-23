@@ -153,6 +153,14 @@ for(let i=0;i<7;i++){q.onchange(i);assert.strictEqual(app.cfg.restThreshold,r.th
 menus.at(-1)["Non-wear"]();
 menus.at(-1)["3D drift"].onchange(0);
 assert.strictEqual(app.cfg.restWearThreshold,.001);
+const alerts=[];
+app.events.showAlert=(message,title)=>{alerts.push({message,title});return {then:cb=>cb()};};
+menus.at(-1)["< Back"](); // Rest graph menu
+menus.at(-1)["Last check"]();
+assert.strictEqual(alerts.length,1);
+assert(alerts[0].message.includes("Reason:"));
+assert(alerts[0].message.includes("3D:"));
+assert(alerts[0].message.includes("Data:"));
 // Day/night timestamps and backward-compatible v2 percentage history render.
 for(const [iso,c] of [["2026-10-19T18:00:00Z",0x07e0],["2026-10-19T06:00:00Z",0xffe0]]){
   const now=Date.parse(iso),end=Math.floor(now/S);
@@ -177,14 +185,52 @@ function runWear(pulse,zAt=()=>1,cfg={}){
   return h;
 }
 const nw=runWear();assert.strictEqual(nw.b.orbitRest.getEngine().level(base/S),0);
+assert.strictEqual(nw.b.orbitRest.getDiagnostics().recent.at(-1).reason,"nonwear");
+// 297 seconds are more than 270s coverage and are valid for non-wear.
+// Previous code incorrectly required a sample within 2.5s of the slot start.
+const lateStart=environment(base+3000,{restWearEnabled:true});
+lateStart.execute("boot.js");
+for(let t=3000;t<=S;t+=1000){
+  lateStart.advance(base+t);
+  lateStart.b.emit("accel",{x:0,y:0,z:1,mag:1,diff:0});
+}
+assert.strictEqual(lateStart.b.orbitRest.getEngine().snapshot().levels.slice(-2),"fe");
+assert.strictEqual(lateStart.b.orbitRest.getDiagnostics().recent.at(-1).reason,"nonwear");
+// Failed or skipped heart probe must be unknown (FF), not stage-5 (64).
+const skipped=r.create({wearEnabled:true,wearThresholdG:.009,nowMs:base});
+feed(skipped,base,base+S);
+assert.strictEqual(skipped.snapshot().levels.slice(-2),"ff");
+assert.strictEqual(skipped.getDiagnostics().recent.at(-1).reason,"hrm_pending");
+const failed=r.create({wearEnabled:true,nowMs:base});
+feed(failed,base,base+S);
+failed.failedProbe(base/S);
+assert.strictEqual(failed.snapshot().levels.slice(-2),"ff");
+assert.strictEqual(failed.getDiagnostics().recent.at(-1).reason,"hrm_failed");
+const rejected=environment(base,{restWearEnabled:true});
+rejected.b.setHRMPower=(on)=>!on; // Hardware declines the HRM-power request.
+rejected.execute("boot.js");
+for(let t=0;t<=S;t+=1000){
+  rejected.advance(base+t);
+  rejected.b.emit("accel",{x:0,y:0,z:1});
+}
+assert.strictEqual(rejected.b.orbitRest.getEngine().snapshot().levels.slice(-2),"ff");
+assert.strictEqual(rejected.b.orbitRest.getDiagnostics().recent.at(-1).reason,"hrm_failed");
+// A late no-pulse callback still updates the just-closed five-minute bin.
+skipped.absentPulse(base/S);
+assert.strictEqual(skipped.snapshot().levels.slice(-2),"fe");
+assert.strictEqual(skipped.getDiagnostics().recent.at(-1).reason,"nonwear");
 assert(nw.b.orbitRest.getEngine().snapshot().levels.endsWith("fe"));
 assert.deepStrictEqual(nw.power,[[base+270000,1,"orbitrest"],[base+S,0,"orbitrest"]]);
 assert.strictEqual(nw.b.listenerCount("HRM"),0);
 const detected=runWear({bpm:60,confidence:90});
 assert.strictEqual(detected.b.orbitRest.getEngine().level(base/S),100);
 assert.deepStrictEqual(detected.power,[[base+270000,1,"orbitrest"],[base+280000,0,"orbitrest"]]);
+assert.strictEqual(detected.b.orbitRest.getDiagnostics().recent.at(-1).reason,"pulse_detected");
+// After a valid early HRM detection, do not immediately start a second
+// optical probe during the same 5-minute interval.
+assert.deepStrictEqual(detected.power.filter(x=>x[1]===1).map(x=>x[0]),[base+270000]);
 assert.strictEqual(runWear({bpm:60,confidence:89}).b.orbitRest.getEngine().level(base/S),0);
-assert.strictEqual(runWear(null,t=>1+t/S*.02).b.orbitRest.getEngine().level(base/S),100);
+assert.strictEqual(runWear(null,t=>1+t/S*.02).b.orbitRest.getEngine().snapshot().levels.slice(-2),"ff");
 // Wristband may be vertical, sideways or tilted on a table: one shared 3D
 // vector-drift threshold must recognize all constant orientations as unworn.
 for(const vector of [
@@ -195,16 +241,17 @@ for(const vector of [
   assert.strictEqual(e.snapshot().levels.slice(-2),"fe",
     "Motionless watch must be unworn in any orientation");
 }
-// Changes in X or Y alone must disqualify the non-wear stillness condition;
-// the peak ratio remains at stage 5 unless the separate HRM criterion is met.
+// Changes in X or Y alone disqualify stillness, but absent pulse + motion
+// must be unknown rather than falsely asserting that it is worn at stage 5.
 for(const axis of ["x","y","z"]){
   const e=runWear(null,t=>{
     const a={x:.6,y:.8,z:0};
     a[axis]+=.02*t/S;
     return a;
   }).b.orbitRest.getEngine();
-  assert.strictEqual(e.snapshot().levels.slice(-2),"64",
-    "3D movement on "+axis+" must be detected");
+  assert.strictEqual(e.snapshot().levels.slice(-2),"ff",
+    "3D movement and absent pulse on "+axis+" must be unknown");
+  assert.strictEqual(e.getDiagnostics().recent.at(-1).reason,"no_pulse_moving");
 }
 // The scalar is an orientation-independent g threshold, not per-axis thresholds.
 const relaxed=runWear(null,t=>({x:.6+t/S*.02,y:.8,z:0}),
@@ -212,7 +259,7 @@ const relaxed=runWear(null,t=>({x:.6+t/S*.02,y:.8,z:0}),
 assert.strictEqual(relaxed.snapshot().levels.slice(-2),"fe");
 // A single 40 mg impulse among fast 80ms samples should average out
 // over the 1s window instead of defeating the non-wear classification.
-const filtered=r.create({wearThresholdG:.009});
+const filtered=r.create({wearThresholdG:.009,wearEnabled:true});
 for(let t=0;t<=S;t+=80){
   filtered.sample({x:t===150040?.04:0,y:0,z:1},base+t);
 }
@@ -227,6 +274,24 @@ for(let t=0;t<=S;t+=1000){
 }
 badAxis.absentPulse(base/S);badAxis.sync(base+S);
 assert.notStrictEqual(badAxis.snapshot().levels.slice(-2),"fe");
+// Completion callback 3.5 seconds late: the previous code ignored this
+// result and permanently displayed a stage-5 bar for an unworn watch.
+const delayed=environment(base,{restWearEnabled:true});
+delayed.execute("boot.js");
+for(let t=0;t<=270000;t+=1000){
+  delayed.advance(base+t);delayed.b.emit("accel",{x:0,y:0,z:1});
+}
+const endTimer=[...delayed.timers.values()].find(x=>x.at===base+S);
+assert(endTimer,"HRM end timer must be scheduled");
+endTimer.at+=3500;
+for(let t=271000;t<=S;t+=1000){
+  delayed.advance(base+t);delayed.b.emit("accel",{x:0,y:0,z:1});
+}
+assert.strictEqual(delayed.b.orbitRest.getEngine().snapshot().levels.slice(-2),"ff");
+delayed.advance(base+S+3500);
+assert.strictEqual(delayed.b.orbitRest.getEngine().snapshot().levels.slice(-2),"fe");
+assert.strictEqual(delayed.b.orbitRest.getDiagnostics().recent.at(-1).reason,"nonwear");
+// Missing three-axis coverage is an independent reason, not false non-wear.
 const killing=environment(base,{restWearEnabled:true});
 killing.execute("boot.js");killing.advance(base+270000);
 killing.events.emit("kill");
@@ -243,6 +308,7 @@ perf.sync(base+benchSamples*80);
 assert.strictEqual(perf.snapshot().v,3);
 console.log("Accelerometer CPU benchmark: "+benchSamples+
   " synthetic 12.5 Hz samples in "+(Date.now()-benchStart)+" ms (Node runtime; not watch power)");
-console.log("PASS: orientation-independent 3-axis non-wear, 1s filtered vector deviation,");
+console.log("PASS: robust no-pulse/coverage slot finalization, three-way HRM status,");
+console.log("bounded persisted diagnostics, 3-axis stillness and 1s filtering,");
 console.log("five-stage peak-ratio, v3 storage, early HRM-off,");
 console.log("12.5Hz events, 24 h history, idle lock/wake, app drawing.");
