@@ -544,3 +544,11 @@ Bodies → View sideで選んだ半球だけが表示対象です。ただし、
 赤くなり、満ち欠けの塗り分けは従来どおりです。日食終了時（または日食表示オフ時）は
 通常の外観に戻ります。従来の30秒更新を利用し、追加タイマーは使いません。
 実機での計算時間・電池消費は未測定です。
+
+### Visible screen-transition feedback (v0.067)
+
+The first tap is acknowledged with a small yellow dot while the 400 ms single/double-tap interval is resolved. Once navigation is determined, tenkyu immediately displays a low-cost **Calendar...**, **Settings...**, **Orbit...** or **Launcher...** transition frame, explicitly flushes it to the memory-in-pixel display, then schedules the expensive new-screen drawing for the next event-loop turn. Calendar swipes similarly display **Calendar...** before updating the 35 date cells, holiday flags and event layers; multiple rapid swipes are combined into a single final repaint. Leaving Settings also displays **Orbit...** before reloading the clock. Screen-wake transitions preserve the existing backlight/lock timeout. This change does not alter tap semantics: one tap opens Calendar; double tap opens Settings.
+
+### 画面遷移の入力応答（v0.067）
+
+最初のタップ時に黄色の小さな点を即時表示し、400msのシングル／ダブルタップ判定中でも入力を受け付けたことが分かるようにしました。画面遷移が決まったら **Calendar... / Settings... / Orbit... / Launcher...** をまず描画・反映し、次のイベントループで詳細な画面を作成します。カレンダーの上下スワイプでも、最初に **Calendar...** を表示してから日付・祝日・予定を更新します。連続するスワイプは最後のページまでまとめて再描画します。設定から時計に戻る際も同じ方式です。時計の消灯・タッチロックの省電力動作、および「1タップ＝カレンダー／2タップ＝設定」の操作仕様は維持します。
