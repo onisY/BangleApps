@@ -503,15 +503,25 @@
     E.showMenu(m);
   }
 
-  function leave(){
-    stopGPS();releasePlaceData();
-    try{E.removeListener("kill",onKill);}catch(e){}
-    back();
+  function showExitFrame(){
+    // First-frame acknowledgement before reloading the large orbit clock.
+    try{
+      var w=g.getWidth(),h=g.getHeight();
+      g.reset().setBgColor(0).setColor(0).fillRect(0,24,w-1,h-1);
+      g.setColor(0xFFFF).setFont("6x8",2).setFontAlign(0,0)
+        .drawString("Orbit...",w>>1,(h+24)>>1);
+      try{g.flip();}catch(e){}
+    }catch(e){}
   }
-  function exitToOrbit(){
+  function exitWithFrame(continuation){
     stopGPS();releasePlaceData();
     try{E.removeListener("kill",onKill);}catch(e){}
-    load("orbit.app.js");
+    showExitFrame();
+    setTimeout(continuation,0);
+  }
+  function leave(){exitWithFrame(back);}
+  function exitToOrbit(){
+    exitWithFrame(function(){load("orbit.app.js");});
   }
   function onKill(){stopGPS();releasePlaceData();}
 
