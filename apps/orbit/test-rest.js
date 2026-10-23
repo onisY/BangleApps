@@ -196,16 +196,16 @@ for(let t=3000;t<=S;t+=1000){
 }
 assert.strictEqual(lateStart.b.orbitRest.getEngine().snapshot().levels.slice(-2),"fe");
 assert.strictEqual(lateStart.b.orbitRest.getDiagnostics().recent.at(-1).reason,"nonwear");
-// Failed or skipped heart probe must be unknown (FF), not stage-5 (64).
+// Unknown/failed pulse on a motionless clock is non-wear (FE), not stage 5.
 const skipped=r.create({wearEnabled:true,wearThresholdG:.009,nowMs:base});
 feed(skipped,base,base+S);
-assert.strictEqual(skipped.snapshot().levels.slice(-2),"ff");
-assert.strictEqual(skipped.getDiagnostics().recent.at(-1).reason,"hrm_pending");
+assert.strictEqual(skipped.snapshot().levels.slice(-2),"fe");
+assert.strictEqual(skipped.getDiagnostics().recent.at(-1).reason,"nonwear_hrm_unknown");
 const failed=r.create({wearEnabled:true,nowMs:base});
 feed(failed,base,base+S);
 failed.failedProbe(base/S);
-assert.strictEqual(failed.snapshot().levels.slice(-2),"ff");
-assert.strictEqual(failed.getDiagnostics().recent.at(-1).reason,"hrm_failed");
+assert.strictEqual(failed.snapshot().levels.slice(-2),"fe");
+assert.strictEqual(failed.getDiagnostics().recent.at(-1).reason,"nonwear_hrm_failed");
 const rejected=environment(base,{restWearEnabled:true});
 rejected.b.setHRMPower=(on)=>!on; // Hardware declines the HRM-power request.
 rejected.execute("boot.js");
@@ -213,8 +213,8 @@ for(let t=0;t<=S;t+=1000){
   rejected.advance(base+t);
   rejected.b.emit("accel",{x:0,y:0,z:1});
 }
-assert.strictEqual(rejected.b.orbitRest.getEngine().snapshot().levels.slice(-2),"ff");
-assert.strictEqual(rejected.b.orbitRest.getDiagnostics().recent.at(-1).reason,"hrm_failed");
+assert.strictEqual(rejected.b.orbitRest.getEngine().snapshot().levels.slice(-2),"fe");
+assert.strictEqual(rejected.b.orbitRest.getDiagnostics().recent.at(-1).reason,"nonwear_hrm_failed");
 // A late no-pulse callback still updates the just-closed five-minute bin.
 skipped.absentPulse(base/S);
 assert.strictEqual(skipped.snapshot().levels.slice(-2),"fe");
@@ -225,12 +225,12 @@ assert.strictEqual(nw.b.listenerCount("HRM"),0);
 const detected=runWear({bpm:60,confidence:90});
 assert.strictEqual(detected.b.orbitRest.getEngine().level(base/S),100);
 assert.deepStrictEqual(detected.power,[[base+270000,1,"orbitrest"],[base+280000,0,"orbitrest"]]);
-assert.strictEqual(detected.b.orbitRest.getDiagnostics().recent.at(-1).reason,"pulse_detected");
+assert.strictEqual(detected.b.orbitRest.getDiagnostics().recent.at(-1).reason,"pulse_detected_still");
 // After a valid early HRM detection, do not immediately start a second
 // optical probe during the same 5-minute interval.
 assert.deepStrictEqual(detected.power.filter(x=>x[1]===1).map(x=>x[0]),[base+270000]);
 assert.strictEqual(runWear({bpm:60,confidence:89}).b.orbitRest.getEngine().level(base/S),0);
-assert.strictEqual(runWear(null,t=>1+t/S*.02).b.orbitRest.getEngine().snapshot().levels.slice(-2),"ff");
+assert.strictEqual(runWear(null,t=>1+t/S*.02).b.orbitRest.getEngine().snapshot().levels.slice(-2),"64");
 // Wristband may be vertical, sideways or tilted on a table: one shared 3D
 // vector-drift threshold must recognize all constant orientations as unworn.
 for(const vector of [
@@ -241,17 +241,17 @@ for(const vector of [
   assert.strictEqual(e.snapshot().levels.slice(-2),"fe",
     "Motionless watch must be unworn in any orientation");
 }
-// Changes in X or Y alone disqualify stillness, but absent pulse + motion
-// must be unknown rather than falsely asserting that it is worn at stage 5.
+// Changes in X or Y alone disqualify stillness and must show a bar
+// irrespective of pulse, even when the Z peak-rate stays at stage 5.
 for(const axis of ["x","y","z"]){
   const e=runWear(null,t=>{
     const a={x:.6,y:.8,z:0};
     a[axis]+=.02*t/S;
     return a;
   }).b.orbitRest.getEngine();
-  assert.strictEqual(e.snapshot().levels.slice(-2),"ff",
-    "3D movement and absent pulse on "+axis+" must be unknown");
-  assert.strictEqual(e.getDiagnostics().recent.at(-1).reason,"no_pulse_moving");
+  assert.strictEqual(e.snapshot().levels.slice(-2),"64",
+    "3D movement on "+axis+" must plot rest independently of pulse");
+  assert.strictEqual(e.getDiagnostics().recent.at(-1).reason,"motion");
 }
 // The scalar is an orientation-independent g threshold, not per-axis thresholds.
 const relaxed=runWear(null,t=>({x:.6+t/S*.02,y:.8,z:0}),
@@ -287,7 +287,8 @@ endTimer.at+=3500;
 for(let t=271000;t<=S;t+=1000){
   delayed.advance(base+t);delayed.b.emit("accel",{x:0,y:0,z:1});
 }
-assert.strictEqual(delayed.b.orbitRest.getEngine().snapshot().levels.slice(-2),"ff");
+assert.strictEqual(delayed.b.orbitRest.getEngine().snapshot().levels.slice(-2),"fe");
+assert.strictEqual(delayed.b.orbitRest.getDiagnostics().recent.at(-1).reason,"nonwear_hrm_unknown");
 delayed.advance(base+S+3500);
 assert.strictEqual(delayed.b.orbitRest.getEngine().snapshot().levels.slice(-2),"fe");
 assert.strictEqual(delayed.b.orbitRest.getDiagnostics().recent.at(-1).reason,"nonwear");
@@ -308,7 +309,8 @@ perf.sync(base+benchSamples*80);
 assert.strictEqual(perf.snapshot().v,3);
 console.log("Accelerometer CPU benchmark: "+benchSamples+
   " synthetic 12.5 Hz samples in "+(Date.now()-benchStart)+" ms (Node runtime; not watch power)");
-console.log("PASS: robust no-pulse/coverage slot finalization, three-way HRM status,");
+console.log("PASS: motion-first HRM-independent bars, still/no-pulse stage 0, still/pulse stage 5,");
+console.log("robust slot finalization, three-way HRM status,");
 console.log("bounded persisted diagnostics, 3-axis stillness and 1s filtering,");
 console.log("five-stage peak-ratio, v3 storage, early HRM-off,");
 console.log("12.5Hz events, 24 h history, idle lock/wake, app drawing.");
