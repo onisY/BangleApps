@@ -134,6 +134,7 @@ const observer=app.log.findIndex(x=>x.op==="fillCircle"&&x.color===0xf800&&x.arg
 assert(graph>=0&&observer>graph);
 app.b.emit("lcdPower",false);assert.strictEqual(app.timers.size,0);
 app.feed(base+S*2);
+app.b.orbitRest.sync(base+S*2);
 assert.strictEqual(app.b.orbitRest.getEngine().level(base/S+1),100);
 app.events.emit("kill");
 const other=environment(base+S*2+1000,{},app.store);
