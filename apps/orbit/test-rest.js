@@ -76,22 +76,25 @@ r.draw({setColor:c=>colors.push(c),drawLine:()=>{}},
     currentAngleRad:0,isDayAt:ms=>{times.push(ms);return ms>=base+S;}});
 assert.deepStrictEqual(times,[base,base+S]);
 assert.deepStrictEqual(colors,[0xffe0,0x07e0]);
-function environment(start,config={},data){
+function environment(start,config={},data,extraModules){
   let now=start,color=0,serial=0,writes=0;
   const log=[],timers=new Map(),store=data||{};
   const cfg=Object.assign({eclipseEnabled:false,restEnabled:true,restBarHeight:10,
     restWearEnabled:false,coordVersion:2,locationSource:"manual",manualLat:25.3,manualLon:-104.1},config);
-  const modules={"orbit.rest":"rest.js","orbit.eclipse":"eclipse.js","orbit.ecldraw":"eclipse-render.js",
-    "orbit.ecldata":"eclipse-terms.js","orbit.eclsun":"eclipse-sun-terms.js"};
+  const modules=Object.assign({"orbit.rest":"rest.js","orbit.eclipse":"eclipse.js","orbit.ecldraw":"eclipse-render.js",
+    "orbit.ecldata":"eclipse-terms.js","orbit.eclsun":"eclipse-sun-terms.js"},extraModules||{});
   const storage={readJSON:n=>n==="orbit.json"?cfg:n==="setting.json"?{timeout:0}:store[n],
     writeJSON:(n,v)=>{writes++;store[n]=JSON.parse(JSON.stringify(v));},
-    read:n=>modules[n]?fs.readFileSync(path.join(__dirname,modules[n]),"utf8"):undefined};
+    read:n=>modules[n]?(modules[n].indexOf("\n")>=0||modules[n].charAt(0)==="("?
+      modules[n]:fs.readFileSync(path.join(__dirname,modules[n]),"utf8")):undefined};
   const g=new Proxy({getWidth:()=>176,getHeight:()=>176,stringWidth:s=>s.length*8,theme:{bg:0,fg:0xffff}},
     {get:(o,k)=>k in o?o[k]:k==="transformVertices"?undefined:(...args)=>{
       if(k==="setColor")color=args[0];log.push({op:k,args,color});return g;}});
   const b=new EventEmitter(),events=new EventEmitter(),locks=[],lights=[];
-  for(const n of ["setGPSPower","setUI","loadWidgets","drawWidgets","showLauncher"])
+  for(const n of ["setGPSPower","loadWidgets","drawWidgets"])
     b[n]=()=>{};
+  b.setUI=ui=>{b.ui=ui;};
+  b.showLauncher=()=>log.push({op:"showLauncher"});
   b.setLocked=v=>locks.push([now,v]);
   b.setBacklight=v=>lights.push([now,v]);
   const power=[];b.setHRMPower=(on,id)=>{power.push([now,on,id]);return !!on;};
@@ -298,6 +301,51 @@ killing.execute("boot.js");killing.advance(base+270000);
 killing.events.emit("kill");
 assert.strictEqual(killing.b.listenerCount("HRM"),0);
 assert.strictEqual(killing.timers.size,0);
+// Acknowledgement must precede expensive screen creation, tested via the UI.
+const fakeCalendar="({create:function(){var live=false,onReturn;" +
+  "return {isActive:function(){return live},stop:function(){live=false}," +
+  "start:function(opts){live=true;onReturn=opts.onReturn;" +
+  "g.drawString('CALENDAR READY',10,80);g.flip()}," +
+  "touch:function(){if(onReturn)onReturn(undefined)},swipe:function(){}};}})";
+const nav=environment(base,{},undefined,{"orbit.cal.js":fakeCalendar});
+nav.execute("boot.js");nav.execute("app.js");nav.log.length=0;
+nav.b.ui.touch(1,{x:50,y:70});
+assert(nav.log.some(x=>x.op==="fillCircle"),"First tap needs instant cue");
+nav.advance(base+400);
+assert(nav.log.some(x=>x.op==="drawString"&&x.args[0]==="Calendar..."));
+assert(!nav.log.some(x=>x.op==="drawString"&&x.args[0]==="CALENDAR READY"));
+nav.advance(base+401);
+assert(nav.log.some(x=>x.op==="drawString"&&x.args[0]==="CALENDAR READY"));
+nav.log.length=0;
+nav.b.ui.touch(1,{x:50,y:70});
+assert(nav.log.some(x=>x.op==="drawString"&&x.args[0]==="Orbit..."));
+const beforeReturn=nav.log.filter(x=>x.op==="drawString").length;
+nav.advance(base+402);
+assert(nav.log.filter(x=>x.op==="drawString").length>beforeReturn);
+const navSettings=environment(base,{},undefined,{"orbit.settings.js":
+  "(function(back){g.drawString('SETTINGS READY',10,80);g.flip();})"});
+navSettings.execute("boot.js");navSettings.execute("app.js");
+navSettings.log.length=0;
+navSettings.b.ui.touch(1,{x:30,y:60});
+navSettings.b.ui.touch(1,{x:30,y:60});
+assert(navSettings.log.some(x=>x.op==="drawString"&&x.args[0]==="Settings..."));
+assert(!navSettings.log.some(x=>x.op==="drawString"&&x.args[0]==="SETTINGS READY"));
+navSettings.advance(base+1);
+assert(navSettings.log.some(x=>x.op==="drawString"&&x.args[0]==="SETTINGS READY"));
+const navWake=environment(base);
+navWake.execute("app.js");navWake.log.length=0;
+navWake.b.emit("lcdPower",true);
+assert(navWake.log.some(x=>x.op==="drawString"&&x.args[0]==="Orbit..."));
+navWake.advance(base+1);
+assert([...navWake.timers.values()].some(x=>x.ms<=10000),
+  "LCD wake must re-arm its idle timeout");
+const navButton=environment(base);
+navButton.execute("app.js");navButton.log.length=0;
+navButton.b.ui.btn();
+assert(navButton.log.some(x=>x.op==="drawString"&&x.args[0]==="Launcher..."));
+assert(!navButton.log.some(x=>x.op==="showLauncher"));
+navButton.advance(base+1);
+assert(navButton.log.some(x=>x.op==="showLauncher"));
 // Repeated 12.5 Hz accelerometer events should not allocate growing sample arrays.
 const perf=r.create({thresholdG:.027});
 const benchStart=Date.now(),benchSamples=15000;
@@ -309,7 +357,8 @@ perf.sync(base+benchSamples*80);
 assert.strictEqual(perf.snapshot().v,3);
 console.log("Accelerometer CPU benchmark: "+benchSamples+
   " synthetic 12.5 Hz samples in "+(Date.now()-benchStart)+" ms (Node runtime; not watch power)");
-console.log("PASS: motion-first HRM-independent bars, still/no-pulse stage 0, still/pulse stage 5,");
+console.log("PASS: tap/calendar/settings/wake/launcher immediate acknowledgement,");
+console.log("motion-first HRM-independent bars, still/no-pulse stage 0, still/pulse stage 5,");
 console.log("robust slot finalization, three-way HRM status,");
 console.log("bounded persisted diagnostics, 3-axis stillness and 1s filtering,");
 console.log("five-stage peak-ratio, v3 storage, early HRM-off,");
