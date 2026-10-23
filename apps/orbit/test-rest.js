@@ -256,12 +256,22 @@ for(let t=0;t<=S;t+=1000){
 }
 badAxis.absentPulse(base/S);badAxis.sync(base+S);
 assert.notStrictEqual(badAxis.snapshot().levels.slice(-2),"fe");
-// A delayed completion callback must not discard the no-pulse result.
+// Completion callback 3.5 seconds late: the previous code ignored this
+// result and permanently displayed a stage-5 bar for an unworn watch.
 const delayed=environment(base,{restWearEnabled:true});
 delayed.execute("boot.js");
-for(let t=0;t<S;t+=1000){delayed.advance(base+t);
-  delayed.b.emit("accel",{x:0,y:0,z:1});}
-// Give the diagnostic state time to be written, then check the result.
+for(let t=0;t<=270000;t+=1000){
+  delayed.advance(base+t);delayed.b.emit("accel",{x:0,y:0,z:1});
+}
+const endTimer=[...delayed.timers.values()].find(x=>x.at===base+S);
+assert(endTimer,"HRM end timer must be scheduled");
+endTimer.at+=3500;
+for(let t=271000;t<=S;t+=1000){
+  delayed.advance(base+t);delayed.b.emit("accel",{x:0,y:0,z:1});
+}
+assert.strictEqual(delayed.b.orbitRest.getEngine().snapshot().levels.slice(-2),"ff");
+delayed.advance(base+S+3500);
+assert.strictEqual(delayed.b.orbitRest.getEngine().snapshot().levels.slice(-2),"fe");
 assert.strictEqual(delayed.b.orbitRest.getDiagnostics().recent.at(-1).reason,"nonwear");
 // Missing three-axis coverage is an independent reason, not false non-wear.
 const killing=environment(base,{restWearEnabled:true});
