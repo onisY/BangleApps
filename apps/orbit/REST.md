@@ -1,4 +1,4 @@
-# Rest bar and power management (tenkyu v0.064)
+# Rest bar and power management (tenkyu v0.065)
 
 ## Five-level bars
 
@@ -63,9 +63,41 @@ The 1-second averaging suppresses brief outlier spikes (at the cost of
 ignoring brief excursions). For typical magnitude near 1g, a pure tilt
 of theta radians produces D approximately theta g; 0.009g is roughly 0.52°.
 
-The resulting low-drift condition is combined with a valid full-bin sensor
-coverage check and the established no-pulse HRM test. If either fails, the
-non-wear flag is not set; a quiet unworn watch may still be scored at rest
-stage 5 for unrelated HRM/coverage reasons, so diagnostics are valuable.
+The low-drift condition is combined with >=270 seconds of valid 3D
+accelerometer coverage and a valid no-pulse HRM result. Incomplete coverage,
+failed/skipped HRM or no-pulse with movement produces an unknown slot (FF),
+rather than a misleading rest stage of 5. Late HRM results can finalize the
+most recently closed slot.
 The existing persisted `restWearThreshold` config key is retained to avoid
 resetting user preferences; its menu label changes from Z range to 3D drift.
+
+## Non-wear finalization and diagnostics (v0.065)
+
+The old algorithm silently treated `noPulse=false` as proof of wearing.
+That caused stage 5 on a perfectly motionless unworn watch whenever the HRM
+probe was skipped, failed, or completed a little late. It also required a
+sample within 2.5 seconds of the beginning/end of each 5-minute slot, even
+when well over 270 seconds of data were available.
+
+The updated logic has distinct HRM states:
+0 = pending/unknown, 1 = pulse detected, 2 = no pulse detected during
+a successful probe, 3 = probe unavailable/failed. With non-wear enabled:
+- At least 270 seconds of continuous valid 3D data are required.
+- Detected pulse: classify as worn (rest bar stages 1–5).
+- No pulse and drift under the 3D threshold: stage 0, draw no bar (FE).
+- No pulse and movement above threshold: unknown, no bar (FF).
+- Pending/failed probe, incomplete sensor coverage: unknown, no bar (FF).
+
+One late callback may finalize the immediately preceding five-minute bin.
+A detected pulse cancels the remainder of the optical test and schedules
+the *next* five-minute bin, not another probe in the current one.
+The old strict start/end 2.5s alignment gate is removed; sufficiently
+covered intervals are evaluated.
+
+The last 12 completed bins contain a bounded `diag` log in
+`orbit.rest.json`, with `bucket`, `coverageSec`, `driftG`, `pulse`,
+`result` and `reason`. On-watch: Settings → Rest graph → Last check.
+These records are generated at existing five-minute save points. They are
+diagnostic estimates, not medically reliable wear or sleep detection.
+History from previous releases remains on the graph until it ages out
+after 24 hours, including any incorrectly classified stage-5 bars.
