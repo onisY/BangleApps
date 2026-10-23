@@ -88,21 +88,17 @@ function create(options){
   }
   function chooseLevel(ok,still,motion,hr,percent){
     if(!ok)return NO_DATA;
-    if(!wearEnabled||motion)return percent;
-    if(still){
-      if(hr===HR_ABSENT)return NOT_WORN;
-      if(hr===HR_FOUND)return percent;
-      return NO_DATA; // Inconclusive HRM must never become stage 5.
-    }
-    return NO_DATA; // Inconclusive 3D motion cannot prove wear.
+    if(!wearEnabled)return percent;
+    if(hr===HR_FOUND)return percent; // Positive wear evidence, independent of motion.
+    if(hr===HR_ABSENT&&still)return NOT_WORN;
+    // Missing/failed HRM, or no pulse with movement, cannot establish wear.
+    return NO_DATA;
   }
   function makeReason(ok,still,motion,hr){
     if(!ok)return "accel_missing";
     if(!wearEnabled)return "nonwear_disabled";
-    if(motion)return "motion";
-    if(!still)return "accel_uncertain";
-    if(hr===HR_ABSENT)return "nonwear";
     if(hr===HR_FOUND)return "pulse_detected";
+    if(hr===HR_ABSENT)return still?"nonwear":"no_pulse_moving";
     return hr===HR_FAILED?"hrm_failed":"hrm_pending";
   }
   function updateClosed(){
