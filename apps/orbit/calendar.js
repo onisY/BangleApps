@@ -744,7 +744,8 @@
       }
     }
     function touch(xy){
-      if(!active)return;
+      // Do not select stale date cells while a swiped page is being rebuilt.
+      if(!active||swipeTimer!==undefined)return;
       try{
         armAuto();
         // The 400ms single/double-tap gesture must acknowledge its first tap.
