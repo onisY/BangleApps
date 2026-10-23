@@ -36,13 +36,13 @@ function create(options){
   var levels=new Uint8Array(COUNT),stamps=new Uint32Array(COUNT);
   var threshold=thresholdG(options.thresholdG),save=options.onCommit;
   var wearG=thresholdG(options.wearThresholdG===undefined?0.009:options.wearThresholdG);
-  var vecFirst,vecLast,vecBad=false,noPulse=false;
+  var vecFirst,vecLast,vecBad=false;
   var vecSX=0,vecSY=0,vecSZ=0,vecCount=0,vecSecond=-1;
   var vecRefX,vecRefY,vecRefZ,vecMaxD2=0;
-  var closedBucket=-1,closedStill=false,closedVectorOK=false,closedCovered=0,
+  var closedBucket=-1,closedStill=false,closedVectorOK=false,
     closedPercent=0,closedPulse=HR_PENDING,closedMotion=false;
   var current=-1,covered=0,peaks=0,quietPeaks=0,lastMs,lastValid=false;
-  var wearEnabled=options.wearEnabled!==false,pulseState=HR_PENDING;
+  var wearEnabled=!!options.wearEnabled,pulseState=HR_PENDING;
   var diag=options.saved&&options.saved.diag instanceof Array?
     options.saved.diag.slice(-12):[];
   var zBase,ampOlder,ampPrevious;
@@ -129,7 +129,7 @@ function create(options){
     if(target===current)return false;
     if(current>=0&&target>current){
       flushVector();
-      closedBucket=current;closedCovered=covered;
+      closedBucket=current;
       closedVectorOK=!vecBad&&vecRefX!==undefined&&covered>=MIN_COVERAGE_MS;
       closedMotion=closedVectorOK&&vecMaxD2>wearG*wearG;
       closedStill=closedVectorOK&&!closedMotion;
@@ -148,7 +148,7 @@ function create(options){
       closedBucket=-1;changed=true;
     }
     current=target;covered=0;peaks=0;quietPeaks=0;resetPeak();resetVector();
-    vecFirst=undefined;vecLast=undefined;vecBad=false;noPulse=false;
+    vecFirst=undefined;vecLast=undefined;vecBad=false;
     pulseState=HR_PENDING;
     if(changed&&save)save();
     return changed;
