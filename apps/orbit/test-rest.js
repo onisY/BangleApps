@@ -213,7 +213,7 @@ assert.strictEqual(detected.b.orbitRest.getDiagnostics().recent.at(-1).reason,"p
 // optical probe during the same 5-minute interval.
 assert.deepStrictEqual(detected.power.filter(x=>x[1]===1).map(x=>x[0]),[base+270000]);
 assert.strictEqual(runWear({bpm:60,confidence:89}).b.orbitRest.getEngine().level(base/S),0);
-assert.strictEqual(runWear(null,t=>1+t/S*.02).b.orbitRest.getEngine().level(base/S),100);
+assert.strictEqual(runWear(null,t=>1+t/S*.02).b.orbitRest.getEngine().snapshot().levels.slice(-2),"ff");
 // Wristband may be vertical, sideways or tilted on a table: one shared 3D
 // vector-drift threshold must recognize all constant orientations as unworn.
 for(const vector of [
@@ -224,16 +224,17 @@ for(const vector of [
   assert.strictEqual(e.snapshot().levels.slice(-2),"fe",
     "Motionless watch must be unworn in any orientation");
 }
-// Changes in X or Y alone must disqualify the non-wear stillness condition;
-// the peak ratio remains at stage 5 unless the separate HRM criterion is met.
+// Changes in X or Y alone disqualify stillness, but absent pulse + motion
+// must be unknown rather than falsely asserting that it is worn at stage 5.
 for(const axis of ["x","y","z"]){
   const e=runWear(null,t=>{
     const a={x:.6,y:.8,z:0};
     a[axis]+=.02*t/S;
     return a;
   }).b.orbitRest.getEngine();
-  assert.strictEqual(e.snapshot().levels.slice(-2),"64",
-    "3D movement on "+axis+" must be detected");
+  assert.strictEqual(e.snapshot().levels.slice(-2),"ff",
+    "3D movement and absent pulse on "+axis+" must be unknown");
+  assert.strictEqual(e.getDiagnostics().recent.at(-1).reason,"no_pulse_moving");
 }
 // The scalar is an orientation-independent g threshold, not per-axis thresholds.
 const relaxed=runWear(null,t=>({x:.6+t/S*.02,y:.8,z:0}),
