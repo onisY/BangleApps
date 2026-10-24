@@ -39,6 +39,34 @@ assert(Math.abs(Math.hypot(stageAngles[0][2]-85,stageAngles[0][3]-90)-
   (70+10*r.stageFor(high.level(base/S))/5))<1);
 const mixed=r.create({thresholdG:.027});pattern(mixed,k=>k%2?.2:.004);
 assert(mixed.level(base/S)>=high.level(base/S)&&mixed.level(base/S)<=100);
+// Dedicated 12.5Hz three-axis peak tests: never count sub-gate events.
+function trial(axis,n,amplitude,opts){
+  const x=r.create(Object.assign({thresholdG:.027,wearEnabled:false,
+    activityThresholds:[.5,2,6,18]},opts||{}));
+  for(let t=0;t<=S;t+=80){
+    const a={x:0,y:0,z:1};
+    if(t>=8000&&t<8000+n*8000&&t%8000===0)a[axis]+=amplitude;
+    x.sample(a,base+t);
+  }
+  x.sync(base+S);
+  return {level:x.level(base/S),data:x.getDiagnostics().recent.at(-1)};
+}
+const sub=trial("x",20,.01),single=trial("x",1,.3),
+  many=trial("x",20,.3),manyY=trial("y",20,.3),manyZ=trial("z",20,.3);
+assert.strictEqual(sub.data.peaks,0);
+assert.strictEqual(sub.data.activity,0);
+assert.strictEqual(single.data.peaks,1);
+assert.strictEqual(single.level,100,"One large motion impulse must not force stage 1");
+assert(many.data.peaks>=19&&many.data.activity>single.data.activity*10);
+assert.strictEqual(many.level,manyY.level);
+assert.strictEqual(many.level,manyZ.level);
+assert.strictEqual(many.data.peaks,manyY.data.peaks);
+assert(many.data.activity>0);
+// User-chosen boundaries change only bar stages, not the activity sum.
+const custom=trial("x",20,.3,{activityThresholds:[.1,.2,.3,.4]});
+assert.strictEqual(custom.data.activity,many.data.activity);
+assert.strictEqual(custom.level,0);
+assert.strictEqual(r.activityLevel(many.data.activity,[10,20,30,40]),100);
 const still=r.create();feed(still,base,base+S);
 assert.strictEqual(still.level(base/S),100);
 assert.strictEqual(still.snapshot().v,3);
