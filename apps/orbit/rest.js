@@ -224,11 +224,13 @@ function create(options){
   function failedProbe(bucket){markProbe(bucket,HR_FAILED);}
   function level(bucket){return stamps[bucket%COUNT]===bucket?
     (levels[bucket%COUNT]>100?0:levels[bucket%COUNT]):0;}
-  function visit(ms,fn){
+  function visit(ms,fn,onNonWear){
     var end=Math.floor(ms/SLOT_MS)-1,b,v;
     for(b=end-COUNT+1;b<=end;b++)if(b>=0&&stamps[b%COUNT]===b){
       v=levels[b%COUNT];
       if(v<=100)fn(b,v); // 0%-quiet is a visible stage-1 bar.
+      else if(v===NOT_WORN&&onNonWear)onNonWear(b);
+      // NO_DATA (255) remains transparent; it must not look like non-wear.
     }
   }
   function snapshot(){
@@ -340,16 +342,31 @@ function draw(graphics,engine,map){
   if(!engine)return;
   // The selected maximum is now the stage-5 height.
   var r=map.radiusPx,height=Math.max(1,Math.min(map.maxHeightPx,14));
-  var dir=map.south?1:-1,now=map.nowMs;
+  var dir=map.south?1:-1,now=map.nowMs,scale=2*Math.PI/DAY_MS;
+  // One five-minute slot spans 1.25 degrees around the lunar orbit.
+  // Rotate each arc endpoint using constants to avoid extra trig calls.
+  var step=dir*2*Math.PI/COUNT,cs=Math.cos(step),ss=Math.sin(step);
+  function angleAt(bucket){
+    return map.currentAngleRad-dir*(now-(bucket+1)*SLOT_MS)*scale;
+  }
   engine.visit(now,function(bucket,value){
     // Plot at the interval END: a completed bar expires exactly 24 h later.
-    var endMs=(bucket+1)*SLOT_MS,age=now-endMs;
-    var a=map.currentAngleRad-dir*age*2*Math.PI/DAY_MS;
+    var endMs=(bucket+1)*SLOT_MS,a=angleAt(bucket);
     var ca=Math.cos(a),sa=Math.sin(a),outer=r+height*stageFor(value)/5;
     // Match the observer ray's geometric sunrise/sunset at this bar's time.
     graphics.setColor(map.isDayAt&&map.isDayAt(endMs)?0x07E0:0xFFE0);
     graphics.drawLine(Math.round(map.cx+r*ca),Math.round(map.cy+r*sa),
       Math.round(map.cx+outer*ca),Math.round(map.cy+outer*sa));
+  },function(bucket){
+    // Non-wear: overlay a one-pixel red arc exactly on the thin orbit.
+    // Each chord connects this five-minute interval's start/end angles.
+    var a=angleAt(bucket),ca=Math.cos(a),sa=Math.sin(a);
+    graphics.setColor(0xF800);
+    graphics.drawLine(
+      Math.round(map.cx+r*(ca*cs+sa*ss)),
+      Math.round(map.cy+r*(sa*cs-ca*ss)),
+      Math.round(map.cx+r*ca),
+      Math.round(map.cy+r*sa));
   });
 }
 exports.create=create;
