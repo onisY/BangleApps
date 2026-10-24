@@ -259,7 +259,7 @@
   function countryLetters(s,range){
     var m={"":{title:"Initial "+range},
       "< Back":function(){countryGroups(s);}};
-    for(var j=range.charCodeAt(0);j<=range.charCodeAt(2);j++){
+    for(var j=range.charCodeAt(0);j<=range.charCodeAt(range.length-1);j++){
       var letter=String.fromCharCode(j),count=0;
       for(var i=0;i<C.length;i++)
         if(C[i][0].charAt(0).toUpperCase()===letter)count++;
