@@ -46,7 +46,7 @@ function create(options){
   var threshold=thresholdG(options.thresholdG),threshold2=threshold*threshold;
   var cuts=activityThresholds(options.activityThresholds),save=options.onCommit;
   var wearG=thresholdG(options.wearThresholdG===undefined?0.009:options.wearThresholdG);
-  var vecFirst,vecLast,vecBad=false;
+  var vecMotionRun=0,vecWornMotion=false;
   var vecSX=0,vecSY=0,vecSZ=0,vecCount=0,vecSecond=-1;
   var vecRefX,vecRefY,vecRefZ,vecMaxD2=0;
   var closedBucket=-1,closedStill=false,closedVectorOK=false,
@@ -90,12 +90,18 @@ function create(options){
       var dx=x-vecRefX,dy=y-vecRefY,dz=z-vecRefZ;
       var d2=dx*dx+dy*dy+dz*dz;
       if(d2>vecMaxD2)vecMaxD2=d2;
+      // Reject isolated noise in a motionless watch. Any large deviation
+      // (>3x) or two consecutive above-threshold seconds proves motion.
+      if(d2>wearG*wearG)vecMotionRun++;
+      else vecMotionRun=0;
+      if(vecMotionRun>=2||d2>9*wearG*wearG)vecWornMotion=true;
     }
     vecSX=0;vecSY=0;vecSZ=0;vecCount=0;
   }
   function resetVector(){
     vecSX=0;vecSY=0;vecSZ=0;vecCount=0;vecSecond=-1;
     vecRefX=undefined;vecRefY=undefined;vecRefZ=undefined;vecMaxD2=0;
+    vecMotionRun=0;vecWornMotion=false;
   }
   function addVector(a,ms){
     var second=Math.floor(ms/1000);
@@ -149,8 +155,10 @@ function create(options){
     if(current>=0&&target>current){
       flushVector();
       closedBucket=current;
-      closedVectorOK=!vecBad&&vecRefX!==undefined&&covered>=MIN_COVERAGE_MS;
-      closedMotion=closedVectorOK&&vecMaxD2>wearG*wearG;
+      // One skipped accelerometer event must not invalidate 270+ seconds
+      // of observed data. Missing major portions still yield NO_DATA.
+      closedVectorOK=vecRefX!==undefined&&covered>=MIN_COVERAGE_MS;
+      closedMotion=closedVectorOK&&vecWornMotion;
       closedStill=closedVectorOK&&!closedMotion;
       closedPercent=activityLevel(activity,cuts);
       closedPulse=pulseState;closedConfidence=pulseConfidence;
@@ -158,6 +166,7 @@ function create(options){
       levels[i]=chooseLevel(closedVectorOK,closedStill,closedMotion,closedPulse,closedPercent);
       diag.push({bucket:current,coverageSec:Math.round(covered/1000),
         driftG:Math.round(Math.sqrt(vecMaxD2)*10000)/10000,
+        motion:closedMotion,
         activity:Math.round(activity*1000)/1000,peaks:peakCount,
         valid:closedVectorOK,pulse:closedPulse,confidence:closedConfidence,
         result:levels[i],
@@ -169,7 +178,7 @@ function create(options){
       closedBucket=-1;changed=true;
     }
     current=target;covered=0;activity=0;peakCount=0;resetPeak();resetVector();
-    vecFirst=undefined;vecLast=undefined;vecBad=false;
+    // No persistent gap-failure flag: covered duration is authoritative.
     pulseState=HR_PENDING;pulseConfidence=-1;
     if(changed&&save)save();
     return changed;
@@ -208,11 +217,7 @@ function create(options){
       roll(ms);
       covered+=ms-boundary;
     }
-    if(!valid)vecBad=true;
-    else{
-      if(vecFirst===undefined)vecFirst=ms;
-      if(vecLast!==undefined&&(ms-vecLast>MAX_GAP_MS||ms<=vecLast))vecBad=true;
-      vecLast=ms;
+    if(valid){
       addVector(a,ms);
       detectPeak(a,continuous?dt:0);
     }
@@ -252,11 +257,12 @@ function create(options){
   return {sample:sample,sync:sync,absentPulse:absentPulse,detectedPulse:detectedPulse,
     failedProbe:failedProbe,visit:visit,snapshot:snapshot,level:level,
     getDiagnostics:function(){return {bucket:current,coverageSec:Math.round(covered/1000),
-      driftG:Math.round(Math.sqrt(vecMaxD2)*10000)/10000,vectorValid:!vecBad,
+      driftG:Math.round(Math.sqrt(vecMaxD2)*10000)/10000,
+      motion:vecWornMotion,vectorValid:vecRefX!==undefined,
       pulse:pulseState,confidence:pulseConfidence,
       probeStatus:"0=pending,1=detected,2=absent,3=failed",
       recent:diag.slice()};},
-    hasMotion:function(bucket){return bucket===current&&vecMaxD2>wearG*wearG;},
+    hasMotion:function(bucket){return bucket===current&&vecWornMotion;},
     getLive:function(){return {bucket:current,covered:covered,peaks:peakCount,
       activity:activity,level:activityLevel(activity,cuts)};}};
 }
