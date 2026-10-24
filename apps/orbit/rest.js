@@ -32,8 +32,8 @@ function thresholdG(v){
 function limit(v,lo,hi,def){return isFinite(v)?Math.max(lo,Math.min(hi,+v)):def;}
 function wearConfig(s){return {enabled:s.restWearEnabled!==false,
   z:thresholdG(s.restWearThreshold===undefined?0.009:s.restWearThreshold),
-  seconds:limit(s.restProbeSeconds,10,60,30),confidence:limit(s.restPulseConfidence,1,100,90),
-  min:limit(s.restPulseMin,20,100,40),max:limit(s.restPulseMax,120,240,200)};}
+  seconds:limit(s.restProbeSeconds,10,60,30),
+  confidence:limit(s.restPulseConfidence,1,100,90)};}
 
 
 /* Rest history retains 0..100 presentation codes for v2/v3 compatibility.
@@ -251,6 +251,7 @@ function create(options){
       driftG:Math.round(Math.sqrt(vecMaxD2)*10000)/10000,vectorValid:!vecBad,
       pulse:pulseState,probeStatus:"0=pending,1=detected,2=absent,3=failed",
       recent:diag.slice()};},
+    hasMotion:function(bucket){return bucket===current&&vecMaxD2>wearG*wearG;},
     getLive:function(){return {bucket:current,covered:covered,peaks:peakCount,
       activity:activity,level:activityLevel(activity,cuts)};}};
 }
@@ -260,10 +261,17 @@ function install(bangle,storage,events,clock){
   var engine,enabled=false,configKey,api,wear,probe,timer;
   var HR_ID="orbitrest";
   function persist(){if(engine)try{storage.writeJSON("orbit.rest.json",engine.snapshot());}catch(e){}}
-  function onAccel(a){engine.sample(a,clock());}
+  function onAccel(a){
+    engine.sample(a,clock());
+    if(probe&&engine.hasMotion(probe.bucket)){
+      var bucket=probe.bucket;
+      stopProbe();scheduleProbe(bucket+1);
+    }
+  }
   function onHRM(h){
-    if(probe&&h&&isFinite(h.bpm)&&h.bpm>=wear.min&&h.bpm<=wear.max&&
-      isFinite(h.confidence)&&h.confidence>=wear.confidence){
+    // Only a positive, high-confidence BPM counts. No BPM min/max.
+    if(probe&&h&&isFinite(h.bpm)&&h.bpm>0&&
+      isFinite(h.confidence)&&h.confidence>wear.confidence){
       var bucket=probe.bucket;
       engine.detectedPulse(bucket);
       // Stop immediately and do not start a second probe in the same slot.
@@ -290,6 +298,8 @@ function install(bangle,storage,events,clock){
       if(begin<start||begin>end-10000){
         engine.failedProbe(bucket);scheduleProbe(bucket+1);return;
       }
+      // Significant 3D movement already establishes wearing: leave HRM off.
+      if(engine.hasMotion(bucket)){scheduleProbe(bucket+1);return;}
       probe={bucket:bucket,start:begin,end:end};
       bangle.on("HRM",onHRM);
       try{
