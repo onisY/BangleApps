@@ -1,26 +1,43 @@
-# Rest bar and power management (tenkyu v0.066)
+# Rest bar and power management (tenkyu v0.068)
 
-## Five-level bars
+## Three-axis high-pass peak integral
 
-The underlying five-minute measure is still the percentage of local maxima
-in the high-pass-filtered Z acceleration whose amplitude is no greater than the
-configured threshold (0.001–0.729 g, seven choices).
+For each XYZ accelerometer sample, independent first-order low-pass filters
+maintain gravity/slow-motion baselines. With `tau=1600 ms` and the measured
+sample interval `dt`, their smoothing coefficient is `dt/(tau+dt)`, about
+a 0.1Hz high-pass response. The vector of high-pass residuals is used only
+through its squared norm `q=X'²+Y'²+Z'²`. The comparison `q >= gate²`
+runs **before** the local-maximum test; a peak is accepted when the preceding
+q is no smaller than the current q and greater than the previous-previous q.
+Only a gated accepted local peak requires `sqrt(q_peak)`, with the excess
+`sqrt(q_peak)-gate` added to a five-minute sum A (units g per collection of
+peaks; NOT integrated acceleration over physical time). Each 5-minute bin
+has at most a fixed set of filter/peak-state variables, not a sample array.
 
-Display stage: 0–19%=1, 20–39%=2, 40–59%=3, 60–79%=4, 80–100%=5.
-Worn, observed inactivity with zero peaks is 100% (stage 5). Worn,
-high-motion intervals that yield 0% quiet peaks still display stage 1.
-Non-wear = stage 0 and draws no bar. Missing coverage (<270 seconds)
-also draws no bar but is stored separately; no-data and non-wear must not
-be treated as the same physiological state.
+Peak gate: seven configurable values [0.001, 0.003, 0.009, 0.027,
+0.081, 0.243, 0.729] g, default 0.027g.
+Rest levels are selected by four ascending editable sum boundaries,
+initially [0.5, 2, 6, 18] g: A<0.5 -> level 5, A<2 -> level 4,
+A<6 -> level 3, A<18 -> level 2, otherwise level 1.
+In watch settings: **Rest graph → Peak gate** and
+**Rest graph → Stage boundaries**. The initial boundary values are
+experimental and must be calibrated using actual wearing data.
 
-The goal is that sleep-like motionlessness maps approximately to 5,
-desk work to 3, and walking to 1; a Z-peak ratio alone does not guarantee
-those classes. Validate thresholds against actual Bangle.js 2 samples.
+Separate non-wear rule: require at least 270 seconds of valid three-axis
+accelerometer coverage in a five-minute window. If 3D drift exceeds the
+chosen **Non-wear → 3D drift** threshold, a rest bar is shown whether
+or not HRM detects a pulse. If sufficiently still, positive pulse means
+level 5 and absent/pending/failed pulse means level 0 (unworn). Missing
+XYZ coverage => unknown (no bar), stored separately from non-wear.
 
-Bars are drawn **after the Moon**, so they overwrite lunar pixels, and before
-the red observer point. Sunrise/sunset classification is cached by
-five-minute slot for 288 bins, reducing repeated astronomy calculations
-during full-screen redraw.
+Bars remain green by day, yellow at night, drawn above the Moon and behind
+the observer marker. The 288 slots cover the preceding 24 hours.
+Their v3 history codes 0..100 retain the same **display** semantics;
+new stage levels are coded 0/20/40/60/100, old percentage-based bins
+continue to display at their previous stage. Historical bins cannot
+be reclassified after changing stage boundaries. The saved active record
+includes `metric:2`, gate and cutoffs, preventing reuse of an incompatible
+old peak-ratio accumulator or an accumulator from different settings.
 
 ## Retained history
 
@@ -50,7 +67,7 @@ duration-based levels remain incompatible.
 
 ## Orientation-independent non-wear (v0.064)
 
-The rest *level* continues to derive from screen-normal Z-axis acceleration peaks.
+The current rest *level* uses gated XYZ high-pass peak heights (v0.068); the Z-axis description below is historical.
 Only the **non-wear** motion gate now uses all three axes. Each accelerometer
 sample contributes to a one-second mean vector (X,Y,Z) in g. For a complete
 five-minute window, let a0 denote its first one-second mean, and let ai be
@@ -63,11 +80,10 @@ The 1-second averaging suppresses brief outlier spikes (at the cost of
 ignoring brief excursions). For typical magnitude near 1g, a pure tilt
 of theta radians produces D approximately theta g; 0.009g is roughly 0.52°.
 
-The low-drift condition is combined with >=270 seconds of valid 3D
-accelerometer coverage and a valid no-pulse HRM result. Incomplete coverage,
-failed/skipped HRM or no-pulse with movement produces an unknown slot (FF),
-rather than a misleading rest stage of 5. Late HRM results can finalize the
-most recently closed slot.
+Current policy instead shows an activity bar whenever 3D drift indicates
+motion (regardless of HRM). For sufficiently still records, pulse evidence
+means stage 5 and missing pulse evidence means non-wear stage 0.
+Late HRM results can finalize the most recently closed slot.
 The existing persisted `restWearThreshold` config key is retained to avoid
 resetting user preferences; its menu label changes from Z range to 3D drift.
 
@@ -111,10 +127,9 @@ after 24 hours, including any incorrectly classified stage-5 bars.
 
 ## Motion-first classification (v0.066)
 
-The rest display no longer depends on HRM when 3-axis drift exceeds the
-single configurable threshold. A completed 5-minute record of actual motion
-retains the original Z-axis peak percentage / five-stage mapping even when the
-HRM probe is missing or failed. If the watch remains still, the optical pulse
+Since v0.066, 3D motion no longer depends on HRM for worn recognition.
+Since v0.068, the five-stage length instead uses the new 3D gated peak
+excess integral, not the original Z-axis peak-count percentage. If the watch remains still, the optical pulse
 is the only positive wearing evidence: confirmed pulse => 5; otherwise
 non-wear => 0. Unknown/insufficient accel coverage remains distinct (FF).
 Diagnostics use `motion`, `pulse_detected_still`, `nonwear`,
