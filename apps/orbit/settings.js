@@ -242,15 +242,14 @@
     }catch(e){}
   }
   function openPlace(s){
+    // The menu now needs no data: draw it immediately, not on a later timer.
     locationLoading("Places...");
-    setTimeout(function(){
-      try{placeMenu(s);}
-      catch(e){
-        releasePlaceData();
-        E.showAlert("Cannot open locations\n"+String(e),"tenkyu")
-          .then(function(){locationMenu(s);});
-      }
-    },0);
+    try{placeMenu(s);}
+    catch(e){
+      releasePlaceData();
+      E.showAlert("Cannot open locations\n"+String(e),"tenkyu")
+        .then(function(){locationMenu(s);});
+    }
   }
   function chosenCountry(s,ci){
     s.countryName=C[ci];
