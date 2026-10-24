@@ -432,6 +432,21 @@ assert.strictEqual(detected.b.orbitRest.getDiagnostics().recent.at(-1).reason,"p
 // After a valid early HRM detection, do not immediately start a second
 // optical probe during the same 5-minute interval.
 assert.deepStrictEqual(detected.power.filter(x=>x[1]===1).map(x=>x[0]),[base+270000]);
+assert.strictEqual(detected.b.orbitRest.isProbing(),false);
+assert.strictEqual(nw.b.orbitRest.isProbing(),false);
+// A new movement during an already-running probe must release the LED
+// before the five-minute boundary, not leave it on for the full window.
+const interrupted=environment(base,{restWearEnabled:true});
+interrupted.execute("boot.js");
+for(let t=0;t<=S;t+=1000){
+  interrupted.advance(base+t);
+  interrupted.b.emit("accel",{x:t>=275000?.06:0,y:0,z:1});
+}
+assert.deepStrictEqual(interrupted.power.slice(0,2).map(q=>q[1]),[1,0]);
+assert(interrupted.power[1][0]<base+S,
+  "Motion must turn the optical sensor off before its timeout");
+assert.strictEqual(interrupted.b.orbitRest.isProbing(),false);
+assert.strictEqual(interrupted.b.listenerCount("HRM"),0);
 assert.strictEqual(detected.b.orbitRest.getDiagnostics().recent.at(-1).confidence,91);
 assert.strictEqual(runWear({bpm:60,confidence:90}).b.orbitRest.getEngine().level(base/S),0,
   "Confidence equal to configured threshold is insufficient");
