@@ -287,6 +287,16 @@
     }
     E.showMenu(m);
   }
+  function openCountries(s){
+    locationLoading("Countries...");
+    setTimeout(function(){
+      try{loadPlaceIndex();countryGroups(s);}
+      catch(e){
+        E.showAlert("Cannot open countries\n"+String(e),"tenkyu")
+          .then(function(){placeMenu(s);});
+      }
+    },0);
+  }
   function countryGroups(s){
     var m={"":{title:"Choose country"},
       "< Back":function(){placeMenu(s);},
@@ -334,6 +344,7 @@
     },0);
   }
   function cityPage(s,page){
+    loadPlaceIndex();
     var ci=countryIndex(s.countryName),list=loadCities(ci),size=7;
     if(page*size>=list.length)page=0;
     var m={"":{title:"Cities"},"< Back":function(){placeMenu(s);}};
@@ -345,6 +356,16 @@
     if((page+1)*size<list.length)
       m["Next >"]=function(){cityPage(s,page+1);};
     E.showMenu(m);
+  }
+  function openPrefectures(s){
+    locationLoading("Prefectures...");
+    setTimeout(function(){
+      try{loadPlaceIndex();prefecturePage(s,Math.floor((s.pref|0)/7));}
+      catch(e){
+        E.showAlert("Cannot open prefectures\n"+String(e),"tenkyu")
+          .then(function(){placeMenu(s);});
+      }
+    },0);
   }
   function prefecturePage(s,page){
     var size=7,start=page*size,i,m={"":{title:"Prefectures"},
@@ -481,24 +502,31 @@
 
   function placeMenu(s){
     stopGPS();
-    normalizePlaceState(s,false);
-    var ci=countryIndex(s.countryName);
-    var m={"":{title:"Place name"},"< Back":function(){releasePlaceData();locationMenu(s);},
-      "Country":function(){countryGroups(s);},
+    // Never require the country module or parse a municipality record just
+    // to display Place name. Opening this menu must be constant-time.
+    var name=s.countryName||"Japan";
+    var m={"":{title:"Place name"},
+      "< Back":function(){releasePlaceData();locationMenu(s);},
+      "Country":function(){openCountries(s);},
       "Selected":{value:0,min:0,max:0,
-        format:function(){return C[ci];}}
+        format:function(){return name;}}
     };
-
-    if(s.countryName==="Japan"){
-      m["Prefecture"]=function(){prefecturePage(s,Math.floor(s.pref/7));};
+    if(name==="Japan"){
+      m["Prefecture"]=function(){openPrefectures(s);};
       m["Area"]={value:0,min:0,max:0,
-        format:function(){return P[s.pref][0];}};
+        format:function(){return s.locPref||"Tokyo";}};
       m["Municipality"]=function(){openMunicipalities(s);};
-    }else{
-      m["City"]=function(){openCityList(s);};
-    }
-
-    m["Use place"]=function(){commitPlace(s);};
+    }else m["City"]=function(){openCityList(s);};
+    m["Use place"]=function(){
+      locationLoading("Saving...");
+      setTimeout(function(){
+        try{commitPlace(s);}
+        catch(e){
+          E.showAlert("Cannot save location\n"+String(e),"tenkyu")
+            .then(function(){placeMenu(s);});
+        }
+      },0);
+    };
     E.showMenu(m);
   }
 
