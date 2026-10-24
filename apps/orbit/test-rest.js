@@ -1,4 +1,4 @@
-/* global Map, Proxy, __dirname */
+/* global Map, Set, Proxy, __dirname */
 /* node apps/orbit/test-rest.js -- 3D threshold-gated five-minute activity sums. */
 const assert=require("assert"),fs=require("fs"),vm=require("vm"),path=require("path");
 const EventEmitter=require("events"),r=require("./rest.js"),S=r.constants.slotMs;
