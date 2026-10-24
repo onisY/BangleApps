@@ -212,6 +212,85 @@
   function defaultColor(type){return type==="holiday"?"red":type==="birthday"?"magenta":type==="family"?"yellow":"yellow";}
 
   // ---------- Location ----------
+  // A visible, inexpensive acknowledgement must precede loading 197 country
+  // entries or parsing municipality data. Never block the touch callback.
+  function locationLoading(label){
+    try{
+      var w=g.getWidth(),h=g.getHeight();
+      g.reset().setBgColor(0).setColor(0).fillRect(0,24,w-1,h-1);
+      g.setColor(0xffff).setFont("6x8",2).setFontAlign(0,0)
+        .drawString(label,w>>1,(h+24)>>1);
+      if(g.flip)g.flip();
+    }catch(e){}
+  }
+  function openPlace(s){
+    locationLoading("Places...");
+    setTimeout(function(){
+      try{placeMenu(s);}
+      catch(e){
+        releasePlaceData();
+        E.showAlert("Cannot open locations\n"+String(e),"tenkyu")
+          .then(function(){locationMenu(s);});
+      }
+    },0);
+  }
+  function chosenCountry(s,ci){
+    s.countryName=C[ci][0];
+    s.place=0;s.municipality=0;
+    releaseMunicipalities();
+    openPlace(s);
+  }
+  function countryPage(s,letter,page){
+    var ids=[],i;
+    for(i=0;i<C.length;i++)
+      if(C[i][0].charAt(0).toUpperCase()===letter)ids.push(i);
+    var size=7,start=page*size;
+    if(start>=ids.length){page=0;start=0;}
+    var m={"":{title:letter+" countries"},
+      "< Back":function(){countryLetters(s,letter);}};
+    if(page>0)m["< Previous"]=function(){countryPage(s,letter,page-1);};
+    for(i=start;i<Math.min(start+size,ids.length);i++)(function(ci){
+      m[C[ci][0]]=function(){chosenCountry(s,ci);};
+    })(ids[i]);
+    if(start+size<ids.length)
+      m["Next >"]=function(){countryPage(s,letter,page+1);};
+    E.showMenu(m);
+  }
+  function countryLetters(s,range){
+    var m={"":{title:"Initial "+range},
+      "< Back":function(){countryGroups(s);}};
+    for(var j=range.charCodeAt(0);j<=range.charCodeAt(2);j++){
+      var letter=String.fromCharCode(j),count=0;
+      for(var i=0;i<C.length;i++)
+        if(C[i][0].charAt(0).toUpperCase()===letter)count++;
+      if(count)(function(c,n){
+        m[c+" ("+n+")"]=function(){countryPage(s,c,0);};
+      })(letter,count);
+    }
+    E.showMenu(m);
+  }
+  function countryGroups(s){
+    var m={"":{title:"Choose country"},
+      "< Back":function(){placeMenu(s);},
+      "Japan (quick)":function(){chosenCountry(s,countryIndex("Japan"));}};
+    var ranges=["A-D","E-H","I-L","M-P","Q-T","U-Z"];
+    for(var i=0;i<ranges.length;i++)(function(range){
+      m[range]=function(){countryLetters(s,range);};
+    })(ranges[i]);
+    E.showMenu(m);
+  }
+  function prefecturePage(s,page){
+    var size=7,start=page*size,i,m={"":{title:"Prefectures"},
+      "< Back":function(){placeMenu(s);}};
+    if(page>0)m["< Previous"]=function(){prefecturePage(s,page-1);};
+    for(i=start;i<Math.min(start+size,P.length);i++)(function(pi){
+      m[P[pi][0]]=function(){
+        s.pref=pi;s.municipality=0;releaseMunicipalities();openPlace(s);
+      };
+    })(i);
+    if(start+size<P.length)m["Next >"]=function(){prefecturePage(s,page+1);};
+    E.showMenu(m);
+  }
   function selectedPlace(s){
     normalizePlaceState(s);
     var ci=countryIndex(s.countryName);
@@ -338,24 +417,15 @@
     normalizePlaceState(s);
     var ci=countryIndex(s.countryName);
     var m={"":{title:"Place name"},"< Back":function(){releasePlaceData();locationMenu(s);},
-      "Country":{value:ci,min:0,max:C.length-1,step:1,
-        format:function(v){return C[v][0];},
-        onchange:function(v){
-          s.countryName=C[v][0];s.place=0;s.municipality=0;
-          releaseMunicipalities();
-          setTimeout(function(){placeMenu(s);},10);
-        }
-      }
+      "Country":function(){countryGroups(s);},
+      "Selected":{value:0,min:0,max:0,
+        format:function(){return C[ci][0];}}
     };
 
     if(s.countryName==="Japan"){
-      m["Prefecture"]={value:s.pref,min:0,max:P.length-1,step:1,
-        format:function(v){return P[v][0];},
-        onchange:function(v){
-          s.pref=v;s.municipality=0;releaseMunicipalities();
-          setTimeout(function(){placeMenu(s);},10);
-        }
-      };
+      m["Prefecture"]=function(){prefecturePage(s,Math.floor(s.pref/7));};
+      m["Area"]={value:0,min:0,max:0,
+        format:function(){return P[s.pref][0];}};
       var ml=loadMunicipalities(s.pref);
       s.municipality=Math.max(0,Math.min(ml.length-1,s.municipality|0));
       m["Municipality"]={value:s.municipality,min:0,max:ml.length-1,step:1,
@@ -410,7 +480,7 @@
     stopGPS();releasePlaceData();
     if(!s)s=appCfg();
     var m={"":{title:"Location"},"< Back":main,
-      "Place name":function(){placeMenu(s);},
+      "Place name":function(){openPlace(s);},
       "Manual":function(){manualMenu(s);},
       "GPS":function(){gpsMenu(s);},
       "Current coords":function(){locationInfo(s,function(){locationMenu(s);});}
