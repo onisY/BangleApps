@@ -572,3 +572,11 @@ Opening **Settings → Location → Place name** now displays its basic menu wit
 ### 地名設定の省メモリ化（v0.070）
 
 **Settings → Location → Place name** を押しただけでは、国名・都市・日本の市区町村データを一切読み込まないよう変更しました。以前のv0.069では **Places...** の直後に全世界の国と都市のデータを同期的に展開していたため、Bangle.js 2の空きメモリが少ない場合に固まる可能性がありました。v0.070では、国名・都道府県の小さな索引だけを必要時に読み込み、各国の都市は新しい `orbitcities.dat` から選択された国だけ取り出します。日本の市区町村も、都道府県を指定して **Municipality** を選択するまで読み込みません。都市・市区町村は7件ずつのページから選択します。国名の頭文字検索、日本へのショートカット、登録済みの場所・座標・時差・夏時間は維持しています。197か国の名前・都市・座標は旧データと照合済みです。新たに `orbitcities.dat` が必要になるため、**設定ファイルだけでなく、v0.070のアプリ全体を更新**してください。
+
+### Non-wear intervals on the lunar orbit (v0.071)
+
+The 24-hour rest graph now also shows confirmed **non-wear** intervals (stored code FE / 254) as **red one-pixel-wide arc segments** directly over the existing thin Moon-orbit circumference. Each recorded five-minute interval corresponds to 1.25° of the orbit. Consecutive unworn intervals produce a continuous red arc. Worn stages 1–5 remain the same green/day or yellow/night radial bars, and insufficient/missing sensor data (FF / 255) remain unpainted. The existing orbit line itself and the separate red observer marker are unchanged. The recorder, 3D drift/HRM non-wear decision, 288-slot/24-hour history, data format, flash writes, and power settings are unchanged. Existing recorded FE intervals will appear red immediately after installing v0.071; no sensor recalculation or data migration is required. The rendering adds a bounded number of short lines only for visible non-wear records.
+
+### 非装着時間を月の軌道上に赤く表示（v0.071）
+
+24時間の安静グラフで、**非装着（保存値FE／254）だった5分間**を、月の軌道の細い線の上に**同じ1画素幅の赤い円弧**として描きます。5分間は軌道上の1.25°に相当し、長時間外していた場合は赤い円弧が連続します。装着時の1〜5段階の緑（昼）・黄色（夜）の放射状の棒は従来どおりです。データ不足（FF／255）は赤くせず、従来の軌道線のままにします。非装着の判定方法、記録間隔、24時間288区間の履歴、保存形式、心拍計測、省電力設定は一切変更していません。旧版で保存された非装着記録もv0.071のインストール直後から赤く表示されます。
