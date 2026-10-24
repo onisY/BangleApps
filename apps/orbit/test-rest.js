@@ -1,5 +1,5 @@
 /* global Map, Proxy, __dirname */
-/* node apps/orbit/test-rest.js -- five-minute screen-normal motion-peak ratios. */
+/* node apps/orbit/test-rest.js -- 3D threshold-gated five-minute activity sums. */
 const assert=require("assert"),fs=require("fs"),vm=require("vm"),path=require("path");
 const EventEmitter=require("events"),r=require("./rest.js"),S=r.constants.slotMs;
 const base=Math.floor(Date.parse("2026-10-19T18:00:00Z")/S)*S;
@@ -18,12 +18,14 @@ function pattern(e,amplitude,step=1000){
 }
 assert.deepStrictEqual(r.thresholds,[.001,.003,.009,.027,.081,.243,.729]);
 assert.strictEqual(r.thresholdG(.03),.027);
-for(const [q,p,c,v] of [[7,10,S,70],[1,2,S,50],[0,3,S,0],[0,0,S,100],[0,0,269000,0]])
-  assert.strictEqual(r.percentFor(q,p,c),v);
+assert.deepStrictEqual(r.activityDefaults,[.5,2,6,18]);
+assert.deepStrictEqual(r.activityThresholds(),[.5,2,6,18]);
+assert.deepStrictEqual([0,.49,.5,1.99,2,5.99,6,17.99,18]
+  .map(x=>r.activityLevel(x,r.activityDefaults)),[100,100,60,60,40,40,20,20,0]);
 const low=r.create({thresholdG:.027});pattern(low,.004);
 assert.strictEqual(low.level(base/S),100);
 const high=r.create({thresholdG:.027});pattern(high,.2);
-assert.strictEqual(high.level(base/S),0);
+assert(high.level(base/S)<100,"Repeated suprathreshold motion must reduce rest level");
 const zeroBars=[];high.visit(base+S*2,(b,v)=>zeroBars.push([b,v]));
 assert.deepStrictEqual(zeroBars,[[base/S,0]]); // a worn, active bin still draws stage 1
 assert.deepStrictEqual([0,19,20,39,40,59,60,79,80,100].map(r.stageFor),
@@ -32,9 +34,10 @@ const stageAngles=[];
 r.draw({setColor:()=>{},drawLine:(...a)=>stageAngles.push(a)},high,
  {nowMs:base+S*2,radiusPx:70,maxHeightPx:10,cx:85,cy:90,currentAngleRad:0});
 assert.strictEqual(stageAngles.length,1);
-assert(Math.abs(Math.hypot(stageAngles[0][2]-85,stageAngles[0][3]-90)-72)<1);
+assert(Math.abs(Math.hypot(stageAngles[0][2]-85,stageAngles[0][3]-90)-
+  (70+10*r.stageFor(high.level(base/S))/5))<1);
 const mixed=r.create({thresholdG:.027});pattern(mixed,k=>k%2?.2:.004);
-assert(Math.abs(mixed.level(base/S)-50)<=4);
+assert(mixed.level(base/S)>=high.level(base/S)&&mixed.level(base/S)<=100);
 const still=r.create();feed(still,base,base+S);
 assert.strictEqual(still.level(base/S),100);
 assert.strictEqual(still.snapshot().v,3);
@@ -147,15 +150,22 @@ assert.strictEqual(other.b.listenerCount("accel"),1);
 const off=environment(base,{restEnabled:false});
 off.execute("boot.js");off.execute("app.js");
 assert.strictEqual(off.b.listenerCount("accel"),0);
-// Menus expose percent height and seven Z-peak thresholds.
+// Menus expose five-level height, seven 3-axis peak gates and four boundaries.
 const menus=[];app.events.showMenu=m=>menus.push(m);
 app.execute("settings.js")(()=>{});menus.at(-1)["Rest graph"]();
 assert.strictEqual(menus.at(-1)["Max bar height"].max,14);
 menus.at(-1)["Max bar height"].onchange(14);
 assert.strictEqual(app.cfg.restBarHeight,14);
-const q=menus.at(-1)["Peak threshold"];
+const q=menus.at(-1)["Peak gate"];
 assert.strictEqual(q.max,6);
 for(let i=0;i<7;i++){q.onchange(i);assert.strictEqual(app.cfg.restThreshold,r.thresholds[i]);}
+menus.at(-1)["Stage boundaries"]();
+assert.deepStrictEqual([1,2,3,4].map(i=>app.cfg["restActivityT"+i]),r.activityDefaults);
+const newLevel=menus.at(-1)["L5/4 boundary"];
+newLevel.onchange(.6);
+assert.strictEqual(app.cfg.restActivityT1,.6);
+assert.strictEqual(app.cfg.restActivityT2,2);
+menus.at(-1)["< Back"]();
 menus.at(-1)["Non-wear"]();
 menus.at(-1)["3D drift"].onchange(0);
 assert.strictEqual(app.cfg.restWearThreshold,.001);
@@ -366,5 +376,5 @@ console.log("PASS: tap/calendar/settings/wake/launcher immediate acknowledgement
 console.log("motion-first HRM-independent bars, still/no-pulse stage 0, still/pulse stage 5,");
 console.log("robust slot finalization, three-way HRM status,");
 console.log("bounded persisted diagnostics, 3-axis stillness and 1s filtering,");
-console.log("five-stage peak-ratio, v3 storage, early HRM-off,");
+console.log("five-stage 3D peak amplitude sum, v3 storage, early HRM-off,");
 console.log("12.5Hz events, 24 h history, idle lock/wake, app drawing.");
