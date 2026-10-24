@@ -1,4 +1,4 @@
-/* tenkyu 0.06: settings and editable event data. */
+/* tenkyu 0.070: settings and flash-backed location picker. */
 (function(back){
   var Storage=require("Storage");
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
@@ -514,7 +514,9 @@
     if(name==="Japan"){
       m["Prefecture"]=function(){openPrefectures(s);};
       m["Area"]={value:0,min:0,max:0,
-        format:function(){return s.locPref||"Tokyo";}};
+        format:function(){
+          return P&&P[s.pref]?P[s.pref][0]:(s.locPref||"Tokyo");
+        }};
       m["Municipality"]=function(){openMunicipalities(s);};
     }else m["City"]=function(){openCityList(s);};
     m["Use place"]=function(){
