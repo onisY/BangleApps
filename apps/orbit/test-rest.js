@@ -27,7 +27,8 @@ assert.strictEqual(low.level(base/S),100);
 const high=r.create({thresholdG:.027});pattern(high,.2);
 assert(high.level(base/S)<100,"Repeated suprathreshold motion must reduce rest level");
 const zeroBars=[];high.visit(base+S*2,(b,v)=>zeroBars.push([b,v]));
-assert.deepStrictEqual(zeroBars,[[base/S,0]]); // a worn, active bin still draws stage 1
+assert.deepStrictEqual(zeroBars,[[base/S,high.level(base/S)]]);
+assert(r.stageFor(high.level(base/S))<5,"Moving intervals draw shortened bars");
 assert.deepStrictEqual([0,19,20,39,40,59,60,79,80,100].map(r.stageFor),
  [1,1,2,2,3,3,4,4,5,5]);
 const stageAngles=[];
