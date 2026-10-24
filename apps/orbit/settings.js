@@ -1,4 +1,4 @@
-/* tenkyu 0.06: settings and editable event data. */
+/* tenkyu 0.070: settings and flash-backed location picker. */
 (function(back){
   var Storage=require("Storage");
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
@@ -21,8 +21,9 @@
     return best;
   }
 
-  var C,P,JPI;
-  var JPFILE="orbitjp.dat",jpPrefCache=-1,jpMunicipalities;
+  var C,P,JPI,cityOffsets,cityCacheIndex=-1,cityCache;
+  var JPFILE="orbitjp.dat",CITYFILE="orbitcities.dat",
+    jpPrefCache=-1,jpMunicipalities;
   var CFG="orbit.json",CAL="orbit.cal.json",EVENTS="orbit.events.json";
   var GPS_ID="orbitsettings";
   var COLORS=["red","yellow","green","blue","cyan","magenta","orange","white","gray","black"];
@@ -39,7 +40,9 @@
   function loadPlaceIndex(){
     if(C&&P)return;
     var d=require("orbitloc");
-    C=d.countries;P=d.prefs;JPI=d.jpidx||[];
+    // Country names are an inexpensive string index; city lists stay on flash.
+    C=d.countryNames.split("|");P=d.prefs;JPI=d.jpidx||[];
+    cityOffsets=d.cityOffsets;
     d=undefined;
   }
   function releaseMunicipalities(){
@@ -48,7 +51,8 @@
   }
   function releasePlaceData(){
     releaseMunicipalities();
-    C=undefined;P=undefined;JPI=undefined;
+    cityCache=undefined;cityCacheIndex=-1;
+    C=undefined;P=undefined;JPI=undefined;cityOffsets=undefined;
     try{
       if(typeof Modules!=="undefined"&&Modules.getCached){
         var mc=Modules.getCached();
@@ -58,8 +62,21 @@
     }catch(e){}
   }
   function countryIndex(name){
-    for(var i=0;C&&i<C.length;i++)if(C[i][0]===name)return i;
+    for(var i=0;C&&i<C.length;i++)if(C[i]===name)return i;
     return -1;
+  }
+  function loadCities(ci){
+    loadPlaceIndex();
+    if(ci===cityCacheIndex&&cityCache)return cityCache;
+    if(ci<0||ci>=C.length)throw new Error("Country index");
+    var len=cityOffsets[ci+1]-cityOffsets[ci]-1;
+    var raw=Storage.read(CITYFILE,cityOffsets[ci],len);
+    if(!raw)throw new Error("Missing city data "+C[ci]);
+    var list=JSON.parse(raw);
+    if(!list.length)throw new Error("Empty city data "+C[ci]);
+    cityCache=undefined;cityCacheIndex=-1;
+    cityCache=list;cityCacheIndex=ci;
+    return list;
   }
   function prefIndex(name){
     for(var i=0;P&&i<P.length;i++)if(P[i][0]===name)return i;
@@ -161,13 +178,14 @@
     return s;
   }
 
-  function normalizePlaceState(s){
+  function normalizePlaceState(s,withCities){
     loadPlaceIndex();
     if(countryIndex(s.countryName)<0)s.countryName="Japan";
     var pi=prefIndex(s.locPref);
-    if(pi>=0&&s.countryName==="Japan")s.pref=pi;
+    if(pi>=0&&s.countryName==="Japan"&&s.placeStateVersion!==1)s.pref=pi;
     s.pref=Math.max(0,Math.min(P.length-1,s.pref|0));
-
+    // Do not parse even one municipality/city record to show Place name.
+    if(withCities===false)return;
     if(s.countryName==="Japan"){
       var ml=loadMunicipalities(s.pref),found=-1;
       if(s.placeStateVersion!==1&&s.locName)
@@ -175,7 +193,7 @@
       if(found>=0)s.municipality=found;
       s.municipality=Math.max(0,Math.min(Math.max(0,ml.length-1),s.municipality|0));
     }else{
-      var ci=countryIndex(s.countryName),list=C[ci][1]||[],f=-1;
+      var ci=countryIndex(s.countryName),list=loadCities(ci),f=-1;
       if(s.placeStateVersion!==1&&s.locName)
         for(var j=0;j<list.length;j++)if(list[j][0]===s.locName){f=j;break;}
       if(f>=0)s.place=f;
@@ -224,33 +242,32 @@
     }catch(e){}
   }
   function openPlace(s){
+    // The menu now needs no data: draw it immediately, not on a later timer.
     locationLoading("Places...");
-    setTimeout(function(){
-      try{placeMenu(s);}
-      catch(e){
-        releasePlaceData();
-        E.showAlert("Cannot open locations\n"+String(e),"tenkyu")
-          .then(function(){locationMenu(s);});
-      }
-    },0);
+    try{placeMenu(s);}
+    catch(e){
+      releasePlaceData();
+      E.showAlert("Cannot open locations\n"+String(e),"tenkyu")
+        .then(function(){locationMenu(s);});
+    }
   }
   function chosenCountry(s,ci){
-    s.countryName=C[ci][0];
-    s.place=0;s.municipality=0;
+    s.countryName=C[ci];
+    s.place=0;s.municipality=0;s.placeStateVersion=1;
     releaseMunicipalities();
     openPlace(s);
   }
   function countryPage(s,letter,page){
     var ids=[],i;
     for(i=0;i<C.length;i++)
-      if(C[i][0].charAt(0).toUpperCase()===letter)ids.push(i);
+      if(C[i].charAt(0).toUpperCase()===letter)ids.push(i);
     var size=7,start=page*size;
     if(start>=ids.length){page=0;start=0;}
     var m={"":{title:letter+" countries"},
       "< Back":function(){countryLetters(s,letter);}};
     if(page>0)m["< Previous"]=function(){countryPage(s,letter,page-1);};
     for(i=start;i<Math.min(start+size,ids.length);i++)(function(ci){
-      m[C[ci][0]]=function(){chosenCountry(s,ci);};
+      m[C[ci]]=function(){chosenCountry(s,ci);};
     })(ids[i]);
     if(start+size<ids.length)
       m["Next >"]=function(){countryPage(s,letter,page+1);};
@@ -262,12 +279,22 @@
     for(var j=range.charCodeAt(0);j<=range.charCodeAt(range.length-1);j++){
       var letter=String.fromCharCode(j),count=0;
       for(var i=0;i<C.length;i++)
-        if(C[i][0].charAt(0).toUpperCase()===letter)count++;
+        if(C[i].charAt(0).toUpperCase()===letter)count++;
       if(count)(function(c,n){
         m[c+" ("+n+")"]=function(){countryPage(s,c,0);};
       })(letter,count);
     }
     E.showMenu(m);
+  }
+  function openCountries(s){
+    locationLoading("Countries...");
+    setTimeout(function(){
+      try{loadPlaceIndex();countryGroups(s);}
+      catch(e){
+        E.showAlert("Cannot open countries\n"+String(e),"tenkyu")
+          .then(function(){placeMenu(s);});
+      }
+    },0);
   }
   function countryGroups(s){
     var m={"":{title:"Choose country"},
@@ -279,13 +306,74 @@
     })(ranges[i]);
     E.showMenu(m);
   }
+  function openMunicipalities(s){
+    locationLoading("Cities...");
+    setTimeout(function(){
+      try{municipalityPage(s,Math.floor((s.municipality|0)/7));}
+      catch(e){
+        E.showAlert("Cannot open cities\n"+String(e),"tenkyu")
+          .then(function(){placeMenu(s);});
+      }
+    },0);
+  }
+  function municipalityPage(s,page){
+    var ml=loadMunicipalities(s.pref),size=7;
+    if(page*size>=ml.length)page=0;
+    var m={"":{title:"Municipalities"},
+      "< Back":function(){placeMenu(s);}};
+    if(page>0)m["< Previous"]=function(){municipalityPage(s,page-1);};
+    for(var i=page*size;i<Math.min((page+1)*size,ml.length);i++)
+      (function(j){
+        m[ml[j][0]]=function(){
+          s.municipality=j;saveSelectedPlace(s);placeMenu(s);
+        };
+      })(i);
+    if((page+1)*size<ml.length)
+      m["Next >"]=function(){municipalityPage(s,page+1);};
+    E.showMenu(m);
+  }
+  function openCityList(s){
+    locationLoading("Cities...");
+    setTimeout(function(){
+      try{cityPage(s,Math.floor((s.place|0)/7));}
+      catch(e){
+        E.showAlert("Cannot open cities\n"+String(e),"tenkyu")
+          .then(function(){placeMenu(s);});
+      }
+    },0);
+  }
+  function cityPage(s,page){
+    loadPlaceIndex();
+    var ci=countryIndex(s.countryName),list=loadCities(ci),size=7;
+    if(page*size>=list.length)page=0;
+    var m={"":{title:"Cities"},"< Back":function(){placeMenu(s);}};
+    if(page>0)m["< Previous"]=function(){cityPage(s,page-1);};
+    for(var i=page*size;i<Math.min((page+1)*size,list.length);i++)
+      (function(j){
+        m[list[j][0]]=function(){s.place=j;saveSelectedPlace(s);placeMenu(s);};
+      })(i);
+    if((page+1)*size<list.length)
+      m["Next >"]=function(){cityPage(s,page+1);};
+    E.showMenu(m);
+  }
+  function openPrefectures(s){
+    locationLoading("Prefectures...");
+    setTimeout(function(){
+      try{loadPlaceIndex();prefecturePage(s,Math.floor((s.pref|0)/7));}
+      catch(e){
+        E.showAlert("Cannot open prefectures\n"+String(e),"tenkyu")
+          .then(function(){placeMenu(s);});
+      }
+    },0);
+  }
   function prefecturePage(s,page){
     var size=7,start=page*size,i,m={"":{title:"Prefectures"},
       "< Back":function(){placeMenu(s);}};
     if(page>0)m["< Previous"]=function(){prefecturePage(s,page-1);};
     for(i=start;i<Math.min(start+size,P.length);i++)(function(pi){
       m[P[pi][0]]=function(){
-        s.pref=pi;s.municipality=0;releaseMunicipalities();openPlace(s);
+        s.pref=pi;s.municipality=0;s.placeStateVersion=1;
+        releaseMunicipalities();openPlace(s);
       };
     })(i);
     if(start+size<P.length)m["Next >"]=function(){prefecturePage(s,page+1);};
@@ -298,8 +386,8 @@
       var jl=loadMunicipalities(s.pref);
       return {group:P[s.pref][0],place:jl[s.municipality],ci:ci,pi:0};
     }
-    var list=C[ci][1]||[];
-    return {group:C[ci][0],place:list[s.place],ci:ci,pi:s.place|0};
+    var list=loadCities(ci);
+    return {group:C[ci],place:list[s.place],ci:ci,pi:s.place|0};
   }
   function placeTimeData(q){
     var t;
@@ -414,39 +502,33 @@
 
   function placeMenu(s){
     stopGPS();
-    normalizePlaceState(s);
-    var ci=countryIndex(s.countryName);
-    var m={"":{title:"Place name"},"< Back":function(){releasePlaceData();locationMenu(s);},
-      "Country":function(){countryGroups(s);},
+    // Never require the country module or parse a municipality record just
+    // to display Place name. Opening this menu must be constant-time.
+    var name=s.countryName||"Japan";
+    var m={"":{title:"Place name"},
+      "< Back":function(){releasePlaceData();locationMenu(s);},
+      "Country":function(){openCountries(s);},
       "Selected":{value:0,min:0,max:0,
-        format:function(){return C[ci][0];}}
+        format:function(){return name;}}
     };
-
-    if(s.countryName==="Japan"){
-      m["Prefecture"]=function(){prefecturePage(s,Math.floor(s.pref/7));};
+    if(name==="Japan"){
+      m["Prefecture"]=function(){openPrefectures(s);};
       m["Area"]={value:0,min:0,max:0,
-        format:function(){return P[s.pref][0];}};
-      var ml=loadMunicipalities(s.pref);
-      s.municipality=Math.max(0,Math.min(ml.length-1,s.municipality|0));
-      m["Municipality"]={value:s.municipality,min:0,max:ml.length-1,step:1,
-        format:function(v){return ml[v][0];},
-        onchange:function(v){s.municipality=v;saveSelectedPlace(s);}
-      };
-    }else{
-      var list=C[ci][1]||[];
-      if(list.length>1){
-        s.place=Math.max(0,Math.min(list.length-1,s.place|0));
-        m["City"]={value:s.place,min:0,max:list.length-1,step:1,
-          format:function(v){return list[v][0];},
-          onchange:function(v){s.place=v;saveSelectedPlace(s);}
-        };
-      }else{
-        s.place=0;
-        m["Capital"]={value:0,min:0,max:0,format:function(){return list[0][0];}};
-      }
-    }
-
-    m["Use place"]=function(){commitPlace(s);};
+        format:function(){
+          return P&&P[s.pref]?P[s.pref][0]:(s.locPref||"Tokyo");
+        }};
+      m["Municipality"]=function(){openMunicipalities(s);};
+    }else m["City"]=function(){openCityList(s);};
+    m["Use place"]=function(){
+      locationLoading("Saving...");
+      setTimeout(function(){
+        try{commitPlace(s);}
+        catch(e){
+          E.showAlert("Cannot save location\n"+String(e),"tenkyu")
+            .then(function(){placeMenu(s);});
+        }
+      },0);
+    };
     E.showMenu(m);
   }
 

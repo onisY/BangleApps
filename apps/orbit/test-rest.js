@@ -1,8 +1,30 @@
-/* global Map, Proxy, __dirname */
+/* global Map, Set, Proxy, __dirname */
 /* node apps/orbit/test-rest.js -- 3D threshold-gated five-minute activity sums. */
 const assert=require("assert"),fs=require("fs"),vm=require("vm"),path=require("path");
 const EventEmitter=require("events"),r=require("./rest.js"),S=r.constants.slotMs;
 const base=Math.floor(Date.parse("2026-10-19T18:00:00Z")/S)*S;
+// The flash-backed city directory must give exact access to all 197 records.
+const placeIndex={},cityRaw=fs.readFileSync(path.join(__dirname,"cities.dat"),"utf8");
+vm.runInNewContext(fs.readFileSync(path.join(__dirname,"locations.js"),"utf8"),
+  {exports:placeIndex});
+const countryNames=placeIndex.countryNames.split("|");
+assert.strictEqual(countryNames.length,197);
+assert.strictEqual(placeIndex.cityOffsets.length,198);
+assert.strictEqual(placeIndex.cityOffsets.at(-1),cityRaw.length);
+const allCountryNames=new Set();
+for(let i=0;i<countryNames.length;i++){
+  const raw=cityRaw.substr(placeIndex.cityOffsets[i],
+    placeIndex.cityOffsets[i+1]-placeIndex.cityOffsets[i]-1);
+  const cities=JSON.parse(raw);
+  assert(cities.length>0||countryNames[i]==="Japan",
+    "No cities for "+countryNames[i]);
+  assert(!allCountryNames.has(countryNames[i]),"Duplicated country "+countryNames[i]);
+  allCountryNames.add(countryNames[i]);
+  for(const city of cities){
+    assert(typeof city[0]==="string"&&city[0]);
+    assert(Number.isFinite(city[1])&&Number.isFinite(city[2]));
+  }
+}
 const quiet={x:0,y:0,z:1,mag:1,diff:0.001};
 function feed(e,start,end,a=quiet,step=1000){
   for(let t=start;t<=end;t+=step)e.sample(a,t);
@@ -115,10 +137,18 @@ function environment(start,config={},data,extraModules){
     restWearEnabled:false,coordVersion:2,locationSource:"manual",manualLat:25.3,manualLon:-104.1},config);
   const modules=Object.assign({"orbit.rest":"rest.js","orbit.eclipse":"eclipse.js","orbit.ecldraw":"eclipse-render.js",
     "orbit.ecldata":"eclipse-terms.js","orbit.eclsun":"eclipse-sun-terms.js"},extraModules||{});
+  const placeReads=[];
   const storage={readJSON:n=>n==="orbit.json"?cfg:n==="setting.json"?{timeout:0}:store[n],
     writeJSON:(n,v)=>{writes++;store[n]=JSON.parse(JSON.stringify(v));},
-    read:n=>modules[n]?(modules[n].indexOf("\n")>=0||modules[n].charAt(0)==="("?
-      modules[n]:fs.readFileSync(path.join(__dirname,modules[n]),"utf8")):undefined};
+    read:(n,start,length)=>{
+      if(n==="orbitcities.dat"||n==="orbitjp.dat"){
+        placeReads.push({name:n,offset:start,length:length});
+        if(n==="orbitcities.dat")return fakeCityData.substr(start,length);
+        return undefined;
+      }
+      return modules[n]?(modules[n].indexOf("\n")>=0||modules[n].charAt(0)==="("?
+        modules[n]:fs.readFileSync(path.join(__dirname,modules[n]),"utf8")):undefined;
+    }};
   const g=new Proxy({getWidth:()=>176,getHeight:()=>176,stringWidth:s=>s.length*8,theme:{bg:0,fg:0xffff}},
     {get:(o,k)=>k in o?o[k]:k==="transformVertices"?undefined:(...args)=>{
       if(k==="setColor")color=args[0];log.push({op:k,args,color});return g;}});
@@ -132,13 +162,20 @@ function environment(start,config={},data,extraModules){
   const power=[];b.setHRMPower=(on,id)=>{power.push([now,on,id]);return !!on;};
   b.isLCDOn=()=>true;
   class Clock extends Date{constructor(...a){super(...(a.length?a:[now]));}static now(){return now;}}
+  let placeIndexLoads=0;
   const fakeCountries=["Afghanistan","Albania","Algeria","Andorra","Angola",
     "Antigua and Barbuda","Argentina","Armenia","Australia","Austria",
     "Azerbaijan","Belgium","Japan","Zimbabwe"].map(n=>[n,[[n+" City",0,0]]]);
-  const locData={countries:fakeCountries,prefs:[["Tokyo",[["Chiyoda-ku",35.69,139.75]]]],jpidx:[]};
+  const cityLines=fakeCountries.map(c=>JSON.stringify(c[1])+"\n");
+  const fakeCityData=cityLines.join("");
+  const cityOffsets=[0];
+  for(const line of cityLines)cityOffsets.push(cityOffsets.at(-1)+line.length);
+  const locData={countryNames:fakeCountries.map(c=>c[0]).join("|"),
+    countryCount:fakeCountries.length,cityOffsets:cityOffsets,
+    prefs:[["Tokyo",[["Chiyoda-ku",35.69,139.75]]]],jpidx:[]};
   const context={Date:Clock,g,Bangle:b,E:events,require:n=>{
     if(n==="Storage")return storage;
-    if(n==="orbitloc")return locData;
+    if(n==="orbitloc"){placeIndexLoads++;return locData;}
     if(n==="orbittz")return {get:()=>[540,0]};
     throw new Error("Unknown module "+n);
   },
@@ -149,7 +186,9 @@ function environment(start,config={},data,extraModules){
       if(!due)break;timers.delete(due[0]);now=due[1].at;due[1].f();}
     now=t;
   }
-  return {b,events,log,timers,cfg,store,storage,execute,power,locks,lights,advance,writes:()=>writes,setNow:t=>now=t,
+  return {b,events,log,timers,cfg,store,storage,placeReads,
+    placeIndexLoads:()=>placeIndexLoads,
+    execute,power,locks,lights,advance,writes:()=>writes,setNow:t=>now=t,
     feed:(end,a=quiet)=>{for(let t=now;t<=end;t+=800){now=t;b.emit("accel",a);}now=end;}};
 }
 
@@ -225,10 +264,19 @@ locMenus.at(-1)["Location"]();
 assert(locMenus.at(-1)["Place name"],"Location menu must expose Place name");
 locMenus.at(-1)["Place name"]();
 assert(loc.log.some(x=>x.op==="drawString"&&x.args[0]==="Places..."));
+assert(locMenus.at(-1)["Country"],"Place menu must open immediately, without timers");
+assert.strictEqual(loc.placeIndexLoads(),0,"No data may be loaded before the first menu");
 loc.advance(base+1);
+assert.strictEqual(loc.placeReads.length,0,"Initial place screen must not load cities or municipality");
+assert.strictEqual(loc.placeIndexLoads(),0,
+  "Place name first screen must not even require the location index");
 assert(locMenus.at(-1)["Country"],"Place selection must open after visible ACK");
 locMenus.at(-1)["Country"]();
+assert(loc.log.some(x=>x.op==="drawString"&&x.args[0]==="Countries..."));
+loc.advance(base+2);
 assert(locMenus.at(-1)["A-D"]&&locMenus.at(-1)["U-Z"]);
+assert.strictEqual(loc.placeIndexLoads(),1,
+  "Country index must be required only after requesting Country");
 locMenus.at(-1)["A-D"]();
 assert(locMenus.at(-1)["A (11)"]);
 locMenus.at(-1)["A (11)"]();
@@ -238,14 +286,29 @@ locMenus.at(-1)["Next >"]();
 assert(locMenus.at(-1)["< Previous"]);
 locMenus.at(-1)["< Previous"]();
 locMenus.at(-1)["Afghanistan"]();
-loc.advance(base+2);
+loc.advance(base+3);
 assert.strictEqual(loc.cfg.countryName,"Afghanistan");
+assert.strictEqual(loc.placeReads.length,0,"Country selection must only change index");
+assert(locMenus.at(-1)["City"],"Open cities only when user requests a city");
+locMenus.at(-1)["City"]();
+loc.advance(base+4);
+assert.strictEqual(loc.placeReads.length,1);
+assert.strictEqual(loc.placeReads[0].name,"orbitcities.dat");
+assert(locMenus.at(-1)["Afghanistan City"]);
+locMenus.at(-1)["Afghanistan City"]();
+assert.strictEqual(loc.cfg.locName,"Afghanistan City");
 assert(locMenus.at(-1)["Use place"]);
 locMenus.at(-1)["Country"]();
+loc.advance(base+5);
 locMenus.at(-1)["Japan (quick)"]();
-loc.advance(base+3);
+loc.advance(base+6);
 assert.strictEqual(loc.cfg.countryName,"Japan");
 assert(locMenus.at(-1)["Prefecture"]);
+assert.strictEqual(loc.placeReads.length,1,
+  "Japan opening must not load municipalities before selecting Municipality");
+locMenus.at(-1)["Municipality"]();
+loc.advance(base+7);
+assert(locMenus.at(-1)["Chiyoda-ku"]);
 // Day/night timestamps and backward-compatible v2 percentage history render.
 for(const [iso,c] of [["2026-10-19T18:00:00Z",0x07e0],["2026-10-19T06:00:00Z",0xffe0]]){
   const now=Date.parse(iso),end=Math.floor(now/S);
