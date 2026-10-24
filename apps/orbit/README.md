@@ -580,3 +580,15 @@ The 24-hour rest graph now also shows confirmed **non-wear** intervals (stored c
 ### 非装着時間を月の軌道上に赤く表示（v0.071）
 
 24時間の安静グラフで、**非装着（保存値FE／254）だった5分間**を、月の軌道の細い線の上に**同じ1画素幅の赤い円弧**として描きます。5分間は軌道上の1.25°に相当し、長時間外していた場合は赤い円弧が連続します。装着時の1〜5段階の緑（昼）・黄色（夜）の放射状の棒は従来どおりです。データ不足（FF／255）は赤くせず、従来の軌道線のままにします。非装着の判定方法、記録間隔、24時間288区間の履歴、保存形式、心拍計測、省電力設定は一切変更していません。旧版で保存された非装着記録もv0.071のインストール直後から赤く表示されます。
+
+### Version display and non-wear diagnostics (v0.072)
+
+**Settings** displays **tenkyu v0.072** in its fixed title (not as a button). **Rest graph → Non-wear** has no minimum or maximum BPM controls: only a positive finite BPM estimate with **confidence strictly greater than** the configured **Pulse confidence** value counts as pulse evidence. The confidence describes BPM estimation quality; it is **not** a validated probability of skin contact. Pulse detection alone does not guarantee wearing. If the measured three-axis movement exceeds the separate 3D drift threshold (two consecutive one-second averaged deviations, or one deviation above three times the threshold), the watch is classified as worn regardless of pulse data. A static watch with no sufficiently reliable pulse is non-worn and its completed five-minute arc is red. Short skipped sensor events no longer force an entire 5-minute interval to unknown if at least 270 seconds of valid coverage were received. Truly insufficient data still remains unknown, not red.
+
+The optical HRM LED powers on only for a still watch during the configured final 10–60s of each five-minute window (30s default); detected 3D movement skips the optical probe entirely. Successful pulse measurement **immediately** calls `Bangle.setHRMPower(0,"orbitrest")`, as does movement during a probe, normal timeout, application shutdown and changed settings. The program releases only its own HRM power request; firmware or other apps may hold independent requests. **Rest graph → Last check** additionally reports the greatest usable BPM confidence observed, to help investigate red-arc misclassification. A one-second accelerometer spike is insufficient to indicate motion unless its magnitude exceeds three times the movement threshold. Existing saved red/worn/unknown history is preserved.
+
+### バージョン表示・非装着判定の見直し（v0.072）
+
+設定の見出しに操作不要の固定表示 **tenkyu v0.072** を追加しました。**Rest graph → Non-wear** の心拍数の上限・下限設定を削除しました。正の心拍数が得られ、**Pulse confidence の設定値を厳密に超えた場合だけ**心拍検出成功とします。信頼度は心拍数推定の品質指標であり、装着確率ではありません。3軸加速度の1秒平均が2秒以上続けて閾値を超えるか、閾値の3倍を超える変化があれば、心拍と無関係に装着と判定します。動きも信頼できる心拍もなければ非装着として赤線を描きます。短いセンサー欠測によって5分間全体を判定不能にしないよう修正しました。ただし5分間に有効な加速度データが270秒未満なら赤線ではなくデータ不足とします。
+
+心拍センサーは、加速度で装着を確認できている5分区間には起動せず、静止時だけ5分区間の終わりに最大設定秒数（標準30秒）試行します。信頼できる脈拍の検出時、測定中の動作検出時、測定時間終了時、アプリ終了時には `orbitrest` の心拍センサー電源要求を解除します。他のアプリがセンサーを使用している場合は、それらまで停止させません。**Last check** で直近の判定理由・加速度・信頼度を確認できます。
