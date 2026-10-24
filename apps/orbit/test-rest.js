@@ -132,7 +132,16 @@ function environment(start,config={},data,extraModules){
   const power=[];b.setHRMPower=(on,id)=>{power.push([now,on,id]);return !!on;};
   b.isLCDOn=()=>true;
   class Clock extends Date{constructor(...a){super(...(a.length?a:[now]));}static now(){return now;}}
-  const context={Date:Clock,g,Bangle:b,E:events,require:n=>{assert.strictEqual(n,"Storage");return storage;},
+  const fakeCountries=["Afghanistan","Albania","Algeria","Andorra","Angola",
+    "Antigua and Barbuda","Argentina","Armenia","Australia","Austria",
+    "Azerbaijan","Belgium","Japan","Zimbabwe"].map(n=>[n,[[n+" City",0,0]]]);
+  const locData={countries:fakeCountries,prefs:[["Tokyo",[["Chiyoda-ku",35.69,139.75]]]],jpidx:[]};
+  const context={Date:Clock,g,Bangle:b,E:events,require:n=>{
+    if(n==="Storage")return storage;
+    if(n==="orbitloc")return locData;
+    if(n==="orbittz")return {get:()=>[540,0]};
+    throw new Error("Unknown module "+n);
+  },
     setTimeout:(f,ms)=>{timers.set(++serial,{f,ms,at:now+ms});return serial;},clearTimeout:id=>timers.delete(id),load:()=>{}};
   function execute(file){return vm.runInNewContext(fs.readFileSync(path.join(__dirname,file),"utf8"),context);}
   function advance(t){
@@ -206,6 +215,37 @@ assert.strictEqual(alerts.length,1);
 assert(alerts[0].message.includes("Reason:"));
 assert(alerts[0].message.includes("3D:"));
 assert(alerts[0].message.includes("Data:"));
+// Location must acknowledge the click immediately and open on the next tick.
+// Long country lists are split into initial-letter groups and 7-item pages.
+const loc=environment(base);
+const locMenus=[];
+loc.events.showMenu=m=>locMenus.push(m);
+loc.execute("settings.js")(()=>{});
+locMenus.at(-1)["Location"]();
+assert(locMenus.at(-1)["Place name"],"Location menu must expose Place name");
+locMenus.at(-1)["Place name"]();
+assert(loc.log.some(x=>x.op==="drawString"&&x.args[0]==="Places..."));
+loc.advance(base+1);
+assert(locMenus.at(-1)["Country"],"Place selection must open after visible ACK");
+locMenus.at(-1)["Country"]();
+assert(locMenus.at(-1)["A-D"]&&locMenus.at(-1)["U-Z"]);
+locMenus.at(-1)["A-D"]();
+assert(locMenus.at(-1)["A (11)"]);
+locMenus.at(-1)["A (11)"]();
+assert(locMenus.at(-1)["Afghanistan"]);
+assert(locMenus.at(-1)["Next >"]);
+locMenus.at(-1)["Next >"]();
+assert(locMenus.at(-1)["< Previous"]);
+locMenus.at(-1)["< Previous"]();
+locMenus.at(-1)["Afghanistan"]();
+loc.advance(base+2);
+assert.strictEqual(loc.cfg.countryName,"Afghanistan");
+assert(locMenus.at(-1)["Use place"]);
+locMenus.at(-1)["Country"]();
+locMenus.at(-1)["Japan (quick)"]();
+loc.advance(base+3);
+assert.strictEqual(loc.cfg.countryName,"Japan");
+assert(locMenus.at(-1)["Prefecture"]);
 // Day/night timestamps and backward-compatible v2 percentage history render.
 for(const [iso,c] of [["2026-10-19T18:00:00Z",0x07e0],["2026-10-19T06:00:00Z",0xffe0]]){
   const now=Date.parse(iso),end=Math.floor(now/S);

@@ -556,3 +556,11 @@ The first tap is acknowledged with a small yellow dot while the 400 ms single/do
 ### 画面遷移の入力応答（v0.067）
 
 最初のタップ時に黄色の小さな点を即時表示し、400msのシングル／ダブルタップ判定中でも入力を受け付けたことが分かるようにしました。画面遷移が決まったら **Calendar... / Settings... / Orbit... / Launcher...** をまず描画・反映し、次のイベントループで詳細な画面を作成します。カレンダーの上下スワイプでも、最初に **Calendar...** を表示してから日付・祝日・予定を更新します。連続するスワイプは最後のページまでまとめて再描画します。設定から時計に戻る際も同じ方式です。時計の消灯・タッチロックの省電力動作、および「1タップ＝カレンダー／2タップ＝設定」の操作仕様は維持します。
+
+### Location picker improvements (v0.069)
+
+Opening Settings → Location → Place name now immediately displays **Places...** before loading country and municipality data. If the data fails to load, the error is reported instead of silently appearing unresponsive. Select **Country** to browse six alphabetic groups (A–D, E–H, I–L, M–P, Q–T, U–Z), then an initial letter and a page of up to seven country names; Previous/Next buttons scroll between pages. **Japan (quick)** opens Japan directly. Japan's **Prefecture** is also chosen from seven-entry pages. Existing municipality/city, GPS, manual coordinate and timezone/DST behavior remains intact.
+
+### 地名選択の改善（v0.069）
+
+設定の **Location → Place name** を押すと、国・市区町村データの読み込みに先立って **Places...** を表示します。データ読込に失敗した場合は、無反応になる代わりにエラーを表示します。国名は **Country** から、まず頭文字の範囲（A–D / E–H / I–L / M–P / Q–T / U–Z）を選び、次に頭文字を選択し、各ページ最大7か国から選べます。**Previous / Next** でページを移動できます。日本は **Japan (quick)** ですぐ選択できます。都道府県も7件ずつページに分けました。市区町村・都市・手動座標・GPS・時差・夏時間の仕組みは維持しています。
