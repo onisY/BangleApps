@@ -1,14 +1,28 @@
-/* tenkyu screen-normal (Z) acceleration peak-rest recorder; MIT.
- * For every observed 5-minute interval, bar height equals the percentage
- * of local |high-pass(Z)| peaks that do not exceed the selected threshold.
- * Non-wear uses one rotation-invariant 3-axis vector-deviation threshold
- * and a periodic HRM probe; 1-second vector averages suppress sensor spikes.
+/* tenkyu 3-axis high-pass peak-excess rest recorder; MIT.
+ * Each valid 5-minute bin sums (|3D HPF peak| - noise threshold) for
+ * suprathreshold local maxima, then maps that sum into five rest stages.
+ * Non-wear retains 1-second XYZ mean-vector drift and periodic HRM probing.
  */
 var SLOT_MS=300000,COUNT=288,DAY_MS=SLOT_MS*COUNT;
 var NOT_WORN=254,NO_DATA=255;
 var HR_PENDING=0,HR_FOUND=1,HR_ABSENT=2,HR_FAILED=3;
 var MAX_GAP_MS=2500,MIN_COVERAGE_MS=270000;
 var THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
+var ACTIVITY_DEFAULTS=[0.5,2,6,18],HP_TAU_MS=1600; // ~0.1Hz at 12.5Hz
+function activityThresholds(v){
+  var a=[],prev=0;
+  for(var i=0;i<4;i++){
+    var n=v&&v[i];
+    if(!isFinite(n)||n<=prev)n=ACTIVITY_DEFAULTS[i];
+    if(n<=prev)n=prev+0.1;
+    a.push(n);prev=n;
+  }
+  return a;
+}
+function activityLevel(sum,cuts){
+  return sum>=cuts[3]?0:sum>=cuts[2]?20:
+    sum>=cuts[1]?40:sum>=cuts[0]?60:100;
+}
 function thresholdG(v){
   if(!isFinite(v)||v<=0)return 0.027;
   var best=0;
@@ -22,30 +36,26 @@ function wearConfig(s){return {enabled:s.restWearEnabled!==false,
   min:limit(s.restPulseMin,20,100,40),max:limit(s.restPulseMax,120,240,200)};}
 
 
-/* Streamed five-minute Z-axis motion-peak ratio.
- * One local maximum of |high-pass(z)| counts as one peak; no arrays of samples.
- * Thresholds are in g, and history stores integer percentages (0..100).
+/* Rest history retains 0..100 presentation codes for v2/v3 compatibility.
+ * New results are quantized into 0,20,40,60,100 (stages 1..5).
+ * 254=unworn; 255=unknown. Old percentages keep their displayed stages.
  */
-function percentFor(quietPeaks,peakCount,coveredMs){
-  if(coveredMs<MIN_COVERAGE_MS)return 0; // missing coverage
-  if(peakCount===0)return 100; // no movement peaks in an observed, worn interval
-  return Math.max(0,Math.min(100,Math.round(100*quietPeaks/peakCount)));
-}
 function create(options){
   options=options||{};
   var levels=new Uint8Array(COUNT),stamps=new Uint32Array(COUNT);
-  var threshold=thresholdG(options.thresholdG),save=options.onCommit;
+  var threshold=thresholdG(options.thresholdG),threshold2=threshold*threshold;
+  var cuts=activityThresholds(options.activityThresholds),save=options.onCommit;
   var wearG=thresholdG(options.wearThresholdG===undefined?0.009:options.wearThresholdG);
   var vecFirst,vecLast,vecBad=false;
   var vecSX=0,vecSY=0,vecSZ=0,vecCount=0,vecSecond=-1;
   var vecRefX,vecRefY,vecRefZ,vecMaxD2=0;
   var closedBucket=-1,closedStill=false,closedVectorOK=false,
     closedPercent=0,closedPulse=HR_PENDING,closedMotion=false;
-  var current=-1,covered=0,peaks=0,quietPeaks=0,lastMs,lastValid=false;
+  var current=-1,covered=0,activity=0,peakCount=0,lastMs,lastValid=false;
   var wearEnabled=!!options.wearEnabled,pulseState=HR_PENDING;
   var diag=options.saved&&options.saved.diag instanceof Array?
     options.saved.diag.slice(-12):[];
-  var zBase,ampOlder,ampPrevious;
+  var lpX,lpY,lpZ,qOld,qPrev;
   var old=options.saved,i,b,v;
   if(old&&(old.v===2||old.v===3)&&isFinite(old.end)&&typeof old.levels==="string"&&old.levels.length===COUNT*2){
     for(i=0;i<COUNT;i++){
@@ -55,14 +65,19 @@ function create(options){
         levels[b%COUNT]=old.v===2&&v===0?NO_DATA:v;
       }
     }
-    if(old.active&&old.active.bucket===Math.floor(options.nowMs/SLOT_MS)){
+    if(old.active&&old.active.metric===2&&
+       old.active.bucket===Math.floor(options.nowMs/SLOT_MS)&&
+       old.active.gate===threshold&&
+       JSON.stringify(old.active.cuts)===JSON.stringify(cuts)){
       current=old.active.bucket;
       covered=Math.max(0,Math.min(SLOT_MS,+old.active.covered||0));
-      peaks=Math.max(0,+old.active.peaks||0);
-      quietPeaks=Math.max(0,Math.min(peaks,+old.active.quietPeaks||0));
+      activity=Math.max(0,+old.active.activity||0);
+      peakCount=Math.max(0,+old.active.peakCount||0);
     }
   }
-  function resetPeak(){zBase=undefined;ampOlder=undefined;ampPrevious=undefined;}
+  function resetPeak(){
+    lpX=undefined;lpY=undefined;lpZ=undefined;qOld=undefined;qPrev=undefined;
+  }
   function flushVector(){
     if(!vecCount)return;
     var x=vecSX/vecCount,y=vecSY/vecCount,z=vecSZ/vecCount;
@@ -134,12 +149,13 @@ function create(options){
       closedVectorOK=!vecBad&&vecRefX!==undefined&&covered>=MIN_COVERAGE_MS;
       closedMotion=closedVectorOK&&vecMaxD2>wearG*wearG;
       closedStill=closedVectorOK&&!closedMotion;
-      closedPercent=percentFor(quietPeaks,peaks,covered);
+      closedPercent=activityLevel(activity,cuts);
       closedPulse=pulseState;
       i=current%COUNT;stamps[i]=current;
       levels[i]=chooseLevel(closedVectorOK,closedStill,closedMotion,closedPulse,closedPercent);
       diag.push({bucket:current,coverageSec:Math.round(covered/1000),
         driftG:Math.round(Math.sqrt(vecMaxD2)*10000)/10000,
+        activity:Math.round(activity*1000)/1000,peaks:peakCount,
         valid:closedVectorOK,pulse:closedPulse,result:levels[i],
         reason:makeReason(closedVectorOK,closedStill,closedMotion,closedPulse)});
       if(diag.length>12)diag.shift();
@@ -148,24 +164,27 @@ function create(options){
       for(i=0;i<COUNT;i++)if(stamps[i]>=target){stamps[i]=0;levels[i]=0;}
       closedBucket=-1;changed=true;
     }
-    current=target;covered=0;peaks=0;quietPeaks=0;resetPeak();resetVector();
+    current=target;covered=0;activity=0;peakCount=0;resetPeak();resetVector();
     vecFirst=undefined;vecLast=undefined;vecBad=false;
     pulseState=HR_PENDING;
     if(changed&&save)save();
     return changed;
   }
-  function detectPeak(z,dt){
-    // IIR removes gravity and changes of orientation without extra sensor reads.
-    if(zBase===undefined)zBase=z;
-    else zBase+=(dt/(2000+dt))*(z-zBase);
-    var amp=Math.abs(z-zBase);
-    // Detect a positive local maximum. Flat tops count once, negative Z included.
-    if(ampOlder!==undefined&&ampPrevious!==undefined&&
-       ampPrevious>ampOlder&&ampPrevious>=amp&&ampPrevious>0){
-      peaks++;
-      if(ampPrevious<=threshold)quietPeaks++;
+  function detectPeak(a,dt){
+    // Three 1st-order HPFs, streaming; one adaptive coefficient per XYZ event.
+    if(lpX===undefined){
+      lpX=a.x;lpY=a.y;lpZ=a.z;qOld=undefined;qPrev=undefined;
+      return;
     }
-    ampOlder=ampPrevious;ampPrevious=amp;
+    var alpha=dt/(HP_TAU_MS+dt);
+    lpX+=alpha*(a.x-lpX);lpY+=alpha*(a.y-lpY);lpZ+=alpha*(a.z-lpZ);
+    var x=a.x-lpX,y=a.y-lpY,z=a.z-lpZ,q=x*x+y*y+z*z;
+    // Gate on squared threshold BEFORE looking for a local maximum.
+    // Only accepted peaks compute sqrt; subthreshold peaks never do.
+    if(qOld!==undefined&&qPrev>=threshold2&&qPrev>qOld&&qPrev>=q){
+      activity+=Math.sqrt(qPrev)-threshold;peakCount++;
+    }
+    qOld=qPrev;qPrev=q;
   }
   function sample(a,ms){
     if(!isFinite(ms)||ms<0)return;
@@ -191,7 +210,7 @@ function create(options){
       if(vecLast!==undefined&&(ms-vecLast>MAX_GAP_MS||ms<=vecLast))vecBad=true;
       vecLast=ms;
       addVector(a,ms);
-      detectPeak(z,continuous?dt:0);
+      detectPeak(a,continuous?dt:0);
     }
     lastMs=ms;lastValid=!!valid;
   }
@@ -221,7 +240,8 @@ function create(options){
       out+=("0"+v.toString(16)).slice(-2);
     }
     return {v:3,end:end,levels:out,diag:diag,
-      active:{bucket:current,covered:covered,peaks:peaks,quietPeaks:quietPeaks}};
+      active:{metric:2,bucket:current,gate:threshold,cuts:cuts,
+        covered:covered,activity:activity,peakCount:peakCount}};
   }
   return {sample:sample,sync:sync,absentPulse:absentPulse,detectedPulse:detectedPulse,
     failedProbe:failedProbe,visit:visit,snapshot:snapshot,level:level,
@@ -229,8 +249,8 @@ function create(options){
       driftG:Math.round(Math.sqrt(vecMaxD2)*10000)/10000,vectorValid:!vecBad,
       pulse:pulseState,probeStatus:"0=pending,1=detected,2=absent,3=failed",
       recent:diag.slice()};},
-    getLive:function(){return {bucket:current,covered:covered,peaks:peaks,
-      quietPeaks:quietPeaks,rate:percentFor(quietPeaks,peaks,covered)};}};
+    getLive:function(){return {bucket:current,covered:covered,peaks:peakCount,
+      activity:activity,level:activityLevel(activity,cuts)};}};
 }
 function install(bangle,storage,events,clock){
   clock=clock||function(){return Date.now();};
@@ -289,13 +309,16 @@ function install(bangle,storage,events,clock){
   }
   function configure(s){
     var on=s.restEnabled!==false,t=thresholdG(s.restThreshold),w=wearConfig(s);
-    var key=JSON.stringify([t,w]);
+    var stages=activityThresholds([
+      s.restActivityT1,s.restActivityT2,s.restActivityT3,s.restActivityT4]);
+    var key=JSON.stringify([t,w,stages]);
     if(on===enabled&&(!on||key===configKey))return;
     stopProbe();
     if(enabled){bangle.removeListener("accel",onAccel);persist();}
     enabled=on;configKey=key;wear=w;
     if(on){
-      engine=create({thresholdG:t,wearThresholdG:w.z,wearEnabled:w.enabled,
+      engine=create({thresholdG:t,activityThresholds:stages,
+        wearThresholdG:w.z,wearEnabled:w.enabled,
         nowMs:clock(),saved:storage.readJSON("orbit.rest.json",1),onCommit:persist});
       bangle.on("accel",onAccel);scheduleProbe();
     }else engine=undefined;
@@ -332,10 +355,12 @@ function draw(graphics,engine,map){
 exports.create=create;
 exports.install=install;
 exports.draw=draw;
-exports.percentFor=percentFor;
+exports.activityLevel=activityLevel;
+exports.activityThresholds=activityThresholds;
 exports.stageFor=stageFor;
 exports.constants={slotMs:SLOT_MS,count:COUNT,maxGapMs:MAX_GAP_MS,minCoverageMs:MIN_COVERAGE_MS};
 
 
 exports.thresholdG=thresholdG;
 exports.thresholds=THRESHOLDS;
+exports.activityDefaults=ACTIVITY_DEFAULTS;
