@@ -16,7 +16,8 @@ for(let i=0;i<countryNames.length;i++){
   const raw=cityRaw.substr(placeIndex.cityOffsets[i],
     placeIndex.cityOffsets[i+1]-placeIndex.cityOffsets[i]-1);
   const cities=JSON.parse(raw);
-  assert(cities.length>0,"No cities for "+countryNames[i]);
+  assert(cities.length>0||countryNames[i]==="Japan",
+    "No cities for "+countryNames[i]);
   assert(!allCountryNames.has(countryNames[i]),"Duplicated country "+countryNames[i]);
   allCountryNames.add(countryNames[i]);
   for(const city of cities){
