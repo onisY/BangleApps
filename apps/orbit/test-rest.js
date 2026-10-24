@@ -3,6 +3,27 @@
 const assert=require("assert"),fs=require("fs"),vm=require("vm"),path=require("path");
 const EventEmitter=require("events"),r=require("./rest.js"),S=r.constants.slotMs;
 const base=Math.floor(Date.parse("2026-10-19T18:00:00Z")/S)*S;
+// The flash-backed city directory must give exact access to all 197 records.
+const placeIndex={},cityRaw=fs.readFileSync(path.join(__dirname,"cities.dat"),"utf8");
+vm.runInNewContext(fs.readFileSync(path.join(__dirname,"locations.js"),"utf8"),
+  {exports:placeIndex});
+const countryNames=placeIndex.countryNames.split("|");
+assert.strictEqual(countryNames.length,197);
+assert.strictEqual(placeIndex.cityOffsets.length,198);
+assert.strictEqual(placeIndex.cityOffsets.at(-1),cityRaw.length);
+const allCountryNames=new Set();
+for(let i=0;i<countryNames.length;i++){
+  const raw=cityRaw.substr(placeIndex.cityOffsets[i],
+    placeIndex.cityOffsets[i+1]-placeIndex.cityOffsets[i]-1);
+  const cities=JSON.parse(raw);
+  assert(cities.length>0,"No cities for "+countryNames[i]);
+  assert(!allCountryNames.has(countryNames[i]),"Duplicated country "+countryNames[i]);
+  allCountryNames.add(countryNames[i]);
+  for(const city of cities){
+    assert(typeof city[0]==="string"&&city[0]);
+    assert(Number.isFinite(city[1])&&Number.isFinite(city[2]));
+  }
+}
 const quiet={x:0,y:0,z:1,mag:1,diff:0.001};
 function feed(e,start,end,a=quiet,step=1000){
   for(let t=start;t<=end;t+=step)e.sample(a,t);
@@ -140,6 +161,7 @@ function environment(start,config={},data,extraModules){
   const power=[];b.setHRMPower=(on,id)=>{power.push([now,on,id]);return !!on;};
   b.isLCDOn=()=>true;
   class Clock extends Date{constructor(...a){super(...(a.length?a:[now]));}static now(){return now;}}
+  let placeIndexLoads=0;
   const fakeCountries=["Afghanistan","Albania","Algeria","Andorra","Angola",
     "Antigua and Barbuda","Argentina","Armenia","Australia","Austria",
     "Azerbaijan","Belgium","Japan","Zimbabwe"].map(n=>[n,[[n+" City",0,0]]]);
@@ -152,7 +174,7 @@ function environment(start,config={},data,extraModules){
     prefs:[["Tokyo",[["Chiyoda-ku",35.69,139.75]]]],jpidx:[]};
   const context={Date:Clock,g,Bangle:b,E:events,require:n=>{
     if(n==="Storage")return storage;
-    if(n==="orbitloc")return locData;
+    if(n==="orbitloc"){placeIndexLoads++;return locData;}
     if(n==="orbittz")return {get:()=>[540,0]};
     throw new Error("Unknown module "+n);
   },
@@ -163,7 +185,9 @@ function environment(start,config={},data,extraModules){
       if(!due)break;timers.delete(due[0]);now=due[1].at;due[1].f();}
     now=t;
   }
-  return {b,events,log,timers,cfg,store,storage,placeReads,execute,power,locks,lights,advance,writes:()=>writes,setNow:t=>now=t,
+  return {b,events,log,timers,cfg,store,storage,placeReads,
+    placeIndexLoads:()=>placeIndexLoads,
+    execute,power,locks,lights,advance,writes:()=>writes,setNow:t=>now=t,
     feed:(end,a=quiet)=>{for(let t=now;t<=end;t+=800){now=t;b.emit("accel",a);}now=end;}};
 }
 
@@ -241,11 +265,15 @@ locMenus.at(-1)["Place name"]();
 assert(loc.log.some(x=>x.op==="drawString"&&x.args[0]==="Places..."));
 loc.advance(base+1);
 assert.strictEqual(loc.placeReads.length,0,"Initial place screen must not load cities or municipality");
+assert.strictEqual(loc.placeIndexLoads(),0,
+  "Place name first screen must not even require the location index");
 assert(locMenus.at(-1)["Country"],"Place selection must open after visible ACK");
 locMenus.at(-1)["Country"]();
 assert(loc.log.some(x=>x.op==="drawString"&&x.args[0]==="Countries..."));
 loc.advance(base+2);
 assert(locMenus.at(-1)["A-D"]&&locMenus.at(-1)["U-Z"]);
+assert.strictEqual(loc.placeIndexLoads(),1,
+  "Country index must be required only after requesting Country");
 locMenus.at(-1)["A-D"]();
 assert(locMenus.at(-1)["A (11)"]);
 locMenus.at(-1)["A (11)"]();
