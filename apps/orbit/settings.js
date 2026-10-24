@@ -182,7 +182,7 @@
     loadPlaceIndex();
     if(countryIndex(s.countryName)<0)s.countryName="Japan";
     var pi=prefIndex(s.locPref);
-    if(pi>=0&&s.countryName==="Japan")s.pref=pi;
+    if(pi>=0&&s.countryName==="Japan"&&s.placeStateVersion!==1)s.pref=pi;
     s.pref=Math.max(0,Math.min(P.length-1,s.pref|0));
     // Do not parse even one municipality/city record to show Place name.
     if(withCities===false)return;
@@ -295,6 +295,55 @@
     for(var i=0;i<ranges.length;i++)(function(range){
       m[range]=function(){countryLetters(s,range);};
     })(ranges[i]);
+    E.showMenu(m);
+  }
+  function openMunicipalities(s){
+    locationLoading("Cities...");
+    setTimeout(function(){
+      try{municipalityPage(s,Math.floor((s.municipality|0)/7));}
+      catch(e){
+        E.showAlert("Cannot open cities\n"+String(e),"tenkyu")
+          .then(function(){placeMenu(s);});
+      }
+    },0);
+  }
+  function municipalityPage(s,page){
+    var ml=loadMunicipalities(s.pref),size=7;
+    if(page*size>=ml.length)page=0;
+    var m={"":{title:"Municipalities"},
+      "< Back":function(){placeMenu(s);}};
+    if(page>0)m["< Previous"]=function(){municipalityPage(s,page-1);};
+    for(var i=page*size;i<Math.min((page+1)*size,ml.length);i++)
+      (function(j){
+        m[ml[j][0]]=function(){
+          s.municipality=j;saveSelectedPlace(s);placeMenu(s);
+        };
+      })(i);
+    if((page+1)*size<ml.length)
+      m["Next >"]=function(){municipalityPage(s,page+1);};
+    E.showMenu(m);
+  }
+  function openCityList(s){
+    locationLoading("Cities...");
+    setTimeout(function(){
+      try{cityPage(s,Math.floor((s.place|0)/7));}
+      catch(e){
+        E.showAlert("Cannot open cities\n"+String(e),"tenkyu")
+          .then(function(){placeMenu(s);});
+      }
+    },0);
+  }
+  function cityPage(s,page){
+    var ci=countryIndex(s.countryName),list=loadCities(ci),size=7;
+    if(page*size>=list.length)page=0;
+    var m={"":{title:"Cities"},"< Back":function(){placeMenu(s);}};
+    if(page>0)m["< Previous"]=function(){cityPage(s,page-1);};
+    for(var i=page*size;i<Math.min((page+1)*size,list.length);i++)
+      (function(j){
+        m[list[j][0]]=function(){s.place=j;saveSelectedPlace(s);placeMenu(s);};
+      })(i);
+    if((page+1)*size<list.length)
+      m["Next >"]=function(){cityPage(s,page+1);};
     E.showMenu(m);
   }
   function prefecturePage(s,page){
