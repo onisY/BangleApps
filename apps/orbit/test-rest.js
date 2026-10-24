@@ -264,6 +264,8 @@ locMenus.at(-1)["Location"]();
 assert(locMenus.at(-1)["Place name"],"Location menu must expose Place name");
 locMenus.at(-1)["Place name"]();
 assert(loc.log.some(x=>x.op==="drawString"&&x.args[0]==="Places..."));
+assert(locMenus.at(-1)["Country"],"Place menu must open immediately, without timers");
+assert.strictEqual(loc.placeIndexLoads(),0,"No data may be loaded before the first menu");
 loc.advance(base+1);
 assert.strictEqual(loc.placeReads.length,0,"Initial place screen must not load cities or municipality");
 assert.strictEqual(loc.placeIndexLoads(),0,
