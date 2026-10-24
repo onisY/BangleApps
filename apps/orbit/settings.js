@@ -626,6 +626,7 @@
     var message=last?("Value: "+value+"\nReason: "+last.reason+
       "\nPulse: "+(hr[last.pulse]||"?")+
       "\n3D: "+last.driftG+"g"+
+      "\nPeak sum: "+(isFinite(last.activity)?last.activity.toFixed(3)+"g":"N/A")+
       "\nData: "+last.coverageSec+"s"):"No complete 5-min bin yet";
     E.showAlert(message,"Rest diagnostics").then(function(){restMenu(s);});
   }
