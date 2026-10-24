@@ -53,6 +53,7 @@ function create(options){
     closedPercent=0,closedPulse=HR_PENDING,closedMotion=false;
   var current=-1,covered=0,activity=0,peakCount=0,lastMs,lastValid=false;
   var wearEnabled=!!options.wearEnabled,pulseState=HR_PENDING;
+  var pulseConfidence=-1,closedConfidence=-1;
   var diag=options.saved&&options.saved.diag instanceof Array?
     options.saved.diag.slice(-12):[];
   var lpX,lpY,lpZ,qOld,qPrev;
@@ -126,17 +127,19 @@ function create(options){
     var v=chooseLevel(closedVectorOK,closedStill,closedMotion,closedPulse,closedPercent);
     levels[closedBucket%COUNT]=v;
     for(var j=diag.length-1;j>=0;j--)if(diag[j].bucket===closedBucket){
-      diag[j].pulse=closedPulse;diag[j].result=v;
+      diag[j].pulse=closedPulse;diag[j].confidence=closedConfidence;diag[j].result=v;
       diag[j].reason=makeReason(closedVectorOK,closedStill,closedMotion,closedPulse);
       break;
     }
     if(save)save();
   }
-  function markProbe(bucket,status){
+  function markProbe(bucket,status,confidence){
     if(bucket===current){
       pulseState=status;
+      if(isFinite(confidence)&&confidence>=0)pulseConfidence=confidence;
     }else if(bucket===closedBucket){
       closedPulse=status;
+      if(isFinite(confidence)&&confidence>=0)closedConfidence=confidence;
       updateClosed();
     }
   }
@@ -150,13 +153,14 @@ function create(options){
       closedMotion=closedVectorOK&&vecMaxD2>wearG*wearG;
       closedStill=closedVectorOK&&!closedMotion;
       closedPercent=activityLevel(activity,cuts);
-      closedPulse=pulseState;
+      closedPulse=pulseState;closedConfidence=pulseConfidence;
       i=current%COUNT;stamps[i]=current;
       levels[i]=chooseLevel(closedVectorOK,closedStill,closedMotion,closedPulse,closedPercent);
       diag.push({bucket:current,coverageSec:Math.round(covered/1000),
         driftG:Math.round(Math.sqrt(vecMaxD2)*10000)/10000,
         activity:Math.round(activity*1000)/1000,peaks:peakCount,
-        valid:closedVectorOK,pulse:closedPulse,result:levels[i],
+        valid:closedVectorOK,pulse:closedPulse,confidence:closedConfidence,
+        result:levels[i],
         reason:makeReason(closedVectorOK,closedStill,closedMotion,closedPulse)});
       if(diag.length>12)diag.shift();
       changed=true;
@@ -166,7 +170,7 @@ function create(options){
     }
     current=target;covered=0;activity=0;peakCount=0;resetPeak();resetVector();
     vecFirst=undefined;vecLast=undefined;vecBad=false;
-    pulseState=HR_PENDING;
+    pulseState=HR_PENDING;pulseConfidence=-1;
     if(changed&&save)save();
     return changed;
   }
@@ -219,8 +223,8 @@ function create(options){
       roll(ms);lastMs=ms;lastValid=false;
     }
   }
-  function absentPulse(bucket){markProbe(bucket,HR_ABSENT);}
-  function detectedPulse(bucket){markProbe(bucket,HR_FOUND);}
+  function absentPulse(bucket,confidence){markProbe(bucket,HR_ABSENT,confidence);}
+  function detectedPulse(bucket,confidence){markProbe(bucket,HR_FOUND,confidence);}
   function failedProbe(bucket){markProbe(bucket,HR_FAILED);}
   function level(bucket){return stamps[bucket%COUNT]===bucket?
     (levels[bucket%COUNT]>100?0:levels[bucket%COUNT]):0;}
@@ -249,7 +253,8 @@ function create(options){
     failedProbe:failedProbe,visit:visit,snapshot:snapshot,level:level,
     getDiagnostics:function(){return {bucket:current,coverageSec:Math.round(covered/1000),
       driftG:Math.round(Math.sqrt(vecMaxD2)*10000)/10000,vectorValid:!vecBad,
-      pulse:pulseState,probeStatus:"0=pending,1=detected,2=absent,3=failed",
+      pulse:pulseState,confidence:pulseConfidence,
+      probeStatus:"0=pending,1=detected,2=absent,3=failed",
       recent:diag.slice()};},
     hasMotion:function(bucket){return bucket===current&&vecMaxD2>wearG*wearG;},
     getLive:function(){return {bucket:current,covered:covered,peaks:peakCount,
@@ -271,9 +276,11 @@ function install(bangle,storage,events,clock){
   function onHRM(h){
     // Only a positive, high-confidence BPM counts. No BPM min/max.
     if(probe&&h&&isFinite(h.bpm)&&h.bpm>0&&
-      isFinite(h.confidence)&&h.confidence>wear.confidence){
+      isFinite(h.confidence)){
+      if(h.confidence>probe.maxConfidence)probe.maxConfidence=h.confidence;
+      if(h.confidence<=wear.confidence)return;
       var bucket=probe.bucket;
-      engine.detectedPulse(bucket);
+      engine.detectedPulse(bucket,h.confidence);
       // Stop immediately and do not start a second probe in the same slot.
       stopProbe();scheduleProbe(bucket+1);
     }
@@ -300,7 +307,7 @@ function install(bangle,storage,events,clock){
       }
       // Significant 3D movement already establishes wearing: leave HRM off.
       if(engine.hasMotion(bucket)){scheduleProbe(bucket+1);return;}
-      probe={bucket:bucket,start:begin,end:end};
+      probe={bucket:bucket,start:begin,end:end,maxConfidence:-1};
       bangle.on("HRM",onHRM);
       try{
         if(bangle.setHRMPower(1,HR_ID)===false)throw new Error("HRM unavailable");
@@ -312,7 +319,7 @@ function install(bangle,storage,events,clock){
         var p=probe,done=clock();stopProbe();
         // Scheduled callback lateness must not discard a completed no-pulse test.
         if(p){
-          engine.absentPulse(p.bucket);
+          engine.absentPulse(p.bucket,p.maxConfidence);
           engine.sync(done);
         }
         scheduleProbe(bucket+1);
@@ -338,7 +345,9 @@ function install(bangle,storage,events,clock){
   api={configure:configure,save:persist,isEnabled:function(){return enabled;},
     draw:function(graphics,map){draw(graphics,engine,map);},
     getDiagnostics:function(){return engine?engine.getDiagnostics():{disabled:true};},
-    getEngine:function(){return engine;},sync:function(ms){if(engine)engine.sync(ms);}};
+    getEngine:function(){return engine;},
+    isProbing:function(){return !!probe;},
+    sync:function(ms){if(engine)engine.sync(ms);}};
   bangle.orbitRest=api;
   if(events)events.on("kill",function(){stopProbe();persist();});
   configure(storage.readJSON("orbit.json",1)||{});
