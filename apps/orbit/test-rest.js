@@ -206,6 +206,37 @@ assert.strictEqual(alerts.length,1);
 assert(alerts[0].message.includes("Reason:"));
 assert(alerts[0].message.includes("3D:"));
 assert(alerts[0].message.includes("Data:"));
+// Location must acknowledge the click immediately and open on the next tick.
+// Long country lists are split into initial-letter groups and 7-item pages.
+const loc=environment(base);
+const locMenus=[];
+loc.events.showMenu=m=>locMenus.push(m);
+loc.execute("settings.js")(()=>{});
+locMenus.at(-1)["Location"]();
+assert(locMenus.at(-1)["Place name"],"Location menu must expose Place name");
+locMenus.at(-1)["Place name"]();
+assert(loc.log.some(x=>x.op==="drawString"&&x.args[0]==="Places..."));
+loc.advance(base+1);
+assert(locMenus.at(-1)["Country"],"Place selection must open after visible ACK");
+locMenus.at(-1)["Country"]();
+assert(locMenus.at(-1)["A-D"]&&locMenus.at(-1)["U-Z"]);
+locMenus.at(-1)["A-D"]();
+assert(locMenus.at(-1)["A (11)"]);
+locMenus.at(-1)["A (11)"]();
+assert(locMenus.at(-1)["Afghanistan"]);
+assert(locMenus.at(-1)["Next >"]);
+locMenus.at(-1)["Next >"]();
+assert(locMenus.at(-1)["< Previous"]);
+locMenus.at(-1)["< Previous"]();
+locMenus.at(-1)["Afghanistan"]();
+loc.advance(base+2);
+assert.strictEqual(loc.cfg.countryName,"Afghanistan");
+assert(locMenus.at(-1)["Use place"]);
+locMenus.at(-1)["Country"]();
+locMenus.at(-1)["Japan (quick)"]();
+loc.advance(base+3);
+assert.strictEqual(loc.cfg.countryName,"Japan");
+assert(locMenus.at(-1)["Prefecture"]);
 // Day/night timestamps and backward-compatible v2 percentage history render.
 for(const [iso,c] of [["2026-10-19T18:00:00Z",0x07e0],["2026-10-19T06:00:00Z",0xffe0]]){
   const now=Date.parse(iso),end=Math.floor(now/S);
