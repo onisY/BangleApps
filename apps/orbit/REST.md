@@ -134,3 +134,7 @@ is the only positive wearing evidence: confirmed pulse => 5; otherwise
 non-wear => 0. Unknown/insufficient accel coverage remains distinct (FF).
 Diagnostics use `motion`, `pulse_detected_still`, `nonwear`,
 `nonwear_hrm_failed`, or `nonwear_hrm_unknown` where applicable.
+
+## Red orbit overlays for non-wear (v0.071)
+
+`visit(now, onWorn, onNonWear)` now optionally calls `onNonWear(bucket)` for the existing code 254 (FE). The original two-argument `visit` contract stays intact and still iterates only worn bars 0..100. Code 255 (FF), including missing data migrated from v2, is never drawn red. Each non-wear bin draws one one-pixel-width red RGB565 `0xF800` line between the start and end angles on the existing radius `MOONORBIT`. The angular span is `2π/288` radians per five-minute interval. Each segment's start point matches the previous segment's end point exactly when bin ranges are contiguous. Both endpoints are calculated with only two per-bin trigonometric calls plus precomputed angle-step sin/cos. Overlay is drawn after the Moon/orbit base, like rest bars, before the topmost observer point, preserving existing layering. No additional sensors, timers or Storage writes are introduced. Historical FE entries are displayed without migration.

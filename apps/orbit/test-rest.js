@@ -334,6 +334,50 @@ function runWear(pulse,zAt=()=>1,cfg={}){
 }
 const nw=runWear();assert.strictEqual(nw.b.orbitRest.getEngine().level(base/S),0);
 assert.strictEqual(nw.b.orbitRest.getDiagnostics().recent.at(-1).reason,"nonwear");
+// Non-wear (FE) is a red *one-pixel arc on the lunar orbit*, never a bar.
+// No-data (FF) must not be drawn red. The original five-stage bars remain.
+function restStrokes(engine,ms){
+  const lines=[];let ink;
+  const graphics={setColor:c=>{ink=c;return graphics;},
+    drawLine:(...p)=>lines.push({color:ink,points:p})};
+  r.draw(graphics,engine,{nowMs:ms,radiusPx:70,maxHeightPx:10,
+    cx:85,cy:90,south:false,currentAngleRad:0,isDayAt:()=>true});
+  return lines;
+}
+const arcLines=restStrokes(nw.b.orbitRest.getEngine(),base+S+1000);
+assert.strictEqual(arcLines.length,1);
+assert.strictEqual(arcLines[0].color,0xF800);
+const [x1,y1,x2,y2]=arcLines[0].points;
+assert(Math.abs(Math.hypot(x1-85,y1-90)-70)<1,"Red start must lie on the orbit");
+assert(Math.abs(Math.hypot(x2-85,y2-90)-70)<1,"Red end must lie on the orbit");
+assert(Math.hypot(x1-x2,y1-y2)<=3,"Five-minute arc must stay short");
+const missing=r.create({wearEnabled:true,nowMs:base});
+feed(missing,base,base+100000);
+missing.sync(base+S);
+assert.strictEqual(missing.snapshot().levels.slice(-2),"ff");
+assert.deepStrictEqual(restStrokes(missing,base+S+1000),[],
+  "Unknown data must not be painted red");
+const restoredNonWear=r.create({saved:nw.b.orbitRest.getEngine().snapshot(),
+  nowMs:base+S+1000});
+assert.deepStrictEqual(restStrokes(restoredNonWear,base+S+1000),arcLines,
+  "Unworn red arcs must survive saving and reopening the clock");
+const normalBar=restStrokes(high,base+S*2);
+assert(normalBar.length===1&&normalBar[0].color===0x07E0,
+  "Normal motion must retain its green radial bar");
+// Full-day absence paints 288 joined red chords on the existing orbit.
+const allOff=r.create({saved:{v:3,end:base/S+287,
+  levels:"fe".repeat(288)},nowMs:base+S*288+1000});
+const allOffLines=restStrokes(allOff,base+S*288+1000);
+assert.strictEqual(allOffLines.length,288);
+assert(allOffLines.every(x=>x.color===0xF800));
+for(let i=1;i<allOffLines.length;i++)
+  assert.deepStrictEqual(allOffLines[i-1].points.slice(2),
+    allOffLines[i].points.slice(0,2),
+    "Adjacent non-wear arcs must join without angular gaps");
+// A legacy v2 code 00 is "missing", not a red non-wear interval.
+const legacyMissing=r.create({saved:{v:2,end:base/S,
+  levels:"ff".repeat(287)+"00"},nowMs:base+S+1000});
+assert.deepStrictEqual(restStrokes(legacyMissing,base+S+1000),[]);
 // 297 seconds are more than 270s coverage and are valid for non-wear.
 // Previous code incorrectly required a sample within 2.5s of the slot start.
 const lateStart=environment(base+3000,{restWearEnabled:true});
