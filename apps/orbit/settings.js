@@ -21,8 +21,9 @@
     return best;
   }
 
-  var C,P,JPI;
-  var JPFILE="orbitjp.dat",jpPrefCache=-1,jpMunicipalities;
+  var C,P,JPI,cityOffsets,cityCacheIndex=-1,cityCache;
+  var JPFILE="orbitjp.dat",CITYFILE="orbitcities.dat",
+    jpPrefCache=-1,jpMunicipalities;
   var CFG="orbit.json",CAL="orbit.cal.json",EVENTS="orbit.events.json";
   var GPS_ID="orbitsettings";
   var COLORS=["red","yellow","green","blue","cyan","magenta","orange","white","gray","black"];
@@ -39,7 +40,9 @@
   function loadPlaceIndex(){
     if(C&&P)return;
     var d=require("orbitloc");
-    C=d.countries;P=d.prefs;JPI=d.jpidx||[];
+    // Country names are an inexpensive string index; city lists stay on flash.
+    C=d.countryNames.split("|");P=d.prefs;JPI=d.jpidx||[];
+    cityOffsets=d.cityOffsets;
     d=undefined;
   }
   function releaseMunicipalities(){
@@ -48,7 +51,8 @@
   }
   function releasePlaceData(){
     releaseMunicipalities();
-    C=undefined;P=undefined;JPI=undefined;
+    cityCache=undefined;cityCacheIndex=-1;
+    C=undefined;P=undefined;JPI=undefined;cityOffsets=undefined;
     try{
       if(typeof Modules!=="undefined"&&Modules.getCached){
         var mc=Modules.getCached();
@@ -58,8 +62,21 @@
     }catch(e){}
   }
   function countryIndex(name){
-    for(var i=0;C&&i<C.length;i++)if(C[i][0]===name)return i;
+    for(var i=0;C&&i<C.length;i++)if(C[i]===name)return i;
     return -1;
+  }
+  function loadCities(ci){
+    loadPlaceIndex();
+    if(ci===cityCacheIndex&&cityCache)return cityCache;
+    if(ci<0||ci>=C.length)throw new Error("Country index");
+    var len=cityOffsets[ci+1]-cityOffsets[ci]-1;
+    var raw=Storage.read(CITYFILE,cityOffsets[ci],len);
+    if(!raw)throw new Error("Missing city data "+C[ci]);
+    var list=JSON.parse(raw);
+    if(!list.length)throw new Error("Empty city data "+C[ci]);
+    cityCache=undefined;cityCacheIndex=-1;
+    cityCache=list;cityCacheIndex=ci;
+    return list;
   }
   function prefIndex(name){
     for(var i=0;P&&i<P.length;i++)if(P[i][0]===name)return i;
@@ -161,13 +178,14 @@
     return s;
   }
 
-  function normalizePlaceState(s){
+  function normalizePlaceState(s,withCities){
     loadPlaceIndex();
     if(countryIndex(s.countryName)<0)s.countryName="Japan";
     var pi=prefIndex(s.locPref);
     if(pi>=0&&s.countryName==="Japan")s.pref=pi;
     s.pref=Math.max(0,Math.min(P.length-1,s.pref|0));
-
+    // Do not parse even one municipality/city record to show Place name.
+    if(withCities===false)return;
     if(s.countryName==="Japan"){
       var ml=loadMunicipalities(s.pref),found=-1;
       if(s.placeStateVersion!==1&&s.locName)
@@ -175,7 +193,7 @@
       if(found>=0)s.municipality=found;
       s.municipality=Math.max(0,Math.min(Math.max(0,ml.length-1),s.municipality|0));
     }else{
-      var ci=countryIndex(s.countryName),list=C[ci][1]||[],f=-1;
+      var ci=countryIndex(s.countryName),list=loadCities(ci),f=-1;
       if(s.placeStateVersion!==1&&s.locName)
         for(var j=0;j<list.length;j++)if(list[j][0]===s.locName){f=j;break;}
       if(f>=0)s.place=f;
@@ -235,7 +253,7 @@
     },0);
   }
   function chosenCountry(s,ci){
-    s.countryName=C[ci][0];
+    s.countryName=C[ci];
     s.place=0;s.municipality=0;
     releaseMunicipalities();
     openPlace(s);
@@ -243,14 +261,14 @@
   function countryPage(s,letter,page){
     var ids=[],i;
     for(i=0;i<C.length;i++)
-      if(C[i][0].charAt(0).toUpperCase()===letter)ids.push(i);
+      if(C[i].charAt(0).toUpperCase()===letter)ids.push(i);
     var size=7,start=page*size;
     if(start>=ids.length){page=0;start=0;}
     var m={"":{title:letter+" countries"},
       "< Back":function(){countryLetters(s,letter);}};
     if(page>0)m["< Previous"]=function(){countryPage(s,letter,page-1);};
     for(i=start;i<Math.min(start+size,ids.length);i++)(function(ci){
-      m[C[ci][0]]=function(){chosenCountry(s,ci);};
+      m[C[ci]]=function(){chosenCountry(s,ci);};
     })(ids[i]);
     if(start+size<ids.length)
       m["Next >"]=function(){countryPage(s,letter,page+1);};
@@ -262,7 +280,7 @@
     for(var j=range.charCodeAt(0);j<=range.charCodeAt(range.length-1);j++){
       var letter=String.fromCharCode(j),count=0;
       for(var i=0;i<C.length;i++)
-        if(C[i][0].charAt(0).toUpperCase()===letter)count++;
+        if(C[i].charAt(0).toUpperCase()===letter)count++;
       if(count)(function(c,n){
         m[c+" ("+n+")"]=function(){countryPage(s,c,0);};
       })(letter,count);
@@ -298,8 +316,8 @@
       var jl=loadMunicipalities(s.pref);
       return {group:P[s.pref][0],place:jl[s.municipality],ci:ci,pi:0};
     }
-    var list=C[ci][1]||[];
-    return {group:C[ci][0],place:list[s.place],ci:ci,pi:s.place|0};
+    var list=loadCities(ci);
+    return {group:C[ci],place:list[s.place],ci:ci,pi:s.place|0};
   }
   function placeTimeData(q){
     var t;
@@ -414,36 +432,21 @@
 
   function placeMenu(s){
     stopGPS();
-    normalizePlaceState(s);
+    normalizePlaceState(s,false);
     var ci=countryIndex(s.countryName);
     var m={"":{title:"Place name"},"< Back":function(){releasePlaceData();locationMenu(s);},
       "Country":function(){countryGroups(s);},
       "Selected":{value:0,min:0,max:0,
-        format:function(){return C[ci][0];}}
+        format:function(){return C[ci];}}
     };
 
     if(s.countryName==="Japan"){
       m["Prefecture"]=function(){prefecturePage(s,Math.floor(s.pref/7));};
       m["Area"]={value:0,min:0,max:0,
         format:function(){return P[s.pref][0];}};
-      var ml=loadMunicipalities(s.pref);
-      s.municipality=Math.max(0,Math.min(ml.length-1,s.municipality|0));
-      m["Municipality"]={value:s.municipality,min:0,max:ml.length-1,step:1,
-        format:function(v){return ml[v][0];},
-        onchange:function(v){s.municipality=v;saveSelectedPlace(s);}
-      };
+      m["Municipality"]=function(){openMunicipalities(s);};
     }else{
-      var list=C[ci][1]||[];
-      if(list.length>1){
-        s.place=Math.max(0,Math.min(list.length-1,s.place|0));
-        m["City"]={value:s.place,min:0,max:list.length-1,step:1,
-          format:function(v){return list[v][0];},
-          onchange:function(v){s.place=v;saveSelectedPlace(s);}
-        };
-      }else{
-        s.place=0;
-        m["Capital"]={value:0,min:0,max:0,format:function(){return list[0][0];}};
-      }
+      m["City"]=function(){openCityList(s);};
     }
 
     m["Use place"]=function(){commitPlace(s);};
