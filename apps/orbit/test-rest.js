@@ -477,7 +477,7 @@ filtered.sync(base+S);
 assert.strictEqual(filtered.snapshot().levels.slice(-2),"fe");
 // One invalid reading is not sufficient to erase 270+ seconds of good
 // motionless XYZ coverage. Repeated missing readings still mean unknown.
-const badAxis=r.create();
+const badAxis=r.create({wearEnabled:true});
 for(let t=0;t<=S;t+=1000){
   const a=t===4000?{z:1}:{x:0,y:0,z:1};
   badAxis.sample(a,base+t);
