@@ -229,7 +229,10 @@ off.execute("boot.js");off.execute("app.js");
 assert.strictEqual(off.b.listenerCount("accel"),0);
 // Menus expose five-level height, seven 3-axis peak gates and four boundaries.
 const menus=[];app.events.showMenu=m=>menus.push(m);
-app.execute("settings.js")(()=>{});menus.at(-1)["Rest graph"]();
+app.execute("settings.js")(()=>{});
+assert.strictEqual(menus.at(-1)[""].title,"tenkyu v0.072");
+assert(!menus.at(-1)["Version"],"Version is a static title, not a button");
+menus.at(-1)["Rest graph"]();
 assert.strictEqual(menus.at(-1)["Max bar height"].max,14);
 menus.at(-1)["Max bar height"].onchange(14);
 assert.strictEqual(app.cfg.restBarHeight,14);
@@ -246,6 +249,9 @@ menus.at(-1)["< Back"]();
 menus.at(-1)["Non-wear"]();
 menus.at(-1)["3D drift"].onchange(0);
 assert.strictEqual(app.cfg.restWearThreshold,.001);
+assert(!menus.at(-1)["Min pulse BPM"]&&!menus.at(-1)["Max pulse BPM"]);
+assert(!("restPulseMin" in app.cfg)&&!("restPulseMax" in app.cfg));
+assert(menus.at(-1)["Pulse confidence"]);
 const alerts=[];
 app.events.showAlert=(message,title)=>{alerts.push({message,title});return {then:cb=>cb()};};
 menus.at(-1)["< Back"](); // Rest graph menu
@@ -253,6 +259,7 @@ menus.at(-1)["Last check"]();
 assert.strictEqual(alerts.length,1);
 assert(alerts[0].message.includes("Reason:"));
 assert(alerts[0].message.includes("3D:"));
+assert(alerts[0].message.includes("Confidence:"));
 assert(alerts[0].message.includes("Data:"));
 // Location must acknowledge the click immediately and open on the next tick.
 // Long country lists are split into initial-letter groups and 7-item pages.
@@ -414,14 +421,24 @@ assert.strictEqual(skipped.getDiagnostics().recent.at(-1).reason,"nonwear");
 assert(nw.b.orbitRest.getEngine().snapshot().levels.endsWith("fe"));
 assert.deepStrictEqual(nw.power,[[base+270000,1,"orbitrest"],[base+S,0,"orbitrest"]]);
 assert.strictEqual(nw.b.listenerCount("HRM"),0);
-const detected=runWear({bpm:60,confidence:90});
+// Motion detected before the HRM window must save all optical LED energy.
+const moving=runWear(null,t=>({x:.6+.02*t/S,y:.8,z:0}));
+assert.deepStrictEqual(moving.power,[],
+  "Motion establishes wearing without any optical HRM probe");
+const detected=runWear({bpm:60,confidence:91});
 assert.strictEqual(detected.b.orbitRest.getEngine().level(base/S),100);
 assert.deepStrictEqual(detected.power,[[base+270000,1,"orbitrest"],[base+280000,0,"orbitrest"]]);
 assert.strictEqual(detected.b.orbitRest.getDiagnostics().recent.at(-1).reason,"pulse_detected_still");
 // After a valid early HRM detection, do not immediately start a second
 // optical probe during the same 5-minute interval.
 assert.deepStrictEqual(detected.power.filter(x=>x[1]===1).map(x=>x[0]),[base+270000]);
+assert.strictEqual(detected.b.orbitRest.getDiagnostics().recent.at(-1).confidence,91);
+assert.strictEqual(runWear({bpm:60,confidence:90}).b.orbitRest.getEngine().level(base/S),0,
+  "Confidence equal to configured threshold is insufficient");
 assert.strictEqual(runWear({bpm:60,confidence:89}).b.orbitRest.getEngine().level(base/S),0);
+assert.strictEqual(runWear({bpm:10,confidence:95}).b.orbitRest.getEngine().level(base/S),100);
+assert.strictEqual(runWear({bpm:260,confidence:95}).b.orbitRest.getEngine().level(base/S),100);
+assert.strictEqual(runWear({bpm:0,confidence:100}).b.orbitRest.getEngine().level(base/S),0);
 assert.strictEqual(runWear(null,t=>1+t/S*.02).b.orbitRest.getEngine().snapshot().levels.slice(-2),"64");
 // Wristband may be vertical, sideways or tilted on a table: one shared 3D
 // vector-drift threshold must recognize all constant orientations as unworn.
@@ -458,14 +475,21 @@ for(let t=0;t<=S;t+=80){
 filtered.absentPulse(base/S);
 filtered.sync(base+S);
 assert.strictEqual(filtered.snapshot().levels.slice(-2),"fe");
-// All axes must be present. A missing X/Y reading cannot masquerade as stillness.
+// One invalid reading is not sufficient to erase 270+ seconds of good
+// motionless XYZ coverage. Repeated missing readings still mean unknown.
 const badAxis=r.create();
 for(let t=0;t<=S;t+=1000){
   const a=t===4000?{z:1}:{x:0,y:0,z:1};
   badAxis.sample(a,base+t);
 }
 badAxis.absentPulse(base/S);badAxis.sync(base+S);
-assert.notStrictEqual(badAxis.snapshot().levels.slice(-2),"fe");
+assert.strictEqual(badAxis.snapshot().levels.slice(-2),"fe",
+  "One missing XYZ reading must not hide non-wear red arc");
+const repeatedMissing=r.create({wearEnabled:true});
+for(let t=0;t<=S;t+=1000)
+  repeatedMissing.sample(t%3000===0?{z:1}:{x:0,y:0,z:1},base+t);
+repeatedMissing.absentPulse(base/S);repeatedMissing.sync(base+S);
+assert.strictEqual(repeatedMissing.snapshot().levels.slice(-2),"ff");
 // Completion callback 3.5 seconds late: the previous code ignored this
 // result and permanently displayed a stage-5 bar for an unworn watch.
 const delayed=environment(base,{restWearEnabled:true});
