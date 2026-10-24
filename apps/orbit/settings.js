@@ -1,6 +1,8 @@
-/* tenkyu 0.070: settings and flash-backed location picker. */
+/* tenkyu 0.072: settings, rest diagnostics and flash-backed location picker. */
 (function(back){
   var Storage=require("Storage");
+  // Read-only version display: title is not a selectable button.
+  var VERSION="0.072";
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
   var REST_ACTIVITY_DEFAULTS=[0.5,2,6,18];
   function restActivityCuts(s){
@@ -130,7 +132,7 @@
     set("restWearEnabled",s.restWearEnabled!==false);
     set("restWearThreshold",REST_THRESHOLDS[thresholdIndex(s.restWearThreshold===undefined?0.009:s.restWearThreshold)]);
     [["restProbeSeconds",10,60,30],
-      ["restPulseConfidence",1,100,90],["restPulseMin",20,100,40],["restPulseMax",120,240,200]].forEach(function(q){
+      ["restPulseConfidence",1,100,90]].forEach(function(q){
       set(q[0],Math.max(q[1],Math.min(q[2],isFinite(s[q[0]])?+s[q[0]]:q[3])));
     });
     set("timeSource",(s.timeSource===1||s.timeSource==="1")?1:0);
@@ -159,6 +161,8 @@
     set("manualLon",Math.max(-180,Math.min(180,lon)));
     if(s.lat!==undefined){delete s.lat;changed=true;}
     if(s.lon!==undefined){delete s.lon;changed=true;}
+    if(s.restPulseMin!==undefined){delete s.restPulseMin;changed=true;}
+    if(s.restPulseMax!==undefined){delete s.restPulseMax;changed=true;}
 
     if(s.locName==="GPS"||s.locPref==="GPS")set("locationSource","gps");
     else if(s.locName==="Custom"||s.locPref==="Manual")set("locationSource","manual");
@@ -762,11 +766,8 @@
       "Probe seconds":{value:s.restProbeSeconds,min:10,max:60,step:5,
         onchange:function(v){s.restProbeSeconds=v;applyRest(s);}},
       "Pulse confidence":{value:s.restPulseConfidence,min:1,max:100,step:1,
-        format:function(v){return v+" %";},onchange:function(v){s.restPulseConfidence=v;applyRest(s);}},
-      "Min pulse BPM":{value:s.restPulseMin,min:20,max:100,step:5,
-        onchange:function(v){s.restPulseMin=v;applyRest(s);}},
-      "Max pulse BPM":{value:s.restPulseMax,min:120,max:240,step:5,
-        onchange:function(v){s.restPulseMax=v;applyRest(s);}}
+        format:function(v){return "> "+v+" %";},
+        onchange:function(v){s.restPulseConfidence=v;applyRest(s);}}
     });
   }
   function showRestDiagnostics(s){
@@ -777,6 +778,7 @@
       last.result===255?"Unknown":"Rest "+(1+Math.min(4,Math.floor(Math.min(99,last.result)/20)));
     var message=last?("Value: "+value+"\nReason: "+last.reason+
       "\nPulse: "+(hr[last.pulse]||"?")+
+      "\nConfidence: "+(last.confidence>=0?last.confidence+"%":"--")+
       "\n3D: "+last.driftG+"g"+
       "\nPeak sum: "+(isFinite(last.activity)?last.activity.toFixed(3)+"g":"N/A")+
       "\nData: "+last.coverageSec+"s"):"No complete 5-min bin yet";
@@ -839,7 +841,7 @@
   function main(){
     stopGPS();releasePlaceData();
     var s=appCfg();
-    E.showMenu({"":{title:"tenkyu"},"< Back":leave,
+    E.showMenu({"":{title:"tenkyu v"+VERSION},"< Back":leave,
       "Location":function(){locationMenu(s);},
       "Date/time":function(){dateTimeMenu(s);},
       "Bodies":function(){bodiesMenu(s);},
