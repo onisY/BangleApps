@@ -132,7 +132,16 @@ function environment(start,config={},data,extraModules){
   const power=[];b.setHRMPower=(on,id)=>{power.push([now,on,id]);return !!on;};
   b.isLCDOn=()=>true;
   class Clock extends Date{constructor(...a){super(...(a.length?a:[now]));}static now(){return now;}}
-  const context={Date:Clock,g,Bangle:b,E:events,require:n=>{assert.strictEqual(n,"Storage");return storage;},
+  const fakeCountries=["Afghanistan","Albania","Algeria","Andorra","Angola",
+    "Antigua and Barbuda","Argentina","Armenia","Australia","Austria",
+    "Azerbaijan","Belgium","Japan","Zimbabwe"].map(n=>[n,[[n+" City",0,0]]]);
+  const locData={countries:fakeCountries,prefs:[["Tokyo",[["Chiyoda-ku",35.69,139.75]]]],jpidx:[]};
+  const context={Date:Clock,g,Bangle:b,E:events,require:n=>{
+    if(n==="Storage")return storage;
+    if(n==="orbitloc")return locData;
+    if(n==="orbittz")return {get:()=>[540,0]};
+    throw new Error("Unknown module "+n);
+  },
     setTimeout:(f,ms)=>{timers.set(++serial,{f,ms,at:now+ms});return serial;},clearTimeout:id=>timers.delete(id),load:()=>{}};
   function execute(file){return vm.runInNewContext(fs.readFileSync(path.join(__dirname,file),"utf8"),context);}
   function advance(t){
