@@ -371,8 +371,8 @@ const allOffLines=restStrokes(allOff,base+S*288+1000);
 assert.strictEqual(allOffLines.length,288);
 assert(allOffLines.every(x=>x.color===0xF800));
 for(let i=1;i<allOffLines.length;i++)
-  assert.deepStrictEqual(allOffLines[i-1].points.slice(0,2),
-    allOffLines[i].points.slice(2),
+  assert.deepStrictEqual(allOffLines[i-1].points.slice(2),
+    allOffLines[i].points.slice(0,2),
     "Adjacent non-wear arcs must join without angular gaps");
 // A legacy v2 code 00 is "missing", not a red non-wear interval.
 const legacyMissing=r.create({saved:{v:2,end:base/S,
