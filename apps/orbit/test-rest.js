@@ -364,6 +364,20 @@ assert.deepStrictEqual(restStrokes(restoredNonWear,base+S+1000),arcLines,
 const normalBar=restStrokes(high,base+S*2);
 assert(normalBar.length===1&&normalBar[0].color===0x07E0,
   "Normal motion must retain its green radial bar");
+// Full-day absence paints 288 joined red chords on the existing orbit.
+const allOff=r.create({saved:{v:3,end:base/S+287,
+  levels:"fe".repeat(288)},nowMs:base+S*288+1000});
+const allOffLines=restStrokes(allOff,base+S*288+1000);
+assert.strictEqual(allOffLines.length,288);
+assert(allOffLines.every(x=>x.color===0xF800));
+for(let i=1;i<allOffLines.length;i++)
+  assert.deepStrictEqual(allOffLines[i-1].points.slice(0,2),
+    allOffLines[i].points.slice(2),
+    "Adjacent non-wear arcs must join without angular gaps");
+// A legacy v2 code 00 is "missing", not a red non-wear interval.
+const legacyMissing=r.create({saved:{v:2,end:base/S,
+  levels:"ff".repeat(287)+"00"},nowMs:base+S+1000});
+assert.deepStrictEqual(restStrokes(legacyMissing,base+S+1000),[]);
 // 297 seconds are more than 270s coverage and are valid for non-wear.
 // Previous code incorrectly required a sample within 2.5s of the slot start.
 const lateStart=environment(base+3000,{restWearEnabled:true});
