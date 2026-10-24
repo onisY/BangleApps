@@ -253,7 +253,7 @@
   }
   function chosenCountry(s,ci){
     s.countryName=C[ci];
-    s.place=0;s.municipality=0;
+    s.place=0;s.municipality=0;s.placeStateVersion=1;
     releaseMunicipalities();
     openPlace(s);
   }
@@ -372,7 +372,8 @@
     if(page>0)m["< Previous"]=function(){prefecturePage(s,page-1);};
     for(i=start;i<Math.min(start+size,P.length);i++)(function(pi){
       m[P[pi][0]]=function(){
-        s.pref=pi;s.municipality=0;releaseMunicipalities();openPlace(s);
+        s.pref=pi;s.municipality=0;s.placeStateVersion=1;
+        releaseMunicipalities();openPlace(s);
       };
     })(i);
     if(start+size<P.length)m["Next >"]=function(){prefecturePage(s,page+1);};
