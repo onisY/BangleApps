@@ -66,7 +66,9 @@ function create(options){
       }
     }
     if(old.active&&old.active.metric===2&&
-       old.active.bucket===Math.floor(options.nowMs/SLOT_MS)){
+       old.active.bucket===Math.floor(options.nowMs/SLOT_MS)&&
+       old.active.gate===threshold&&
+       JSON.stringify(old.active.cuts)===JSON.stringify(cuts)){
       current=old.active.bucket;
       covered=Math.max(0,Math.min(SLOT_MS,+old.active.covered||0));
       activity=Math.max(0,+old.active.activity||0);
@@ -238,8 +240,8 @@ function create(options){
       out+=("0"+v.toString(16)).slice(-2);
     }
     return {v:3,end:end,levels:out,diag:diag,
-      active:{metric:2,bucket:current,covered:covered,
-        activity:activity,peakCount:peakCount}};
+      active:{metric:2,bucket:current,gate:threshold,cuts:cuts,
+        covered:covered,activity:activity,peakCount:peakCount}};
   }
   return {sample:sample,sync:sync,absentPulse:absentPulse,detectedPulse:detectedPulse,
     failedProbe:failedProbe,visit:visit,snapshot:snapshot,level:level,
