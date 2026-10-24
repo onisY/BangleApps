@@ -564,3 +564,11 @@ Opening Settings → Location → Place name now immediately displays **Places..
 ### 地名選択の改善（v0.069）
 
 設定の **Location → Place name** を押すと、国・市区町村データの読み込みに先立って **Places...** を表示します。データ読込に失敗した場合は、無反応になる代わりにエラーを表示します。国名は **Country** から、まず頭文字の範囲（A–D / E–H / I–L / M–P / Q–T / U–Z）を選び、次に頭文字を選択し、各ページ最大7か国から選べます。**Previous / Next** でページを移動できます。日本は **Japan (quick)** ですぐ選択できます。都道府県も7件ずつページに分けました。市区町村・都市・手動座標・GPS・時差・夏時間の仕組みは維持しています。
+
+### Low-memory Place name editor (v0.070)
+
+Opening **Settings → Location → Place name** now displays its basic menu without importing any country, city or Japanese municipality database. The previous v0.069 implementation deferred an expensive **synchronous** full country/city parse until just after the "Places..." message, which could appear stuck on memory-constrained Bangle.js 2. The expensive work has been removed from the initial transition. The new `orbitloc` module contains only a compact country-name index, small prefecture-capital table, and offsets. Its 197 foreign city lists are separate `orbitcities.dat` flash records, with only the requested country's list read and parsed on pressing **City**. For Japan, **Municipality** reads only the selected prefecture's pre-existing `orbitjp.dat` slice. Each city and municipality list is browsed in pages of seven entries. Existing country filters (first letter), Japan shortcut, saved location, GPS/manual coordinates, timezone/DST, calendar and sensor features are retained. Country-name/coordinate data were compared against the earlier dataset: all 197 country entries were preserved without modification. The update uses one additional installed data file (`orbitcities.dat`); install the complete v0.070 release, not just settings.js.
+
+### 地名設定の省メモリ化（v0.070）
+
+**Settings → Location → Place name** を押しただけでは、国名・都市・日本の市区町村データを一切読み込まないよう変更しました。以前のv0.069では **Places...** の直後に全世界の国と都市のデータを同期的に展開していたため、Bangle.js 2の空きメモリが少ない場合に固まる可能性がありました。v0.070では、国名・都道府県の小さな索引だけを必要時に読み込み、各国の都市は新しい `orbitcities.dat` から選択された国だけ取り出します。日本の市区町村も、都道府県を指定して **Municipality** を選択するまで読み込みません。都市・市区町村は7件ずつのページから選択します。国名の頭文字検索、日本へのショートカット、登録済みの場所・座標・時差・夏時間は維持しています。197か国の名前・都市・座標は旧データと照合済みです。新たに `orbitcities.dat` が必要になるため、**設定ファイルだけでなく、v0.070のアプリ全体を更新**してください。
