@@ -2,6 +2,18 @@
 (function(back){
   var Storage=require("Storage");
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
+  var REST_ACTIVITY_DEFAULTS=[0.5,2,6,18];
+  function restActivityCuts(s){
+    var a=[],prev=0;
+    for(var i=0;i<4;i++){
+      var n=+s["restActivityT"+(i+1)];
+      if(!isFinite(n)||n<=prev)n=REST_ACTIVITY_DEFAULTS[i];
+      if(n<=prev)n=prev+0.1;
+      n=Math.round(n*1000)/1000;
+      a.push(n);prev=n;
+    }
+    return a;
+  }
   function thresholdIndex(v){
     if(!isFinite(v)||v<=0)return 3;
     var best=0;
@@ -96,6 +108,8 @@
     set("restEnabled",s.restEnabled!==false);
     set("restBarHeight",Math.max(1,Math.min(14,isFinite(s.restBarHeight)?s.restBarHeight|0:10)));
     set("restThreshold",REST_THRESHOLDS[thresholdIndex(s.restThreshold)]);
+    var activityCuts=restActivityCuts(s);
+    for(var ai=0;ai<4;ai++)set("restActivityT"+(ai+1),activityCuts[ai]);
     set("restWearEnabled",s.restWearEnabled!==false);
     set("restWearThreshold",REST_THRESHOLDS[thresholdIndex(s.restWearThreshold===undefined?0.009:s.restWearThreshold)]);
     [["restProbeSeconds",10,60,30],
@@ -615,12 +629,30 @@
       "\nData: "+last.coverageSec+"s"):"No complete 5-min bin yet";
     E.showAlert(message,"Rest diagnostics").then(function(){restMenu(s);});
   }
+  function activityMenu(s){
+    var cuts=restActivityCuts(s);
+    var m={"":{title:"Rest levels"},"< Back":function(){restMenu(s);}};
+    for(var i=0;i<4;i++)(function(k){
+      m["L"+(5-k)+"/"+(4-k)+" boundary"]={
+        value:cuts[k],min:k?+(cuts[k-1]+0.1).toFixed(3):0.1,
+        max:k<3?+(cuts[k+1]-0.1).toFixed(3):500,
+        step:0.1,format:function(v){return v.toFixed(1)+" g";},
+        onchange:function(v){
+          s["restActivityT"+(k+1)]=+v.toFixed(3);
+          applyRest(s);
+          setTimeout(function(){activityMenu(s);},10);
+        }
+      };
+    })(i);
+    E.showMenu(m);
+  }
   function restMenu(s){
     E.showMenu({"":{title:"Rest graph"},"< Back":main,
       "Enabled":{value:s.restEnabled,onchange:function(v){s.restEnabled=!!v;applyRest(s);}},
       "Max bar height":{value:s.restBarHeight,min:1,max:14,step:1,
         format:function(v){return v+" px";},onchange:function(v){s.restBarHeight=v;write(CFG,s);}},
-      "Peak threshold":thresholdMenu(s,"restThreshold"),
+      "Peak gate":thresholdMenu(s,"restThreshold"),
+      "Stage boundaries":function(){activityMenu(s);},
       "Non-wear":function(){wearMenu(s);},
       "Last check":function(){showRestDiagnostics(s);}
     });
