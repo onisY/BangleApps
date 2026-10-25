@@ -1,8 +1,8 @@
-/* tenkyu 0.073: settings, rest diagnostics and flash-backed location picker. */
+/* tenkyu 0.074: settings, rest diagnostics and flash-backed location picker. */
 (function(back){
   var Storage=require("Storage");
   // Read-only version display: title is not a selectable button.
-  var VERSION="0.073";
+  var VERSION="0.074";
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
   var REST_ACTIVITY_DEFAULTS=[0.5,2,6,18];
   function restActivityCuts(s){
@@ -140,7 +140,7 @@
     set("orbitHourStep",[1,2,3,6].indexOf(s.orbitHourStep)>=0?s.orbitHourStep:1);
     set("orbitHourEnabled",s.orbitHourEnabled===undefined?false:s.orbitHourEnabled!==false);
     s.sunSize=Math.max(6,Math.min(15,s.sunSize|0));
-    s.earthSize=Math.max(40,Math.min(45,s.earthSize|0));
+    s.earthSize=Math.max(25,Math.min(50,s.earthSize|0));
     s.moonSize=Math.max(14,Math.min(16,s.moonSize|0));
     s.datePos=Math.max(0,Math.min(2,s.datePos|0));s.timePos=Math.max(0,Math.min(2,s.timePos|0));
     s.dateSize=Math.max(12,Math.min(30,s.dateSize|0));s.timeSize=Math.max(12,Math.min(30,s.timeSize|0));
@@ -729,7 +729,7 @@
         onchange:function(v){s.viewSide=v?1:0;write(CFG,s);}
       },
       "Sun size":{value:s.sunSize,min:6,max:15,step:1,onchange:function(v){s.sunSize=v;write(CFG,s);}},
-      "Earth size":{value:s.earthSize,min:40,max:45,step:1,onchange:function(v){
+      "Earth size":{value:s.earthSize,min:25,max:50,step:1,onchange:function(v){
         s.earthSize=v;var mn=s.earthSize+s.moonSize+4;if(s.moonOrbit<mn)s.moonOrbit=mn;
         write(CFG,s);setTimeout(function(){bodiesMenu(s);},10);
       }},
