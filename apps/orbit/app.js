@@ -29,7 +29,7 @@
     var earth=isFinite(cfg.earthSize)?(cfg.earthSize|0):42;
     var moon=isFinite(cfg.moonSize)?(cfg.moonSize|0):15;
     sun=Math.max(6,Math.min(15,sun));
-    earth=Math.max(40,Math.min(45,earth));
+    earth=Math.max(25,Math.min(50,earth));
     moon=Math.max(14,Math.min(16,moon));
     var mn=earth+moon+4;
     var orb=isFinite(cfg.moonOrbit)?(cfg.moonOrbit|0):62;
@@ -95,7 +95,7 @@
   var selectedDayOffset=0,hasSelectedDate=false;
   var nativeDrawWidgets,widgetDrawWrapper;
   var SUNR=Math.max(6,Math.min(15,cfg.sunSize|0));
-  var EARTHR=Math.max(40,Math.min(45,cfg.earthSize|0));
+  var EARTHR=Math.max(25,Math.min(50,cfg.earthSize|0));
   var MOONR=Math.max(14,Math.min(16,cfg.moonSize|0));
   /* Keep a visible gap between Earth and Moon at every supported size. */
   var minOrbit=EARTHR+MOONR+4;
