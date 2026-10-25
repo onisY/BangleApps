@@ -1,8 +1,8 @@
-/* tenkyu 0.072: settings, rest diagnostics and flash-backed location picker. */
+/* tenkyu 0.073: settings, rest diagnostics and flash-backed location picker. */
 (function(back){
   var Storage=require("Storage");
   // Read-only version display: title is not a selectable button.
-  var VERSION="0.072";
+  var VERSION="0.073";
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
   var REST_ACTIVITY_DEFAULTS=[0.5,2,6,18];
   function restActivityCuts(s){
@@ -774,15 +774,28 @@
     var api=Bangle.orbitRest,d=api&&api.getDiagnostics&&api.getDiagnostics();
     var list=d&&d.recent,last=list&&list.length?list[list.length-1]:undefined;
     var hr=["Pending","Detected","Absent","Failed"];
-    var value=!last?"N/A":last.result===254?"0 (unworn)":
-      last.result===255?"Unknown":"Rest "+(1+Math.min(4,Math.floor(Math.min(99,last.result)/20)));
-    var message=last?("Value: "+value+"\nReason: "+last.reason+
-      "\nPulse: "+(hr[last.pulse]||"?")+
-      "\nConfidence: "+(last.confidence>=0?last.confidence+"%":"--")+
-      "\n3D: "+last.driftG+"g"+
-      "\nPeak sum: "+(isFinite(last.activity)?last.activity.toFixed(3)+"g":"N/A")+
-      "\nData: "+last.coverageSec+"s"):"No complete 5-min bin yet";
-    E.showAlert(message,"Rest diagnostics").then(function(){restMenu(s);});
+    var reasons={
+      accel_missing:"No accel",nonwear_disabled:"Disabled",
+      motion:"Motion",pulse_detected_still:"Pulse+still",
+      nonwear_hrm_failed:"HRM failed",nonwear_hrm_unknown:"HRM unknown",
+      nonwear:"No pulse",accel_uncertain:"Uncertain"
+    };
+    // E.showAlert does not scroll on Bangle.js 2. Use read-only
+    // menu rows for a scrollable diagnostic display instead.
+    function readOnly(value){
+      return {value:0,min:0,max:0,format:function(){return String(value);}};
+    }
+    var m={"":{title:"Last check"},"< Back":function(){restMenu(s);}};
+    if(!last)m["Status"]=readOnly("No 5-min bin");
+    m["Result"]=readOnly(!last?"--":last.result===254?"Unworn":
+      last.result===255?"Unknown":"Rest "+(1+Math.min(4,Math.floor(Math.min(99,last.result)/20))));
+    m["Reason"]=readOnly(last?(reasons[last.reason]||last.reason):"--");
+    m["Pulse"]=readOnly(last?(hr[last.pulse]||"?"):"--");
+    m["Conf."]=readOnly(last&&last.confidence>=0?last.confidence+"%":"--");
+    m["3D drift"]=readOnly(last&&isFinite(last.driftG)?last.driftG+" g":"--");
+    m["Peak sum"]=readOnly(last&&isFinite(last.activity)?last.activity.toFixed(3)+" g":"--");
+    m["Data"]=readOnly(last?last.coverageSec+" s":"--");
+    E.showMenu(m);
   }
   function activityMenu(s){
     var cuts=restActivityCuts(s);
