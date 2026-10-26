@@ -1,5 +1,26 @@
 # Rest bar and power management (tenkyu v0.068)
 
+## Five-minute coverage normalization (v0.076)
+
+For each completed five-minute bin with at least 270 seconds of valid
+X/Y/Z coverage, convert the measured gated XYZ high-pass peak sum to
+a 300-second equivalent before applying the existing stage thresholds:
+
+`A300 = Araw * 300 / Tvalid` (Tvalid in seconds).
+
+The normalization uses full precision for classification; rounded 3-decimal
+values are retained in diagnostics as `activity300` alongside the original
+`activity` and coverage seconds. There is no extrapolation for less than
+270 seconds of valid coverage: those intervals remain unknown. The independent
+motion/non-wear decision and HRM timing are unchanged. Stillness with
+accepted pulse remains stage 5, while insufficient coverage remains unknown.
+Previously recorded five-minute levels are not recalculated.
+
+**日本語：** 5分区間で有効な3軸加速度計測が270秒以上の場合のみ、
+ピーク積算値に `300 / 有効計測秒数` を乗じ、従来の5段階閾値で
+判定します。270秒未満は補正せず判定不能とし、心拍・非装着判定
+および保存済みの過去の安静グラフは変更しません。
+
 ## Three-axis high-pass peak integral
 
 For each XYZ accelerometer sample, independent first-order low-pass filters
