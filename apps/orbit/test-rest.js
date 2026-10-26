@@ -84,6 +84,37 @@ assert.strictEqual(many.level,manyY.level);
 assert.strictEqual(many.level,manyZ.level);
 assert.strictEqual(many.data.peaks,manyY.data.peaks);
 assert(many.data.activity>0);
+
+// v0.076: 270..300s valid XYZ coverage normalizes peak sum to 300s
+// BEFORE stage boundaries; <270s must remain unknown (FF).
+assert.strictEqual(r.activity300(6,300000),6);
+assert.strictEqual(r.activity300(6,270000),6*300/270);
+assert.strictEqual(r.activity300(6,269000),6); // never applied: invalid bin
+function coverageTrial(seconds,cuts){
+  const x=r.create({thresholdG:.027,wearEnabled:false,
+    activityThresholds:cuts||[.5,2,6,18],nowMs:base});
+  for(let t=0;t<=seconds*1000;t+=80){
+    const a={x:t>0&&t%8000===0?.3:0,y:0,z:1};
+    x.sample(a,base+t);
+  }
+  x.sync(base+S);
+  return {engine:x,diagnostic:x.getDiagnostics().recent.at(-1)};
+}
+const cv270=coverageTrial(270);
+const cv300=coverageTrial(300);
+const cv269=coverageTrial(269);
+assert(Math.abs(cv270.diagnostic.activity300-
+  cv270.diagnostic.activity*300/270)<.002);
+assert(Math.abs(cv300.diagnostic.activity300-cv300.diagnostic.activity)<.002);
+assert.strictEqual(cv269.diagnostic.result,255);
+assert.strictEqual(cv269.diagnostic.activity300,null);
+assert.strictEqual(cv269.engine.snapshot().levels.slice(-2),"ff");
+const cut=cv270.diagnostic.activity*1.05;
+assert(cut>0);
+const boundary=coverageTrial(270,[cut,cut*2,cut*3,cut*4]);
+assert.strictEqual(boundary.diagnostic.result,60,
+  "Corrected 270s sum must cross L5/L4 boundary while raw sum would not");
+
 // User-chosen boundaries change only bar stages, not the activity sum.
 const custom=trial("x",20,.3,{activityThresholds:[.1,.2,.3,.4]});
 assert.strictEqual(custom.data.activity,many.data.activity);
@@ -230,7 +261,7 @@ assert.strictEqual(off.b.listenerCount("accel"),0);
 // Menus expose five-level height, seven 3-axis peak gates and four boundaries.
 const menus=[];app.events.showMenu=m=>menus.push(m);
 app.execute("settings.js")(()=>{});
-assert.strictEqual(menus.at(-1)[""].title,"tenkyu v0.072");
+assert.strictEqual(menus.at(-1)[""].title,"tenkyu v0.076");
 assert(!menus.at(-1)["Version"],"Version is a static title, not a button");
 menus.at(-1)["Rest graph"]();
 assert.strictEqual(menus.at(-1)["Max bar height"].max,14);
@@ -252,15 +283,15 @@ assert.strictEqual(app.cfg.restWearThreshold,.001);
 assert(!menus.at(-1)["Min pulse BPM"]&&!menus.at(-1)["Max pulse BPM"]);
 assert(!("restPulseMin" in app.cfg)&&!("restPulseMax" in app.cfg));
 assert(menus.at(-1)["Pulse confidence"]);
-const alerts=[];
-app.events.showAlert=(message,title)=>{alerts.push({message,title});return {then:cb=>cb()};};
 menus.at(-1)["< Back"](); // Rest graph menu
 menus.at(-1)["Last check"]();
-assert.strictEqual(alerts.length,1);
-assert(alerts[0].message.includes("Reason:"));
-assert(alerts[0].message.includes("3D:"));
-assert(alerts[0].message.includes("Confidence:"));
-assert(alerts[0].message.includes("Data:"));
+assert(menus.at(-1)["Reason"]);
+assert(menus.at(-1)["Pulse"]);
+assert(menus.at(-1)["Conf."]);
+assert(menus.at(-1)["3D drift"]);
+assert(menus.at(-1)["Peak sum"]);
+assert(menus.at(-1)["Data"]);
+assert(menus.at(-1)["Raw sum"],"Valid latest check exposes raw and corrected sums");
 // Location must acknowledge the click immediately and open on the next tick.
 // Long country lists are split into initial-letter groups and 7-item pages.
 const loc=environment(base);
