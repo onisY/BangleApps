@@ -270,10 +270,19 @@ function install(bangle,storage,events,clock){
   clock=clock||function(){return Date.now();};
   if(bangle.orbitRest)return bangle.orbitRest;
   var engine,enabled=false,configKey,api,wear,probe,timer;
+  var sampleMs=0,nextSampleAt=0;
   var HR_ID="orbitrest";
   function persist(){if(engine)try{storage.writeJSON("orbit.rest.json",engine.snapshot());}catch(e){}}
   function onAccel(a){
-    engine.sample(a,clock());
+    var now=clock();
+    if(sampleMs){
+      // Phase-locked 200 ms slots: alternating 160/240 ms hardware samples
+      // average 5 Hz without altering the accelerometer for other apps.
+      if(now<nextSampleAt)return;
+      nextSampleAt=nextSampleAt&&now-nextSampleAt<=sampleMs?
+        nextSampleAt+sampleMs:now+sampleMs;
+    }
+    engine.sample(a,now);
     if(probe&&engine.hasMotion(probe.bucket)){
       var bucket=probe.bucket;
       stopProbe();scheduleProbe(bucket+1);
@@ -336,11 +345,13 @@ function install(bangle,storage,events,clock){
     var on=s.restEnabled!==false,t=thresholdG(s.restThreshold),w=wearConfig(s);
     var stages=activityThresholds([
       s.restActivityT1,s.restActivityT2,s.restActivityT3,s.restActivityT4]);
-    var key=JSON.stringify([t,w,stages]);
+    var eco=s.restEco===true;
+    var key=JSON.stringify([t,w,stages,eco]);
     if(on===enabled&&(!on||key===configKey))return;
     stopProbe();
     if(enabled){bangle.removeListener("accel",onAccel);persist();}
     enabled=on;configKey=key;wear=w;
+    sampleMs=eco?200:0;nextSampleAt=0;
     if(on){
       engine=create({thresholdG:t,activityThresholds:stages,
         wearThresholdG:w.z,wearEnabled:w.enabled,
@@ -371,21 +382,30 @@ function draw(graphics,engine,map){
   // One five-minute slot spans 1.25 degrees around the lunar orbit.
   // Rotate each arc endpoint using constants to avoid extra trig calls.
   var step=dir*2*Math.PI/COUNT,cs=Math.cos(step),ss=Math.sin(step);
-  function angleAt(bucket){
-    return map.currentAngleRad-dir*(now-(bucket+1)*SLOT_MS)*scale;
+  var lastBucket=-2,ca=0,sa=0;
+  function pointAt(bucket){
+    // When bins are contiguous, reuse a single rotation rather than
+    // recomputing sine/cosine twice for each of up to 288 bars.
+    if(bucket===lastBucket+1){
+      var nc=ca*cs-sa*ss;
+      sa=sa*cs+ca*ss;ca=nc;
+    }else if(bucket!==lastBucket){
+      var a=map.currentAngleRad-dir*(now-(bucket+1)*SLOT_MS)*scale;
+      ca=Math.cos(a);sa=Math.sin(a);
+    }
+    lastBucket=bucket;
   }
   engine.visit(now,function(bucket,value){
     // Plot at the interval END: a completed bar expires exactly 24 h later.
-    var endMs=(bucket+1)*SLOT_MS,a=angleAt(bucket);
-    var ca=Math.cos(a),sa=Math.sin(a),outer=r+height*stageFor(value)/5;
+    pointAt(bucket);
+    var endMs=(bucket+1)*SLOT_MS,outer=r+height*stageFor(value)/5;
     // Match the observer ray's geometric sunrise/sunset at this bar's time.
     graphics.setColor(map.isDayAt&&map.isDayAt(endMs)?0x07E0:0xFFE0);
     graphics.drawLine(Math.round(map.cx+r*ca),Math.round(map.cy+r*sa),
       Math.round(map.cx+outer*ca),Math.round(map.cy+outer*sa));
   },function(bucket){
     // Non-wear: overlay a one-pixel red arc exactly on the thin orbit.
-    // Each chord connects this five-minute interval's start/end angles.
-    var a=angleAt(bucket),ca=Math.cos(a),sa=Math.sin(a);
+    pointAt(bucket);
     graphics.setColor(0xF800);
     graphics.drawLine(
       Math.round(map.cx+r*(ca*cs+sa*ss)),
