@@ -23,6 +23,12 @@ function activityLevel(sum,cuts){
   return sum>=cuts[3]?0:sum>=cuts[2]?20:
     sum>=cuts[1]?40:sum>=cuts[0]?60:100;
 }
+// Extrapolate a valid >=270s observation to one full five-minute window.
+// Lower coverage is UNKNOWN, never a reliable extrapolation.
+function activity300(sum,coveredMs){
+  return coveredMs>=MIN_COVERAGE_MS&&coveredMs<SLOT_MS?
+    sum*SLOT_MS/coveredMs:sum;
+}
 function thresholdG(v){
   if(!isFinite(v)||v<=0)return 0.027;
   var best=0;
@@ -160,15 +166,17 @@ function create(options){
       closedVectorOK=vecRefX!==undefined&&covered>=MIN_COVERAGE_MS;
       closedMotion=closedVectorOK&&vecWornMotion;
       closedStill=closedVectorOK&&!closedMotion;
-      closedPercent=activityLevel(activity,cuts);
+      var corrected=closedVectorOK?activity300(activity,covered):undefined;
+      closedPercent=activityLevel(corrected===undefined?activity:corrected,cuts);
       closedPulse=pulseState;closedConfidence=pulseConfidence;
       i=current%COUNT;stamps[i]=current;
       levels[i]=chooseLevel(closedVectorOK,closedStill,closedMotion,closedPulse,closedPercent);
       diag.push({bucket:current,coverageSec:Math.round(covered/1000),
         driftG:Math.round(Math.sqrt(vecMaxD2)*10000)/10000,
         motion:closedMotion,
-        activity:Math.round(activity*1000)/1000,peaks:peakCount,
-        valid:closedVectorOK,pulse:closedPulse,confidence:closedConfidence,
+        activity:Math.round(activity*1000)/1000,
+        activity300:corrected===undefined?null:Math.round(corrected*1000)/1000,
+        peaks:peakCount,valid:closedVectorOK,pulse:closedPulse,confidence:closedConfidence,
         result:levels[i],
         reason:makeReason(closedVectorOK,closedStill,closedMotion,closedPulse)});
       if(diag.length>12)diag.shift();
@@ -418,6 +426,7 @@ exports.create=create;
 exports.install=install;
 exports.draw=draw;
 exports.activityLevel=activityLevel;
+exports.activity300=activity300;
 exports.activityThresholds=activityThresholds;
 exports.stageFor=stageFor;
 exports.constants={slotMs:SLOT_MS,count:COUNT,maxGapMs:MAX_GAP_MS,minCoverageMs:MIN_COVERAGE_MS};
