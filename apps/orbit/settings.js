@@ -803,10 +803,10 @@
     m["Pulse"]=readOnly(last?(hr[last.pulse]||"?"):"--");
     m["Conf."]=readOnly(last&&last.confidence>=0?last.confidence+"%":"--");
     m["3D drift"]=readOnly(last&&isFinite(last.driftG)?last.driftG+" g":"--");
-    m["Peak sum"]=readOnly(last&&isFinite(last.activity300)?
+    m["Peak sum"]=readOnly(last&&typeof last.activity300==="number"&&isFinite(last.activity300)?
       last.activity300.toFixed(3)+" g":
       last&&isFinite(last.activity)?last.activity.toFixed(3)+" g":"--");
-    if(last&&isFinite(last.activity300))
+    if(last&&typeof last.activity300==="number"&&isFinite(last.activity300))
       m["Raw sum"]=readOnly(isFinite(last.activity)?last.activity.toFixed(3)+" g":"--");
     m["Data"]=readOnly(last?last.coverageSec+" s":"--");
     E.showMenu(m);
