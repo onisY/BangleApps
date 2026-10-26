@@ -2,7 +2,7 @@
   "id": "orbit",
   "name": "tenkyu",
   "shortName": "tenkyu",
-  "version": "0.074",
+  "version": "0.075",
   "author": "onisY",
   "description": "Sun-Earth-Moon clock, triaxial rest graph, red non-wear arcs and low-power confidence-based pulse checks.",
   "icon": "app.png",
