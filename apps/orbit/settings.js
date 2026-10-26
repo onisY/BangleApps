@@ -1,10 +1,13 @@
-/* tenkyu 0.074: settings, rest diagnostics and flash-backed location picker. */
+/* tenkyu 0.075: settings, rest diagnostics and flash-backed location picker. */
 (function(back){
   var Storage=require("Storage");
   // Read-only version display: title is not a selectable button.
-  var VERSION="0.074";
+  var VERSION="0.075";
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
   var REST_ACTIVITY_DEFAULTS=[0.5,2,6,18];
+  // Bangle.js 2 has a 3-bit colour screen (8 actual dial colours).
+  var DIAL_COLOR_NAMES=["White","Red","Green","Blue","Yellow","Cyan","Magenta","Black"];
+  var DIAL_COLOR_VALUES=[0xFFFF,0xF800,0x07E0,0x001F,0xFFE0,0x07FF,0xF81F,0];
   function restActivityCuts(s){
     var a=[],prev=0;
     for(var i=0;i<4;i++){
@@ -139,6 +142,8 @@
     set("orbitHourSize",Math.max(6,Math.min(12,isFinite(s.orbitHourSize)?s.orbitHourSize|0:8)));
     set("orbitHourStep",[1,2,3,6].indexOf(s.orbitHourStep)>=0?s.orbitHourStep:1);
     set("orbitHourEnabled",s.orbitHourEnabled===undefined?false:s.orbitHourEnabled!==false);
+    if(DIAL_COLOR_VALUES.indexOf(s.orbitHourColor)<0)set("orbitHourColor",0xFFFF);
+    set("restEco",s.restEco===true);
     s.sunSize=Math.max(6,Math.min(15,s.sunSize|0));
     s.earthSize=Math.max(25,Math.min(50,s.earthSize|0));
     s.moonSize=Math.max(14,Math.min(16,s.moonSize|0));
@@ -699,6 +704,11 @@
     E.showMenu({"":{title:"Dial"},"< Back":main,
       "Enabled":{value:s.orbitHourEnabled,onchange:function(v){s.orbitHourEnabled=!!v;write(CFG,s);}},
       "Hour size":{value:s.orbitHourSize,min:6,max:12,step:1,onchange:function(v){s.orbitHourSize=v;write(CFG,s);}},
+      "Hour color":{value:Math.max(0,DIAL_COLOR_VALUES.indexOf(s.orbitHourColor)),
+        min:0,max:DIAL_COLOR_NAMES.length-1,step:1,
+        format:function(v){return DIAL_COLOR_NAMES[v];},
+        onchange:function(v){s.orbitHourColor=DIAL_COLOR_VALUES[v];write(CFG,s);}
+      },
       "Hour step":{value:[1,2,3,6].indexOf(s.orbitHourStep),min:0,max:3,step:1,
         format:function(v){return [1,2,3,6][v]+" h";},
         onchange:function(v){s.orbitHourStep=[1,2,3,6][v];write(CFG,s);}
@@ -817,6 +827,8 @@
   function restMenu(s){
     E.showMenu({"":{title:"Rest graph"},"< Back":main,
       "Enabled":{value:s.restEnabled,onchange:function(v){s.restEnabled=!!v;applyRest(s);}},
+      "Eco sampling":{value:s.restEco,format:function(v){return v?"5 Hz":"Full";},
+        onchange:function(v){s.restEco=!!v;applyRest(s);}},
       "Max bar height":{value:s.restBarHeight,min:1,max:14,step:1,
         format:function(v){return v+" px";},onchange:function(v){s.restBarHeight=v;write(CFG,s);}},
       "Peak gate":thresholdMenu(s,"restThreshold"),
