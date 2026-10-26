@@ -45,6 +45,7 @@
     set("orbitHourSize",Math.max(6,Math.min(12,isFinite(cfg.orbitHourSize)?cfg.orbitHourSize|0:8)));
     set("orbitHourStep",[1,2,3,6].indexOf(cfg.orbitHourStep)>=0?cfg.orbitHourStep:1);
     set("orbitHourEnabled",cfg.orbitHourEnabled===undefined?false:cfg.orbitHourEnabled!==false);
+    if(!isFinite(cfg.orbitHourColor))set("orbitHourColor",0xFFFF);
 
     var lat,lon;
     if(cfg.coordVersion!==2){
@@ -116,6 +117,7 @@
   var TIMESOURCE=cfg.timeSource===1?1:0;
   var HOURSIZE=cfg.orbitHourSize|0,HOURSTEP=cfg.orbitHourStep|0;
   var HOURENABLED=cfg.orbitHourEnabled;
+  var HOURCOLOR=isFinite(cfg.orbitHourColor)?cfg.orbitHourColor:WHITE;
   var ROMAN=["XII","I","II","III","IV","V","VI","VII","VIII","IX","X","XI"];
   var PLACETZ=isFinite(cfg.tzBase)?+cfg.tzBase:NaN;
   var PLACEDST=isFinite(cfg.tzRule)?(cfg.tzRule|0):0;
@@ -751,14 +753,17 @@
        zenith line, including the selected time source and DST. */
     var p=displayParts(virtualNowMs());
     var hour=p.h+p.mi/60+p.s/3600,dir=VIEW_SOUTH?1:-1;
-    var base=SUNANG+dir*(sol.ha-hour*Math.PI/12);
-    var radius=MOONORBIT+7;
-    g.setBgColor(BLACK).setColor(WHITE).setFont("Vector",HOURSIZE).setFontAlign(0,0);
+    var base=SUNANG+dir*(sol.ha-hour*Math.PI/12),radius=MOONORBIT+7;
+    // Rotate one unit vector around the dial. For step=1 this replaces
+    // 48 trigonometric calls with just 4 per full dial redraw.
+    var da=dir*HOURSTEP*Math.PI/12,cs=Math.cos(da),ss=Math.sin(da);
+    var ca=Math.cos(base),sa=Math.sin(base);
+    g.setBgColor(BLACK).setColor(HOURCOLOR).setFont("Vector",HOURSIZE).setFontAlign(0,0);
     for(var h=0;h<24;h+=HOURSTEP){
-      var a=base+dir*h*Math.PI/12;
-      var x=Math.round(EARTHX+radius*Math.cos(a));
-      var y=Math.round(EARTHY+radius*Math.sin(a));
+      var x=Math.round(EARTHX+radius*ca),y=Math.round(EARTHY+radius*sa);
       g.drawString(ROMAN[h%12],x,y,true);
+      var nc=ca*cs-sa*ss;
+      sa=sa*cs+ca*ss;ca=nc;
     }
   }
 
@@ -1145,11 +1150,12 @@
   }
 
   function onFaceUp(up){
-    if(up&&mode==="tenkyu")startInteraction();
+    // A second gesture while illuminated must not extend the backlight timer.
+    if(up&&mode==="tenkyu"&&!interactive)startInteraction();
   }
 
   function onTwist(){
-    if(mode==="tenkyu")startInteraction();
+    if(mode==="tenkyu"&&!interactive)startInteraction();
   }
 
   function onLCD(on){
