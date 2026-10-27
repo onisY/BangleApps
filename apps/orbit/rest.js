@@ -39,6 +39,7 @@ function limit(v,lo,hi,def){return isFinite(v)?Math.max(lo,Math.min(hi,+v)):def;
 function wearConfig(s){return {enabled:s.restWearEnabled!==false,
   z:thresholdG(s.restWearThreshold===undefined?0.009:s.restWearThreshold),
   seconds:limit(s.restProbeSeconds,10,60,30),
+  hold:s.restWearHold!==false,
   confidence:limit(s.restPulseConfidence,1,100,90)};}
 
 
@@ -58,7 +59,8 @@ function create(options){
   var closedBucket=-1,closedStill=false,closedVectorOK=false,
     closedPercent=0,closedPulse=HR_PENDING,closedMotion=false;
   var current=-1,covered=0,activity=0,peakCount=0,lastMs,lastValid=false;
-  var wearEnabled=!!options.wearEnabled,pulseState=HR_PENDING;
+  var wearEnabled=!!options.wearEnabled,holdEnabled=!!options.holdEnabled,pulseState=HR_PENDING;
+  var holdPulse=HR_PENDING,holdX,holdY,holdZ,lastX,lastY,lastZ,holdRun=0;
   var pulseConfidence=-1,closedConfidence=-1;
   var diag=options.saved&&options.saved.diag instanceof Array?
     options.saved.diag.slice(-12):[];
@@ -85,6 +87,19 @@ function create(options){
   function resetPeak(){
     lpX=undefined;lpY=undefined;lpZ=undefined;qOld=undefined;qPrev=undefined;
   }
+  function clearHold(){holdPulse=HR_PENDING;holdX=undefined;holdRun=0;}
+  function establishHold(hr){
+    if(!wearEnabled||!holdEnabled||lastX===undefined)return;
+    if(hr!==HR_FOUND&&hr!==HR_ABSENT)return;
+    holdPulse=hr;holdX=lastX;holdY=lastY;holdZ=lastZ;holdRun=0;
+  }
+  function checkHeldMotion(x,y,z){
+    if(holdPulse===HR_PENDING)return;
+    var dx=x-holdX,dy=y-holdY,dz=z-holdZ;
+    var d2=dx*dx+dy*dy+dz*dz,z2=wearG*wearG;
+    if(d2>z2)holdRun++;else holdRun=0;
+    if(holdRun>=2||d2>9*z2){clearHold();vecWornMotion=true;}
+  }
   function flushVector(){
     if(!vecCount)return;
     var x=vecSX/vecCount,y=vecSY/vecCount,z=vecSZ/vecCount;
@@ -102,6 +117,8 @@ function create(options){
       else vecMotionRun=0;
       if(vecMotionRun>=2||d2>9*wearG*wearG)vecWornMotion=true;
     }
+    checkHeldMotion(x,y,z);
+    lastX=x;lastY=y;lastZ=z;
     vecSX=0;vecSY=0;vecSZ=0;vecCount=0;
   }
   function resetVector(){
@@ -119,7 +136,8 @@ function create(options){
   function chooseLevel(ok,still,motion,hr,percent){
     if(!ok)return NO_DATA;
     if(!wearEnabled||motion)return percent;
-    if(still)return hr===HR_FOUND?100:NOT_WORN;
+    if(still)return hr===HR_FOUND||hr===HR_PENDING&&holdPulse===HR_FOUND?
+      100:NOT_WORN;
     return NO_DATA;
   }
   function makeReason(ok,still,motion,hr){
@@ -129,6 +147,8 @@ function create(options){
     if(still){
       if(hr===HR_FOUND)return "pulse_detected_still";
       if(hr===HR_FAILED)return "nonwear_hrm_failed";
+      if(hr===HR_PENDING&&holdPulse===HR_FOUND)return "pulse_held_still";
+      if(hr===HR_PENDING&&holdPulse===HR_ABSENT)return "nonwear_held";
       if(hr===HR_PENDING)return "nonwear_hrm_unknown";
       return "nonwear";
     }
@@ -143,6 +163,8 @@ function create(options){
       diag[j].reason=makeReason(closedVectorOK,closedStill,closedMotion,closedPulse);
       break;
     }
+    if(closedVectorOK&&closedStill&&(closedPulse===HR_FOUND||closedPulse===HR_ABSENT))
+      establishHold(closedPulse);
     if(save)save();
   }
   function markProbe(bucket,status,confidence){
@@ -180,10 +202,12 @@ function create(options){
         result:levels[i],
         reason:makeReason(closedVectorOK,closedStill,closedMotion,closedPulse)});
       if(diag.length>12)diag.shift();
+      if(closedVectorOK&&closedStill&&(closedPulse===HR_FOUND||closedPulse===HR_ABSENT))
+        establishHold(closedPulse);
       changed=true;
     }else if(current>=0&&target<current){
       for(i=0;i<COUNT;i++)if(stamps[i]>=target){stamps[i]=0;levels[i]=0;}
-      closedBucket=-1;changed=true;
+      clearHold();closedBucket=-1;changed=true;
     }
     current=target;covered=0;activity=0;peakCount=0;resetPeak();resetVector();
     // No persistent gap-failure flag: covered duration is authoritative.
@@ -200,6 +224,10 @@ function create(options){
     var alpha=dt/(HP_TAU_MS+dt);
     lpX+=alpha*(a.x-lpX);lpY+=alpha*(a.y-lpY);lpZ+=alpha*(a.z-lpZ);
     var x=a.x-lpX,y=a.y-lpY,z=a.z-lpZ,q=x*x+y*y+z*z;
+    // Detect brief displacements even if the one-second mean returns to rest.
+    if(holdPulse!==HR_PENDING&&q>9*wearG*wearG){
+      clearHold();vecWornMotion=true;
+    }
     // Gate on squared threshold BEFORE looking for a local maximum.
     // Only accepted peaks compute sqrt; subthreshold peaks never do.
     if(qOld!==undefined&&qPrev>=threshold2&&qPrev>qOld&&qPrev>=q){
@@ -214,6 +242,9 @@ function create(options){
     var continuous=lastValid&&valid&&dt>0&&dt<=MAX_GAP_MS;
     var target=Math.floor(ms/SLOT_MS);
     if(!continuous){
+      // Equal timestamps are possible when a boundary timer and accelerometer
+      // event coincide; only a genuine gap/rewind invalidates the held state.
+      if(lastMs!==undefined&&(!valid||dt>MAX_GAP_MS||dt<0))clearHold();
       if(target!==current)roll(ms);
       resetPeak();
     }else if(target===current){
@@ -267,10 +298,11 @@ function create(options){
     getDiagnostics:function(){return {bucket:current,coverageSec:Math.round(covered/1000),
       driftG:Math.round(Math.sqrt(vecMaxD2)*10000)/10000,
       motion:vecWornMotion,vectorValid:vecRefX!==undefined,
-      pulse:pulseState,confidence:pulseConfidence,
+      pulse:pulseState,confidence:pulseConfidence,holdState:holdPulse,
       probeStatus:"0=pending,1=detected,2=absent,3=failed",
       recent:diag.slice()};},
     hasMotion:function(bucket){return bucket===current&&vecWornMotion;},
+    getWearHold:function(){return holdPulse;},
     getLive:function(){return {bucket:current,covered:covered,peaks:peakCount,
       activity:activity,level:activityLevel(activity,cuts)};}};
 }
@@ -329,7 +361,8 @@ function install(bangle,storage,events,clock){
         engine.failedProbe(bucket);scheduleProbe(bucket+1);return;
       }
       // Significant 3D movement already establishes wearing: leave HRM off.
-      if(engine.hasMotion(bucket)){scheduleProbe(bucket+1);return;}
+      if(engine.getWearHold()!==HR_PENDING||
+        engine.hasMotion(bucket)){scheduleProbe(bucket+1);return;}
       probe={bucket:bucket,start:begin,end:end,maxConfidence:-1};
       bangle.on("HRM",onHRM);
       try{
@@ -362,7 +395,7 @@ function install(bangle,storage,events,clock){
     sampleMs=eco?200:0;nextSampleAt=0;
     if(on){
       engine=create({thresholdG:t,activityThresholds:stages,
-        wearThresholdG:w.z,wearEnabled:w.enabled,
+        wearThresholdG:w.z,wearEnabled:w.enabled,holdEnabled:w.hold,
         nowMs:clock(),saved:storage.readJSON("orbit.rest.json",1),onCommit:persist});
       bangle.on("accel",onAccel);scheduleProbe();
     }else engine=undefined;
