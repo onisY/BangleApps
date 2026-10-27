@@ -1,5 +1,35 @@
 # Rest bar and power management (tenkyu v0.068)
 
+## Non-wear/quiet-worn state retention (v0.077)
+
+With **Rest graph → Non-wear → Keep until move** enabled (default), a
+completed five-minute bin with at least 270 s valid XYZ coverage, stable
+three-axis orientation, and a successful optical test latches the optical
+result across future stationary bins. A high-confidence pulse latches
+quiet worn (stage 5); a completed HRM probe with no acceptable pulse latches
+unworn (red arc). Further five-minute HRM probes are suppressed while still.
+A failed HRM start or pending/unknown result does **not** establish a hold.
+
+All accelerometer samples continue to be processed. The held reference
+XYZ mean is compared against later one-second means (two consecutive
+seconds above the user's 3D drift threshold or one >3×), and short
+high-pass acceleration transients can also end a hold. Any invalid sample
+or gap over 2.5 seconds revokes the hold. The cache is intentionally
+volatile (not stored on flash); reboot/reload requires fresh verification.
+Coverage, the 300-second activity normalization, and the non-wear bar/arc
+logic remain unchanged. Disable Keep until move to restore five-minute
+heart rate probing.
+
+**Caveats:** brief removal and reattachment can escape sampling; a false
+negative pulse measurement can remain latched until movement; vibrations
+can cancel the hold even when unworn. This is a low-power heuristic rather
+than a continuously measured skin-contact indication.
+
+**日本語：** 安静／非装着の確定後、加速度変化が現れるまで状態を保持し、
+定期的な光学心拍測定を省きます。加速度監視は継続し、計測欠落や
+再起動時には判定をリセットします。心拍センサーの起動失敗は
+保持しません。「Keep until move」で従来方式に戻せます。
+
 ## Five-minute coverage normalization (v0.076)
 
 For each completed five-minute bin with at least 270 seconds of valid
