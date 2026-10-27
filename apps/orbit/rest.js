@@ -310,6 +310,7 @@ function create(options){
       probeStatus:"0=pending,1=detected,2=absent,3=failed",
       recent:diag.slice()};},
     hasMotion:function(bucket){return bucket===current&&vecWornMotion;},
+    hasPulse:function(bucket){return bucket===current&&pulseState===HR_FOUND;},
     hasRecentAccel:function(ms){return lastValid&&lastMs!==undefined&&
       ms>=lastMs&&ms-lastMs<=MAX_GAP_MS;},
     getWearHold:function(){return holdPulse;},
@@ -320,7 +321,7 @@ function install(bangle,storage,events,clock){
   clock=clock||function(){return Date.now();};
   if(bangle.orbitRest)return bangle.orbitRest;
   var engine,enabled=false,configKey,api,wear,probe,timer,failedAttempts=0;
-  var sampleMs=0,nextSampleAt=0;
+  var sampleMs=0,nextSampleAt=0,sharedPulseCount=0;
   var HR_ID="orbitrest";
   function persist(){if(engine)try{storage.writeJSON("orbit.rest.json",engine.snapshot());}catch(e){}}
   function onAccel(a){
@@ -343,22 +344,34 @@ function install(bangle,storage,events,clock){
     }
   }
   function onHRM(h){
-    // A well-formed sample establishes that HRM actually returned data.
-    // No accepted pulse from those samples means confirmed "no pulse";
-    // zero valid samples throughout the probe means measurement failure.
-    if(probe&&h&&isFinite(h.bpm)&&h.bpm>=0&&isFinite(h.confidence)){
+    // Subscribe once for the lifetime of the boot-owned recorder.
+    // Events from another HRM user are accepted without powering the
+    // optical sensor on. An existing, good pulse avoids a new probe.
+    if(!enabled||!wear.enabled||!h||!isFinite(h.bpm)||h.bpm<0||
+       !isFinite(h.confidence))return;
+    if(probe){
       probe.hasData=true;
       if(h.confidence>probe.maxConfidence)probe.maxConfidence=h.confidence;
-      if(h.bpm<=0||h.confidence<=wear.confidence)return;
-      var bucket=probe.bucket;
-      failedAttempts=0;engine.detectedPulse(bucket,h.confidence);
-      stopProbe();scheduleProbe(bucket+1);
     }
+    if(h.bpm<=0||h.confidence<=wear.confidence)return;
+    var now=clock(),bucket=Math.floor(now/SLOT_MS);
+    if(!engine.hasRecentAccel(now)||engine.hasMotion(bucket))return;
+    if(engine.getWearHold()===HR_FOUND||engine.hasPulse(bucket))return;
+    // Only live, sufficiently reliable readings count. Never reuse
+    // the firmware's older heart-rate history for wear detection.
+    if(!probe||!probe.ownsPower)sharedPulseCount++;
+    failedAttempts=0;
+    engine.detectedPulse(bucket,h.confidence);
+    stopProbe();scheduleProbe(bucket+1);
   }
   function stopProbe(){
     if(timer!==undefined){clearTimeout(timer);timer=undefined;}
-    if(probe){bangle.removeListener("HRM",onHRM);
-      try{bangle.setHRMPower(0,HR_ID);}catch(e){}probe=undefined;}
+    if(probe){
+      var own=probe.ownsPower;
+      probe=undefined;
+      // Release only this application's request; leave other apps alone.
+      if(own)try{bangle.setHRMPower(0,HR_ID);}catch(e){}
+    }
   }
   // First real HRM failure: retry in 60 seconds. Further failures:
   // retry every 900 seconds. Timing starts at failure, not bin boundary.
@@ -384,12 +397,19 @@ function install(bangle,storage,events,clock){
     if(!engine.hasRecentAccel(begin)||engine.hasMotion(Math.floor(begin/SLOT_MS))){
       failedAttempts=0;scheduleProbe(Math.floor(begin/SLOT_MS)+1);return;
     }
-    probe={bucket:bucket,maxConfidence:-1,hasData:false};
-    bangle.on("HRM",onHRM);
-    try{
-      if(bangle.setHRMPower(1,HR_ID)===false)throw new Error("HRM unavailable");
-    }catch(e){
-      stopProbe();failProbe(bucket);return;
+    probe={bucket:bucket,maxConfidence:-1,hasData:false,ownsPower:false};
+    // If another app/widget already powers HRM, observe its event
+    // stream for this window without requesting additional sensor power.
+    var alreadyOn=false;
+    try{alreadyOn=typeof bangle.isHRMOn==="function"&&bangle.isHRMOn();}
+    catch(e){}
+    if(!alreadyOn){
+      probe.ownsPower=true;
+      try{
+        if(bangle.setHRMPower(1,HR_ID)===false)throw new Error("HRM unavailable");
+      }catch(e){
+        stopProbe();failProbe(bucket);return;
+      }
     }
     timer=setTimeout(function(){
       timer=undefined;
@@ -417,7 +437,7 @@ function install(bangle,storage,events,clock){
       var begin=clock(),end=(bucket+1)*SLOT_MS;
       if(begin<start||begin>end-10000){failProbe(bucket);return;}
       if(engine.getWearHold()===HR_FOUND||engine.getWearHold()===HR_ABSENT||
-        engine.hasMotion(bucket)||!engine.hasRecentAccel(begin)){
+        engine.hasPulse(bucket)||engine.hasMotion(bucket)||!engine.hasRecentAccel(begin)){
         scheduleProbe(bucket+1);return;
       }
       beginProbe(bucket,end);
@@ -431,24 +451,37 @@ function install(bangle,storage,events,clock){
     var key=JSON.stringify([t,w,stages,eco]);
     if(on===enabled&&(!on||key===configKey))return;
     stopProbe();
-    if(enabled){bangle.removeListener("accel",onAccel);persist();}
-    enabled=on;configKey=key;wear=w;failedAttempts=0;
+    if(enabled){
+      bangle.removeListener("accel",onAccel);
+      bangle.removeListener("HRM",onHRM);
+      persist();
+    }
+    enabled=on;configKey=key;wear=w;failedAttempts=0;sharedPulseCount=0;
     sampleMs=eco?200:0;nextSampleAt=0;
     if(on){
       engine=create({thresholdG:t,activityThresholds:stages,
         wearThresholdG:w.z,wearEnabled:w.enabled,holdEnabled:w.hold,
         nowMs:clock(),saved:storage.readJSON("orbit.rest.json",1),onCommit:persist});
-      bangle.on("accel",onAccel);scheduleProbe();
+      bangle.on("accel",onAccel);
+      if(w.enabled)bangle.on("HRM",onHRM);
+      scheduleProbe();
     }else engine=undefined;
   }
   api={configure:configure,save:persist,isEnabled:function(){return enabled;},
     draw:function(graphics,map){draw(graphics,engine,map);},
-    getDiagnostics:function(){return engine?engine.getDiagnostics():{disabled:true};},
+    getDiagnostics:function(){
+      var d=engine?engine.getDiagnostics():{disabled:true};
+      d.sharedPulseCount=sharedPulseCount;return d;
+    },
     getEngine:function(){return engine;},
     isProbing:function(){return !!probe;},
     sync:function(ms){if(engine)engine.sync(ms);}};
   bangle.orbitRest=api;
-  if(events)events.on("kill",function(){stopProbe();persist();});
+  if(events)events.on("kill",function(){
+    stopProbe();
+    bangle.removeListener("HRM",onHRM);
+    persist();
+  });
   configure(storage.readJSON("orbit.json",1)||{});
   return api;
 }
