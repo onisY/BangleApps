@@ -1,5 +1,41 @@
 # Rest bar and power management (tenkyu v0.068)
 
+## Reuse other apps' HRM readings (v0.080)
+
+The boot-owned rest service installs one shared `Bangle.on("HRM", ...)`
+listener while non-wear detection is enabled. A **live**, positive BPM
+with confidence **strictly above** the configured threshold is used as
+current-bin evidence of wearing, even when tenkyu did not request HRM power.
+For trustworthy events, sensor data must be accompanied by recent XYZ
+samples. Readings saved in Health or in other historical stores are not
+used as live skin-contact evidence.
+
+The fifth-minute optical check is skipped if a reliable shared pulse
+has already been received. If a check is needed while
+`Bangle.isHRMOn()` says another application is keeping the sensor
+powered, tenkyu observes the stream for the check window without
+calling `setHRMPower(1, "orbitrest")`. When the sensor is off, tenkyu
+requests it under its own ID and only releases its own request.
+A streamed HRM signal may therefore prevent any tenkyu-owned HRM
+power cycles; it does NOT turn off power requested by other apps.
+
+`Rest graph → Last check → Shared HRM` counts accepted usable HRM
+readings processed while tenkyu did not own the sensor. The number
+resets if the boot-owned recorder is reconfigured/restarted and is
+intended as a debugging indicator, not a measure of total HRM energy.
+
+The previous confirmed worn/unworn hold, white failure arcs,
+1-minute then 15-minute failure retries, and 270-second XYZ coverage
+rule are preserved. A reliable shared pulse can replace an
+earlier provisional failure or non-wear result in a later bin.
+If HRM is on but no valid events arrive during an observation window,
+the existing failure/backoff rule still applies.
+
+**日本語：** 他のアプリが心拍計を動かしている場合、tenkyuはその
+リアルタイム心拍イベントを使用し、不要な独自の電源要求を省きます。
+自分が起動していない心拍計は停止しません。設定のLast checkで
+「Shared HRM」に再利用した計測イベントの回数を表示します。
+
 ## White HRM-failure arcs and backoff (v0.079)
 
 A five-minute interval with >=270 s of valid XYZ coverage and
