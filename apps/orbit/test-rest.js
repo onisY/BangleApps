@@ -243,6 +243,24 @@ app.advance(base+S+1); // Complete the deferred clock redraw after first frame.
 const graph=app.log.findIndex(x=>x.op==="drawLine"&&x.color===0x07e0);
 const observer=app.log.findIndex(x=>x.op==="fillCircle"&&x.color===0xf800&&x.args[2]===2);
 assert(graph>=0&&observer>graph);
+// v0.078: dial glyphs are drawn BEFORE the rest bars and non-wear arcs.
+// The red observer marker must remain above both.
+const layered=environment(base,{orbitHourEnabled:true,orbitHourStep:3,restWearEnabled:false},
+  {"orbit.rest.json":{v:3,end:base/S-1,levels:"ff".repeat(287)+"64"}});
+layered.execute("boot.js");layered.execute("app.js");
+const dialIndices=[];
+layered.log.forEach((e,i)=>{
+  if(e.op==="drawString"&&/^(XII|I|II|III|IV|V|VI|VII|VIII|IX|X|XI)$/.test(e.args[0]))
+    dialIndices.push(i);
+});
+assert.strictEqual(dialIndices.length,8,"All dial numerals must be rendered");
+const lastDial=dialIndices[dialIndices.length-1];
+const restOnTop=layered.log.findIndex((e,i)=>i>lastDial&&e.op==="drawLine"&&
+  (e.color===0x07E0||e.color===0xFFE0));
+const pointOnTop=layered.log.findIndex((e,i)=>i>restOnTop&&e.op==="fillCircle"&&
+  e.color===0xF800&&e.args[2]===2);
+assert(restOnTop>lastDial&&pointOnTop>restOnTop,
+  "Dial must be behind rest graph, with red observer marker on top");
 app.b.emit("lcdPower",false);assert.strictEqual(app.timers.size,0);
 app.feed(base+S*2);
 app.b.orbitRest.sync(base+S*2);
@@ -261,7 +279,7 @@ assert.strictEqual(off.b.listenerCount("accel"),0);
 // Menus expose five-level height, seven 3-axis peak gates and four boundaries.
 const menus=[];app.events.showMenu=m=>menus.push(m);
 app.execute("settings.js")(()=>{});
-assert.strictEqual(menus.at(-1)[""].title,"tenkyu v0.077");
+assert.strictEqual(menus.at(-1)[""].title,"tenkyu v0.078");
 assert(!menus.at(-1)["Version"],"Version is a static title, not a button");
 menus.at(-1)["Rest graph"]();
 assert.strictEqual(menus.at(-1)["Max bar height"].max,14);
