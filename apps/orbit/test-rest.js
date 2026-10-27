@@ -261,7 +261,7 @@ assert.strictEqual(off.b.listenerCount("accel"),0);
 // Menus expose five-level height, seven 3-axis peak gates and four boundaries.
 const menus=[];app.events.showMenu=m=>menus.push(m);
 app.execute("settings.js")(()=>{});
-assert.strictEqual(menus.at(-1)[""].title,"tenkyu v0.076");
+assert.strictEqual(menus.at(-1)[""].title,"tenkyu v0.077");
 assert(!menus.at(-1)["Version"],"Version is a static title, not a button");
 menus.at(-1)["Rest graph"]();
 assert.strictEqual(menus.at(-1)["Max bar height"].max,14);
@@ -283,10 +283,12 @@ assert.strictEqual(app.cfg.restWearThreshold,.001);
 assert(!menus.at(-1)["Min pulse BPM"]&&!menus.at(-1)["Max pulse BPM"]);
 assert(!("restPulseMin" in app.cfg)&&!("restPulseMax" in app.cfg));
 assert(menus.at(-1)["Pulse confidence"]);
+assert(menus.at(-1)["Keep until move"]);
 menus.at(-1)["< Back"](); // Rest graph menu
 menus.at(-1)["Last check"]();
 assert(menus.at(-1)["Reason"]);
 assert(menus.at(-1)["Pulse"]);
+assert(menus.at(-1)["Hold"]);
 assert(menus.at(-1)["Conf."]);
 assert(menus.at(-1)["3D drift"]);
 assert(menus.at(-1)["Peak sum"]);
