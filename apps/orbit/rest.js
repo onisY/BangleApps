@@ -4,7 +4,7 @@
  * Non-wear retains 1-second XYZ mean-vector drift and periodic HRM probing.
  */
 var SLOT_MS=300000,COUNT=288,DAY_MS=SLOT_MS*COUNT;
-var NOT_WORN=254,NO_DATA=255;
+var HRM_FAILED=253,NOT_WORN=254,NO_DATA=255;
 var HR_PENDING=0,HR_FOUND=1,HR_ABSENT=2,HR_FAILED=3;
 var MAX_GAP_MS=2500,MIN_COVERAGE_MS=270000;
 var THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
@@ -45,7 +45,8 @@ function wearConfig(s){return {enabled:s.restWearEnabled!==false,
 
 /* Rest history retains 0..100 presentation codes for v2/v3 compatibility.
  * New results are quantized into 0,20,40,60,100 (stages 1..5).
- * 254=unworn; 255=unknown. Old percentages keep their displayed stages.
+ * 253=HRM failed (white); 254=unworn (red); 255=missing XYZ (blank).
+ * Old percentages keep their displayed stages.
  */
 function create(options){
   options=options||{};
@@ -90,7 +91,7 @@ function create(options){
   function clearHold(){holdPulse=HR_PENDING;holdX=undefined;holdRun=0;}
   function establishHold(hr){
     if(!wearEnabled||!holdEnabled||lastX===undefined)return;
-    if(hr!==HR_FOUND&&hr!==HR_ABSENT)return;
+    if(hr!==HR_FOUND&&hr!==HR_ABSENT&&hr!==HR_FAILED)return;
     holdPulse=hr;holdX=lastX;holdY=lastY;holdZ=lastZ;holdRun=0;
   }
   function checkHeldMotion(x,y,z){
@@ -136,8 +137,11 @@ function create(options){
   function chooseLevel(ok,still,motion,hr,percent){
     if(!ok)return NO_DATA;
     if(!wearEnabled||motion)return percent;
-    if(still)return hr===HR_FOUND||hr===HR_PENDING&&holdPulse===HR_FOUND?
-      100:NOT_WORN;
+    if(still){
+      if(hr===HR_FOUND||hr===HR_PENDING&&holdPulse===HR_FOUND)return 100;
+      if(hr===HR_FAILED||hr===HR_PENDING&&holdPulse===HR_FAILED)return HRM_FAILED;
+      return NOT_WORN;
+    }
     return NO_DATA;
   }
   function makeReason(ok,still,motion,hr){
@@ -149,6 +153,7 @@ function create(options){
       if(hr===HR_FAILED)return "nonwear_hrm_failed";
       if(hr===HR_PENDING&&holdPulse===HR_FOUND)return "pulse_held_still";
       if(hr===HR_PENDING&&holdPulse===HR_ABSENT)return "nonwear_held";
+      if(hr===HR_PENDING&&holdPulse===HR_FAILED)return "hrm_retry_wait";
       if(hr===HR_PENDING)return "nonwear_hrm_unknown";
       return "nonwear";
     }
@@ -163,13 +168,15 @@ function create(options){
       diag[j].reason=makeReason(closedVectorOK,closedStill,closedMotion,closedPulse);
       break;
     }
-    if(closedVectorOK&&closedStill&&(closedPulse===HR_FOUND||closedPulse===HR_ABSENT))
+    if(closedVectorOK&&closedStill&&closedPulse!==HR_PENDING)
       establishHold(closedPulse);
     if(save)save();
   }
   function markProbe(bucket,status,confidence){
     if(bucket===current){
       pulseState=status;
+      if(status===HR_FAILED&&!vecWornMotion&&covered>=MIN_COVERAGE_MS)
+        establishHold(HR_FAILED);
       if(isFinite(confidence)&&confidence>=0)pulseConfidence=confidence;
     }else if(bucket===closedBucket){
       closedPulse=status;
@@ -202,7 +209,7 @@ function create(options){
         result:levels[i],
         reason:makeReason(closedVectorOK,closedStill,closedMotion,closedPulse)});
       if(diag.length>12)diag.shift();
-      if(closedVectorOK&&closedStill&&(closedPulse===HR_FOUND||closedPulse===HR_ABSENT))
+      if(closedVectorOK&&closedStill&&closedPulse!==HR_PENDING)
         establishHold(closedPulse);
       changed=true;
     }else if(current>=0&&target<current){
@@ -272,13 +279,14 @@ function create(options){
   function failedProbe(bucket){markProbe(bucket,HR_FAILED);}
   function level(bucket){return stamps[bucket%COUNT]===bucket?
     (levels[bucket%COUNT]>100?0:levels[bucket%COUNT]):0;}
-  function visit(ms,fn,onNonWear){
+  function visit(ms,fn,onNonWear,onFailure){
     var end=Math.floor(ms/SLOT_MS)-1,b,v;
     for(b=end-COUNT+1;b<=end;b++)if(b>=0&&stamps[b%COUNT]===b){
       v=levels[b%COUNT];
-      if(v<=100)fn(b,v); // 0%-quiet is a visible stage-1 bar.
+      if(v<=100)fn(b,v);
       else if(v===NOT_WORN&&onNonWear)onNonWear(b);
-      // NO_DATA (255) remains transparent; it must not look like non-wear.
+      else if(v===HRM_FAILED&&onFailure)onFailure(b);
+      // Missing XYZ coverage (255) is always transparent.
     }
   }
   function snapshot(){
@@ -302,6 +310,8 @@ function create(options){
       probeStatus:"0=pending,1=detected,2=absent,3=failed",
       recent:diag.slice()};},
     hasMotion:function(bucket){return bucket===current&&vecWornMotion;},
+    hasRecentAccel:function(ms){return lastValid&&lastMs!==undefined&&
+      ms>=lastMs&&ms-lastMs<=MAX_GAP_MS;},
     getWearHold:function(){return holdPulse;},
     getLive:function(){return {bucket:current,covered:covered,peaks:peakCount,
       activity:activity,level:activityLevel(activity,cuts)};}};
@@ -309,7 +319,7 @@ function create(options){
 function install(bangle,storage,events,clock){
   clock=clock||function(){return Date.now();};
   if(bangle.orbitRest)return bangle.orbitRest;
-  var engine,enabled=false,configKey,api,wear,probe,timer;
+  var engine,enabled=false,configKey,api,wear,probe,timer,failedAttempts=0;
   var sampleMs=0,nextSampleAt=0;
   var HR_ID="orbitrest";
   function persist(){if(engine)try{storage.writeJSON("orbit.rest.json",engine.snapshot());}catch(e){}}
@@ -322,21 +332,26 @@ function install(bangle,storage,events,clock){
       nextSampleAt=nextSampleAt&&now-nextSampleAt<=sampleMs?
         nextSampleAt+sampleMs:now+sampleMs;
     }
+    var wasFailed=engine.getWearHold()===HR_FAILED;
     engine.sample(a,now);
-    if(probe&&engine.hasMotion(probe.bucket)){
+    if(wasFailed&&engine.getWearHold()!==HR_FAILED){
+      // Motion or a sensor-data gap invalidates the prior failure verdict.
+      failedAttempts=0;stopProbe();scheduleProbe(Math.floor(now/SLOT_MS)+1);
+    }else if(probe&&engine.hasMotion(probe.bucket)){
       var bucket=probe.bucket;
-      stopProbe();scheduleProbe(bucket+1);
+      failedAttempts=0;stopProbe();scheduleProbe(bucket+1);
     }
   }
   function onHRM(h){
-    // Only a positive, high-confidence BPM counts. No BPM min/max.
-    if(probe&&h&&isFinite(h.bpm)&&h.bpm>0&&
-      isFinite(h.confidence)){
+    // A well-formed sample establishes that HRM actually returned data.
+    // No accepted pulse from those samples means confirmed "no pulse";
+    // zero valid samples throughout the probe means measurement failure.
+    if(probe&&h&&isFinite(h.bpm)&&h.bpm>=0&&isFinite(h.confidence)){
+      probe.hasData=true;
       if(h.confidence>probe.maxConfidence)probe.maxConfidence=h.confidence;
-      if(h.confidence<=wear.confidence)return;
+      if(h.bpm<=0||h.confidence<=wear.confidence)return;
       var bucket=probe.bucket;
-      engine.detectedPulse(bucket,h.confidence);
-      // Stop immediately and do not start a second probe in the same slot.
+      failedAttempts=0;engine.detectedPulse(bucket,h.confidence);
       stopProbe();scheduleProbe(bucket+1);
     }
   }
@@ -345,41 +360,67 @@ function install(bangle,storage,events,clock){
     if(probe){bangle.removeListener("HRM",onHRM);
       try{bangle.setHRMPower(0,HR_ID);}catch(e){}probe=undefined;}
   }
+  // First real HRM failure: retry in 60 seconds. Further failures:
+  // retry every 900 seconds. Timing starts at failure, not bin boundary.
+  function failProbe(bucket){
+    engine.failedProbe(bucket);
+    failedAttempts++;
+    if(!enabled||!wear.enabled)return;
+    var delay=failedAttempts===1?60000:900000;
+    timer=setTimeout(function(){
+      timer=undefined;
+      if(engine.getWearHold()===HR_FOUND||engine.getWearHold()===HR_ABSENT){
+        failedAttempts=0;scheduleProbe();return;
+      }
+      var now=clock(),b=Math.floor(now/SLOT_MS);
+      if(!engine.hasRecentAccel(now)||engine.hasMotion(b)){
+        failedAttempts=0;scheduleProbe(b+1);return;
+      }
+      beginProbe(b,now+wear.seconds*1000);
+    },delay);
+  }
+  function beginProbe(bucket,end){
+    var begin=clock();
+    if(!engine.hasRecentAccel(begin)||engine.hasMotion(Math.floor(begin/SLOT_MS))){
+      failedAttempts=0;scheduleProbe(Math.floor(begin/SLOT_MS)+1);return;
+    }
+    probe={bucket:bucket,maxConfidence:-1,hasData:false};
+    bangle.on("HRM",onHRM);
+    try{
+      if(bangle.setHRMPower(1,HR_ID)===false)throw new Error("HRM unavailable");
+    }catch(e){
+      stopProbe();failProbe(bucket);return;
+    }
+    timer=setTimeout(function(){
+      timer=undefined;
+      var p=probe,done=clock();stopProbe();
+      if(p){
+        if(p.hasData){
+          failedAttempts=0;engine.absentPulse(p.bucket,p.maxConfidence);
+          engine.sync(done);scheduleProbe(p.bucket+1);
+        }else{
+          failProbe(p.bucket);engine.sync(done);
+        }
+      }
+    },Math.max(1,end-clock()));
+  }
   function scheduleProbe(minBucket){
     if(!enabled||!wear.enabled)return;
     var now=clock(),bucket=Math.max(Math.floor(now/SLOT_MS),minBucket||0);
     var start=(bucket+1)*SLOT_MS-wear.seconds*1000;
     if(start<now){bucket++;start+=SLOT_MS;}
     if(typeof bangle.setHRMPower!=="function"){
-      engine.failedProbe(bucket);return;
+      failProbe(bucket);return;
     }
     timer=setTimeout(function(){
       timer=undefined;
       var begin=clock(),end=(bucket+1)*SLOT_MS;
-      // A late start is acceptable if at least 10 seconds remain.
-      if(begin<start||begin>end-10000){
-        engine.failedProbe(bucket);scheduleProbe(bucket+1);return;
+      if(begin<start||begin>end-10000){failProbe(bucket);return;}
+      if(engine.getWearHold()===HR_FOUND||engine.getWearHold()===HR_ABSENT||
+        engine.hasMotion(bucket)||!engine.hasRecentAccel(begin)){
+        scheduleProbe(bucket+1);return;
       }
-      // Significant 3D movement already establishes wearing: leave HRM off.
-      if(engine.getWearHold()!==HR_PENDING||
-        engine.hasMotion(bucket)){scheduleProbe(bucket+1);return;}
-      probe={bucket:bucket,start:begin,end:end,maxConfidence:-1};
-      bangle.on("HRM",onHRM);
-      try{
-        if(bangle.setHRMPower(1,HR_ID)===false)throw new Error("HRM unavailable");
-      }catch(e){
-        stopProbe();engine.failedProbe(bucket);scheduleProbe(bucket+1);return;
-      }
-      timer=setTimeout(function(){
-        timer=undefined;
-        var p=probe,done=clock();stopProbe();
-        // Scheduled callback lateness must not discard a completed no-pulse test.
-        if(p){
-          engine.absentPulse(p.bucket,p.maxConfidence);
-          engine.sync(done);
-        }
-        scheduleProbe(bucket+1);
-      },Math.max(1,end-clock()));
+      beginProbe(bucket,end);
     },Math.max(1,start-now));
   }
   function configure(s){
@@ -391,7 +432,7 @@ function install(bangle,storage,events,clock){
     if(on===enabled&&(!on||key===configKey))return;
     stopProbe();
     if(enabled){bangle.removeListener("accel",onAccel);persist();}
-    enabled=on;configKey=key;wear=w;
+    enabled=on;configKey=key;wear=w;failedAttempts=0;
     sampleMs=eco?200:0;nextSampleAt=0;
     if(on){
       engine=create({thresholdG:t,activityThresholds:stages,
@@ -436,6 +477,14 @@ function draw(graphics,engine,map){
     }
     lastBucket=bucket;
   }
+  function drawArc(bucket,color){
+    pointAt(bucket);
+    graphics.setColor(color);
+    graphics.drawLine(
+      Math.round(map.cx+r*(ca*cs+sa*ss)),
+      Math.round(map.cy+r*(sa*cs-ca*ss)),
+      Math.round(map.cx+r*ca),Math.round(map.cy+r*sa));
+  }
   engine.visit(now,function(bucket,value){
     // Plot at the interval END: a completed bar expires exactly 24 h later.
     pointAt(bucket);
@@ -445,14 +494,9 @@ function draw(graphics,engine,map){
     graphics.drawLine(Math.round(map.cx+r*ca),Math.round(map.cy+r*sa),
       Math.round(map.cx+outer*ca),Math.round(map.cy+outer*sa));
   },function(bucket){
-    // Non-wear: overlay a one-pixel red arc exactly on the thin orbit.
-    pointAt(bucket);
-    graphics.setColor(0xF800);
-    graphics.drawLine(
-      Math.round(map.cx+r*(ca*cs+sa*ss)),
-      Math.round(map.cy+r*(sa*cs-ca*ss)),
-      Math.round(map.cx+r*ca),
-      Math.round(map.cy+r*sa));
+    drawArc(bucket,0xF800); // Confirmed no pulse: red.
+  },function(bucket){
+    drawArc(bucket,0xFFFF); // HRM failed: white.
   });
 }
 exports.create=create;
@@ -462,7 +506,8 @@ exports.activityLevel=activityLevel;
 exports.activity300=activity300;
 exports.activityThresholds=activityThresholds;
 exports.stageFor=stageFor;
-exports.constants={slotMs:SLOT_MS,count:COUNT,maxGapMs:MAX_GAP_MS,minCoverageMs:MIN_COVERAGE_MS};
+exports.constants={slotMs:SLOT_MS,count:COUNT,maxGapMs:MAX_GAP_MS,minCoverageMs:MIN_COVERAGE_MS,
+  hrmFailed:HRM_FAILED,unworn:NOT_WORN,noData:NO_DATA};
 
 
 exports.thresholdG=thresholdG;
