@@ -1,8 +1,8 @@
-/* tenkyu 0.078: settings, rest diagnostics and flash-backed location picker. */
+/* tenkyu 0.079: settings, rest diagnostics and flash-backed location picker. */
 (function(back){
   var Storage=require("Storage");
   // Read-only version display: title is not a selectable button.
-  var VERSION="0.078";
+  var VERSION="0.079";
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
   var REST_ACTIVITY_DEFAULTS=[0.5,2,6,18];
   // Bangle.js 2 has a 3-bit colour screen (8 actual dial colours).
@@ -790,7 +790,8 @@
     var reasons={
       accel_missing:"No accel",nonwear_disabled:"Disabled",
       motion:"Motion",pulse_detected_still:"Pulse+still",
-      nonwear_hrm_failed:"HRM failed",nonwear_hrm_unknown:"HRM unknown",
+      nonwear_hrm_failed:"HRM failed",hrm_retry_wait:"Retry wait",
+      nonwear_hrm_unknown:"HRM unknown",
       nonwear:"No pulse",nonwear_held:"Held unworn",
       pulse_held_still:"Held worn",accel_uncertain:"Uncertain"
     };
@@ -802,11 +803,13 @@
     var m={"":{title:"Last check"},"< Back":function(){restMenu(s);}};
     if(!last)m["Status"]=readOnly("No 5-min bin");
     m["Result"]=readOnly(!last?"--":last.result===254?"Unworn":
+      last.result===253?"HRM failed":
       last.result===255?"Unknown":"Rest "+(1+Math.min(4,Math.floor(Math.min(99,last.result)/20))));
     m["Reason"]=readOnly(last?(reasons[last.reason]||last.reason):"--");
     m["Pulse"]=readOnly(last?(hr[last.pulse]||"?"):"--");
     m["Hold"]=readOnly(d&&d.holdState===1?"Worn":
-      d&&d.holdState===2?"Unworn":"Unknown");
+      d&&d.holdState===2?"Unworn":
+      d&&d.holdState===3?"HRM failed":"Unknown");
     m["Conf."]=readOnly(last&&last.confidence>=0?last.confidence+"%":"--");
     m["3D drift"]=readOnly(last&&isFinite(last.driftG)?last.driftG+" g":"--");
     m["Peak sum"]=readOnly(last&&typeof last.activity300==="number"&&isFinite(last.activity300)?
