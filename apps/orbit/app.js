@@ -958,10 +958,9 @@
     drawEarth(sol);
     drawEclipse(sol); // Earth's shadow first.
     var moon=drawMoon();
-    drawRest(sol); // Rest bars overwrite the Moon, as requested.
-    drawObserver(sol); // The red location point is still the topmost overlay.
-    /* Keep hour numerals visible over both sides of the Moon. */
-    drawOrbitHours(sol);
+    drawOrbitHours(sol); // Dial numerals are behind the rest graph.
+    drawRest(sol); // Rest bars/arcs take priority over the Moon and dial.
+    drawObserver(sol); // Red observer marker stays above the rest graph.
     drawLocationStatus(moon);
     drawDateTime(moon);
     try{Bangle.drawWidgets();}catch(e){}
