@@ -279,7 +279,7 @@ assert.strictEqual(off.b.listenerCount("accel"),0);
 // Menus expose five-level height, seven 3-axis peak gates and four boundaries.
 const menus=[];app.events.showMenu=m=>menus.push(m);
 app.execute("settings.js")(()=>{});
-assert.strictEqual(menus.at(-1)[""].title,"tenkyu v0.079");
+assert.strictEqual(menus.at(-1)[""].title,"tenkyu v0.080");
 assert(!menus.at(-1)["Version"],"Version is a static title, not a button");
 menus.at(-1)["Rest graph"]();
 assert.strictEqual(menus.at(-1)["Max bar height"].max,14);
@@ -307,6 +307,7 @@ menus.at(-1)["Last check"]();
 assert(menus.at(-1)["Reason"]);
 assert(menus.at(-1)["Pulse"]);
 assert(menus.at(-1)["Hold"]);
+assert(menus.at(-1)["Shared HRM"]);
 assert(menus.at(-1)["Conf."]);
 assert(menus.at(-1)["3D drift"]);
 assert(menus.at(-1)["Peak sum"]);
@@ -496,6 +497,32 @@ assert.strictEqual(nw.b.listenerCount("HRM"),0);
 const moving=runWear(null,t=>({x:.6+.02*t/S,y:.8,z:0}));
 assert.deepStrictEqual(moving.power,[],
   "Motion establishes wearing without any optical HRM probe");
+// Reuse HRM readings from another app's power request, without
+// overriding its power state or starting a duplicate optical probe.
+const shared=environment(base,{restWearEnabled:true});
+shared.b.isHRMOn=()=>true;
+shared.execute("boot.js");
+for(let t=0;t<=S*2;t+=1000){
+  shared.advance(base+t);
+  shared.b.emit("accel",{x:0,y:0,z:1});
+  if(t===260000)shared.b.emit("HRM",{bpm:68,confidence:95});
+}
+assert.deepStrictEqual(shared.power,[],
+  "Reliable HRM reading from an existing owner must avoid own power requests");
+assert.strictEqual(shared.b.orbitRest.getEngine().snapshot().levels.slice(-2),"64");
+assert(shared.b.orbitRest.getDiagnostics().sharedPulseCount>=1);
+assert.strictEqual(shared.b.listenerCount("HRM"),1);
+// A powered external sensor without a good pulse is observed passively
+// and never switched off by tenkyu (even when the window times out).
+const passive=environment(base,{restWearEnabled:true});
+passive.b.isHRMOn=()=>true;
+passive.execute("boot.js");
+for(let t=0;t<=S;t+=1000){
+  passive.advance(base+t);passive.b.emit("accel",{x:0,y:0,z:1});
+  if(t===280000)passive.b.emit("HRM",{bpm:0,confidence:0});
+}
+assert.deepStrictEqual(passive.power,[]);
+assert.strictEqual(passive.b.orbitRest.getEngine().snapshot().levels.slice(-2),"fe");
 const detected=runWear({bpm:60,confidence:91});
 assert.strictEqual(detected.b.orbitRest.getEngine().level(base/S),100);
 assert.deepStrictEqual(detected.power,[[base+270000,1,"orbitrest"],[base+280000,0,"orbitrest"]]);
