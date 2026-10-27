@@ -279,7 +279,7 @@ assert.strictEqual(off.b.listenerCount("accel"),0);
 // Menus expose five-level height, seven 3-axis peak gates and four boundaries.
 const menus=[];app.events.showMenu=m=>menus.push(m);
 app.execute("settings.js")(()=>{});
-assert.strictEqual(menus.at(-1)[""].title,"tenkyu v0.078");
+assert.strictEqual(menus.at(-1)[""].title,"tenkyu v0.079");
 assert(!menus.at(-1)["Version"],"Version is a static title, not a button");
 menus.at(-1)["Rest graph"]();
 assert.strictEqual(menus.at(-1)["Max bar height"].max,14);
@@ -386,7 +386,7 @@ function runWear(pulse,zAt=()=>1,cfg={}){
     h.advance(base+t);
     const v=zAt(t),xyz=typeof v==="number"?{x:0,y:0,z:v}:v;
     h.b.emit("accel",Object.assign({mag:1,diff:0},xyz));
-    if(t===280000&&pulse)h.b.emit("HRM",pulse);
+    if(t===280000)h.b.emit("HRM",pulse||{bpm:0,confidence:0});
   }
   return h;
 }
@@ -443,6 +443,7 @@ lateStart.execute("boot.js");
 for(let t=3000;t<=S;t+=1000){
   lateStart.advance(base+t);
   lateStart.b.emit("accel",{x:0,y:0,z:1,mag:1,diff:0});
+  if(t===280000)lateStart.b.emit("HRM",{bpm:0,confidence:0});
 }
 assert.strictEqual(lateStart.b.orbitRest.getEngine().snapshot().levels.slice(-2),"fe");
 assert.strictEqual(lateStart.b.orbitRest.getDiagnostics().recent.at(-1).reason,"nonwear");
@@ -454,8 +455,27 @@ assert.strictEqual(skipped.getDiagnostics().recent.at(-1).reason,"nonwear_hrm_un
 const failed=r.create({wearEnabled:true,nowMs:base});
 feed(failed,base,base+S);
 failed.failedProbe(base/S);
-assert.strictEqual(failed.snapshot().levels.slice(-2),"fe");
+assert.strictEqual(failed.snapshot().levels.slice(-2),"fd");
 assert.strictEqual(failed.getDiagnostics().recent.at(-1).reason,"nonwear_hrm_failed");
+const whiteLines=restStrokes(failed,base+S+1000);
+assert.strictEqual(whiteLines.length,1);
+assert.strictEqual(whiteLines[0].color,0xFFFF,
+  "Failed HRM must produce a white orbital arc");
+// Failure backoff: +60 seconds once, then +900 seconds.
+const retry=environment(base,{restWearEnabled:true});
+let badStarts=0;
+retry.b.setHRMPower=on=>{if(on)badStarts++;return !on;};
+retry.execute("boot.js");
+for(let t=0;t<=1230000;t+=1000){
+  retry.advance(base+t);
+  retry.b.emit("accel",{x:0,y:0,z:1});
+  if(t===270000||t===330000||t===1230000)
+    assert.strictEqual(badStarts,t===270000?1:t===330000?2:3);
+}
+assert.strictEqual(badStarts,3);
+assert.strictEqual(retry.b.orbitRest.getEngine().snapshot().levels.slice(-2),"fd");
+assert(restStrokes(retry.b.orbitRest.getEngine(),base+1230000)
+  .every(line=>line.color===0xFFFF));
 const rejected=environment(base,{restWearEnabled:true});
 rejected.b.setHRMPower=(on)=>!on; // Hardware declines the HRM-power request.
 rejected.execute("boot.js");
@@ -463,7 +483,7 @@ for(let t=0;t<=S;t+=1000){
   rejected.advance(base+t);
   rejected.b.emit("accel",{x:0,y:0,z:1});
 }
-assert.strictEqual(rejected.b.orbitRest.getEngine().snapshot().levels.slice(-2),"fe");
+assert.strictEqual(rejected.b.orbitRest.getEngine().snapshot().levels.slice(-2),"fd");
 assert.strictEqual(rejected.b.orbitRest.getDiagnostics().recent.at(-1).reason,"nonwear_hrm_failed");
 // A late no-pulse callback still updates the just-closed five-minute bin.
 skipped.absentPulse(base/S);
@@ -568,6 +588,7 @@ assert(endTimer,"HRM end timer must be scheduled");
 endTimer.at+=3500;
 for(let t=271000;t<=S;t+=1000){
   delayed.advance(base+t);delayed.b.emit("accel",{x:0,y:0,z:1});
+  if(t===280000)delayed.b.emit("HRM",{bpm:0,confidence:0});
 }
 assert.strictEqual(delayed.b.orbitRest.getEngine().snapshot().levels.slice(-2),"fe");
 assert.strictEqual(delayed.b.orbitRest.getDiagnostics().recent.at(-1).reason,"nonwear_hrm_unknown");
