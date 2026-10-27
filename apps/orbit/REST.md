@@ -1,5 +1,33 @@
 # Rest bar and power management (tenkyu v0.068)
 
+## White HRM-failure arcs and backoff (v0.079)
+
+A five-minute interval with >=270 s of valid XYZ coverage and
+motionless 3D acceleration now draws a **white orbit arc** for a failed
+HRM measurement (new persistent code FD / 253), distinct from the
+**red orbit arc** for no accepted pulse after at least one valid HRM
+sample was actually returned (FE / 254). Missing accelerometer
+coverage remains unpainted (FF / 255). Worn stages still use green
+and yellow radial bars.
+
+Failure means the HRM cannot be started, the API is unavailable,
+or the complete optical measurement window produced zero well-formed
+HRM events. A successful sensor event with 0 BPM or insufficient
+confidence is evidence of no accepted pulse, not a sensor I/O failure.
+One minute after the first failure, the watch retries. If that also fails,
+it retries every 15 minutes, timed from the failure. Until the accelerometer
+changes, consecutive eligible bins retain a white indication.
+A valid pulse or a completed no-pulse observation holds the resulting
+worn/unworn state until motion. Significant movement resets the retry
+backoff; invalid/missing accelerometer data clears the retained state.
+No data with under 270 s coverage is displayed as white or red.
+
+**日本語：** 心拍計が起動できないか、有効な出力が全くない
+測定失敗では、静止している区間を白線で表示します。
+最初の失敗は1分後、それ以降は15分間隔で再測定します。
+計測値を取得したものの有効な脈拍がない場合は赤線、
+加速度データ不足では何も描きません。
+
 ## Non-wear/quiet-worn state retention (v0.077)
 
 With **Rest graph → Non-wear → Keep until move** enabled (default), a
