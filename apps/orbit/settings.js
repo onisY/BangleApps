@@ -1,8 +1,8 @@
-/* tenkyu 0.079: settings, rest diagnostics and flash-backed location picker. */
+/* tenkyu 0.080: settings, rest diagnostics and flash-backed location picker. */
 (function(back){
   var Storage=require("Storage");
   // Read-only version display: title is not a selectable button.
-  var VERSION="0.079";
+  var VERSION="0.080";
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
   var REST_ACTIVITY_DEFAULTS=[0.5,2,6,18];
   // Bangle.js 2 has a 3-bit colour screen (8 actual dial colours).
@@ -810,6 +810,7 @@
     m["Hold"]=readOnly(d&&d.holdState===1?"Worn":
       d&&d.holdState===2?"Unworn":
       d&&d.holdState===3?"HRM failed":"Unknown");
+    m["Shared HRM"]=readOnly(d?d.sharedPulseCount||0:0);
     m["Conf."]=readOnly(last&&last.confidence>=0?last.confidence+"%":"--");
     m["3D drift"]=readOnly(last&&isFinite(last.driftG)?last.driftG+" g":"--");
     m["Peak sum"]=readOnly(last&&typeof last.activity300==="number"&&isFinite(last.activity300)?
