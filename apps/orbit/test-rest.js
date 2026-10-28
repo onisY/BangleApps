@@ -505,7 +505,8 @@ assert.strictEqual(skipped.snapshot().levels.slice(-2),"fe");
 assert.strictEqual(skipped.getDiagnostics().recent.at(-1).reason,"nonwear");
 assert(nw.b.orbitRest.getEngine().snapshot().levels.endsWith("fe"));
 assert.deepStrictEqual(nw.power,[[base+270000,1,"orbitrest"],[base+S,0,"orbitrest"]]);
-assert.strictEqual(nw.b.listenerCount("HRM"),0);
+assert.strictEqual(nw.b.listenerCount("HRM"),1,
+  "Shared HRM listener stays attached for readings from other apps");
 // Motion detected before the HRM window must save all optical LED energy.
 const moving=runWear(null,t=>({x:.6+.02*t/S,y:.8,z:0}));
 assert.deepStrictEqual(moving.power,[],
