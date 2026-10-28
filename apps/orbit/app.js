@@ -1009,6 +1009,11 @@
   function drawBase(){
     cancelProgressive();
     busy=true;
+    // A timer may request a normal redraw before the staged opening has
+    // completed; build any missing caches only in that exceptional path.
+    if(!earthCacheReady){buildEarthMapCache();earthCacheReady=true;}
+    if(!moonCacheReady){buildMoonCache();moonCacheReady=true;}
+    if(!restReady){initRest();restReady=true;}
     TIMEBOX=undefined;
     eclipseActive=updateEclipse();
     lastClockMinute=Math.floor(Date.now()/60000);
@@ -1220,6 +1225,7 @@
 
   function onLCD(on){
     if(!on){
+      cancelProgressive(); // Don't spend CPU on layers while LCD is off.
       try{Bangle.setLocked(true);}catch(e){}
       clear(minuteTimer);minuteTimer=undefined;
       clear(transitionTimer);transitionTimer=undefined;
