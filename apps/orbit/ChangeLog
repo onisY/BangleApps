@@ -24,3 +24,4 @@
 0.078: Draw the rest graph over Roman dial numerals while keeping the observer marker on top.
 0.079: Display HRM measurement failures as white orbital arcs, separate from red non-wear arcs, and retry failed measurements after 1 minute then every 15 minutes.
 0.080: Reuse reliable live HRM events from other applications without claiming their optical-sensor power request; keep tenkyu-owned HRM power management and show shared readings in diagnostics.
+0.081: Show the actual Sun and orbit immediately on first clock opening, then progressively fill in Earth, Moon/eclipse/dial and the rest graph/observer/widgets with visible LCD flushes between steps. Defer costly initial map, Moon and recorder initialization until the first frame is visible. Preserve single-flip periodic redraws and cancel pending staged frames on navigation or exit.
