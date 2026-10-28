@@ -92,6 +92,7 @@
   var REST_MAX_HEIGHT=Math.max(1,Math.min(14,isFinite(cfg.restBarHeight)?cfg.restBarHeight|0:10));
   var restService;
   var busy=false,killed=false,minuteTimer,idleTimer,tapTimer,transitionTimer;
+  var renderTimer,renderGeneration=0,earthCacheReady=false,moonCacheReady=false,restReady=false;
   var mode="tenkyu",interactive=true,tapCount=0,resetOnWake=false;
   var selectedDayOffset=0,hasSelectedDate=false;
   var nativeDrawWidgets,widgetDrawWrapper;
@@ -947,7 +948,64 @@
       isDayAt:restIsDayAt});
   }
 
+  function cancelProgressive(){
+    renderGeneration++;
+    clear(renderTimer);renderTimer=undefined;
+    busy=false;
+  }
+  // On opening/returning to the clock, show each completed layer rather
+  // than holding the "Orbit..." acknowledgement until the final g.flip().
+  // The inexpensive initial Sun/orbit frame precedes map/HRM/eclipse loads.
+  // Periodic five-minute refreshes still use the single-flip drawBase().
+  function drawProgressively(){
+    if(killed||mode!=="tenkyu")return;
+    cancelProgressive();busy=true;
+    var ticket=renderGeneration,step=0,sol,moon;
+    TIMEBOX=undefined;
+    lastClockMinute=Math.floor(Date.now()/60000);
+    lastBaseBucket=Math.floor(Date.now()/300000);
+    g.reset().setBgColor(BLACK).setColor(BLACK).clear();
+    drawSun();
+    g.setColor(0x8410).drawCircle(EARTHX,EARTHY,MOONORBIT);
+    g.setColor(CYAN).drawCircle(EARTHX,EARTHY,EARTHR);
+    try{g.flip();}catch(e){}
+    function nextLayer(){
+      renderTimer=undefined;
+      if(killed||mode!=="tenkyu"||ticket!==renderGeneration)return;
+      try{
+        if(step===0){
+          if(!earthCacheReady){buildEarthMapCache();earthCacheReady=true;}
+          sol=safeSolar();
+          drawEarth(sol);
+        }else if(step===1){
+          eclipseActive=updateEclipse();
+          drawEclipse(sol);
+          if(!moonCacheReady){buildMoonCache();moonCacheReady=true;}
+          moon=drawMoon();
+          drawOrbitHours(sol);
+        }else{
+          if(!restReady){initRest();restReady=true;}
+          drawRest(sol);drawObserver(sol);
+          drawLocationStatus(moon);drawDateTime(moon);
+          try{Bangle.drawWidgets();}catch(e){}
+          drawHeaderClock();
+        }
+        try{g.flip();}catch(e){}
+        step++;
+        if(step<3)renderTimer=setTimeout(nextLayer,0);
+        else busy=false;
+      }catch(e){
+        // A failed incremental stage must not leave touch permanently blocked.
+        cancelProgressive();
+        try{drawBase();}catch(ex){busy=false;}
+      }
+    }
+    renderTimer=setTimeout(nextLayer,0);
+  }
+
   function drawBase(){
+    cancelProgressive();
+    busy=true;
     TIMEBOX=undefined;
     eclipseActive=updateEclipse();
     lastClockMinute=Math.floor(Date.now()/60000);
@@ -1005,6 +1063,7 @@
   function queueTransition(label,run){
     if(killed)return;
     stopOrbitTimers();
+    cancelProgressive();
     clear(transitionTimer);transitionTimer=undefined;
     mode="transition";interactive=false;
     try{Bangle.setLocked(false);}catch(e){}
@@ -1047,8 +1106,7 @@
     if(killed)return;
     if(calendar&&calendar.isActive())calendar.stop();
     mode="tenkyu";
-    busy=false;
-    drawBase();
+    drawProgressively();
     armMinute();
     interactive=!!keepInteractive;
     if(interactive){
@@ -1185,7 +1243,7 @@
       try{Bangle.setBacklight(true);}catch(e){}
       // Existing clock drawing may be expensive after LCD power restoration.
       queueTransition("Orbit...",function(){
-        mode="tenkyu";interactive=true;drawBase();armMinute();armIdle();
+        mode="tenkyu";interactive=true;drawProgressively();armMinute();armIdle();
       });
     }
   }
@@ -1225,7 +1283,7 @@
     if(killed)return;
     killed=true;
     clear(transitionTimer);transitionTimer=undefined;
-    stopOrbitTimers();
+    stopOrbitTimers();cancelProgressive();
     if(eclipseDisplay)eclipseDisplay.reset();
     // The boot-owned recorder keeps running in menus and other apps.
     restService=undefined;
@@ -1242,9 +1300,7 @@
   layoutBodies();
   buildSunCache();
   buildLightingCache();
-  buildEarthMapCache();
-  buildMoonCache();
-  initRest();
+  // Defer costly map/ephemeris/rest loading until after the first real frame.
   try{Bangle.setUI({mode:"custom",clock:1,touch:onTouch,swipe:onSwipe,btn:onButton});}catch(e){}
   /* Load widgets only after setUI, as required for clock/widget state tracking. */
   try{if(typeof WIDGETS==="undefined")Bangle.loadWidgets();}catch(e){}
@@ -1254,7 +1310,7 @@
   Bangle.on("lcdPower",onLCD);
   E.on("kill",cleanup);
   try{Bangle.setLocked(false);}catch(e){}
-  drawBase();
+  drawProgressively();
   armMinute();
   armIdle(); // Also enforce a finite timeout when the system timeout is zero.
 })();
