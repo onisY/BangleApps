@@ -112,6 +112,23 @@ function appHarness(enabled,iso){
     E:{on:(n,f)=>events[n]=f,removeListener:()=>{}},setTimeout:(f,ms)=>{timers.set(++nextId,{f,ms});return nextId;},
     clearTimeout:id=>timers.delete(id),load:()=>{}};
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,"app.js"),"utf8"),context);
+  // Opening is progressive: the Sun/orbit are flushed before heavy data
+  // loads, then Earth, eclipse/Moon and overlays appear in three turns.
+  const firstFlush=log.findIndex(x=>x.op==="flip");
+  assert(firstFlush>=0&&log.slice(0,firstFlush).some(x=>
+    x.op==="fillCircle"&&x.color===0xFFE0));
+  assert(!reads.some(n=>n.startsWith("orbit.ecl")),
+    "Opening frame must not wait for the eclipse engine");
+  let stages=0;
+  for(;;){
+    const due=[...timers].find(x=>x[1].ms===0);
+    if(!due)break;
+    timers.delete(due[0]);due[1].f();
+    assert(++stages<=3,"Opening must have a bounded number of layers");
+  }
+  assert.strictEqual(stages,3);
+  assert(log.filter(x=>x.op==="flip").length>=4,
+    "Clock layers must visibly appear before rendering completes");
   return {timers,events,log,reads,advance:ms=>now+=ms};
 }
 const app=appHarness(true,refs[1].date);
