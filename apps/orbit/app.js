@@ -979,6 +979,9 @@
           drawEarth(sol);
         }else if(step===1){
           eclipseActive=updateEclipse();
+          // The first minute timer was armed before eclipse discovery.
+          // Switch to 30-second updates when the initial shadow is active.
+          if(eclipseActive)armMinute();
           drawEclipse(sol);
           if(!moonCacheReady){buildMoonCache();moonCacheReady=true;}
           moon=drawMoon();
