@@ -558,7 +558,8 @@ assert.deepStrictEqual(interrupted.power.slice(0,2).map(q=>q[1]),[1,0]);
 assert(interrupted.power[1][0]<base+S,
   "Motion must turn the optical sensor off before its timeout");
 assert.strictEqual(interrupted.b.orbitRest.isProbing(),false);
-assert.strictEqual(interrupted.b.listenerCount("HRM"),0);
+assert.strictEqual(interrupted.b.listenerCount("HRM"),1,
+  "Shared HRM event listener remains active when an owned probe stops");
 assert.strictEqual(detected.b.orbitRest.getDiagnostics().recent.at(-1).confidence,91);
 assert.strictEqual(runWear({bpm:60,confidence:90}).b.orbitRest.getEngine().level(base/S),0,
   "Confidence equal to configured threshold is insufficient");
