@@ -227,6 +227,18 @@ function environment(start,config={},data,extraModules){
 const app=environment(base);
 app.execute("boot.js");assert.strictEqual(app.b.listenerCount("accel"),1);
 app.execute("app.js");assert.strictEqual(app.b.listenerCount("accel"),1);
+// First display update precedes Earth-map caching and full globe rendering.
+assert(app.log.some(e=>e.op==="fillCircle"),
+  "Opening the clock should immediately paint the Sun");
+assert(!app.log.some(e=>e.op==="fillPoly"),
+  "Map and eclipse rendering should be deferred after first LCD flush");
+assert(app.log.some(e=>e.op==="flip"),
+  "First layer must be made visible before expensive rendering");
+app.advance(base); // Drain the three zero-delay stages.
+assert(app.log.some(e=>e.op==="fillPoly"),
+  "Earth and Moon must appear on subsequent frames");
+const initialFlipCount=app.log.filter(e=>e.op==="flip").length;
+assert(initialFlipCount>=4,"Opening must visibly flush each incremental stage");
 assert([...app.timers.values()].some(x=>x.ms<=10000),
   "Backlight must have a finite default-off timer");
 app.advance(base+10000);
@@ -248,6 +260,7 @@ assert(graph>=0&&observer>graph);
 const layered=environment(base,{orbitHourEnabled:true,orbitHourStep:3,restWearEnabled:false},
   {"orbit.rest.json":{v:3,end:base/S-1,levels:"ff".repeat(287)+"64"}});
 layered.execute("boot.js");layered.execute("app.js");
+layered.advance(base); // Complete staged initial layers.
 const dialIndices=[];
 layered.log.forEach((e,i)=>{
   if(e.op==="drawString"&&/^(XII|I|II|III|IV|V|VI|VII|VIII|IX|X|XI)$/.test(e.args[0]))
@@ -279,7 +292,7 @@ assert.strictEqual(off.b.listenerCount("accel"),0);
 // Menus expose five-level height, seven 3-axis peak gates and four boundaries.
 const menus=[];app.events.showMenu=m=>menus.push(m);
 app.execute("settings.js")(()=>{});
-assert.strictEqual(menus.at(-1)[""].title,"tenkyu v0.080");
+assert.strictEqual(menus.at(-1)[""].title,"tenkyu v0.081");
 assert(!menus.at(-1)["Version"],"Version is a static title, not a button");
 menus.at(-1)["Rest graph"]();
 assert.strictEqual(menus.at(-1)["Max bar height"].max,14);
@@ -373,7 +386,7 @@ for(const [iso,c] of [["2026-10-19T18:00:00Z",0x07e0],["2026-10-19T06:00:00Z",0x
   const now=Date.parse(iso),end=Math.floor(now/S);
   const h=environment(now,{},{"orbit.rest.json":{v:2,end:end-1,
     levels:"64".repeat(288),active:{bucket:end,covered:0,peaks:0,quietPeaks:0}}});
-  h.execute("boot.js");h.execute("app.js");
+  h.execute("boot.js");h.execute("app.js");h.advance(now);
   const bars=h.log.filter(x=>x.op==="drawLine"&&(x.color===0x07e0||x.color===0xffe0));
   assert.strictEqual(bars.length,288);
   assert(bars.some(x=>x.color===0x07e0)&&bars.some(x=>x.color===0xffe0));
@@ -635,7 +648,7 @@ const fakeCalendar="({create:function(){var live=false,onReturn;" +
   "g.drawString('CALENDAR READY',10,80);g.flip()}," +
   "touch:function(){if(onReturn)onReturn(undefined)},swipe:function(){}};}})";
 const nav=environment(base,{},undefined,{"orbit.cal.js":fakeCalendar});
-nav.execute("boot.js");nav.execute("app.js");nav.log.length=0;
+nav.execute("boot.js");nav.execute("app.js");nav.advance(base);nav.log.length=0;
 nav.b.ui.touch(1,{x:50,y:70});
 assert(nav.log.some(x=>x.op==="fillCircle"),"First tap needs instant cue");
 nav.advance(base+400);
@@ -653,7 +666,7 @@ nav.advance(base+402);
 assert(nav.log.filter(x=>x.op==="drawString").length>beforeReturn);
 const navSettings=environment(base,{},undefined,{"orbit.settings.js":
   "(function(back){g.drawString('SETTINGS READY',10,80);g.flip();})"});
-navSettings.execute("boot.js");navSettings.execute("app.js");
+navSettings.execute("boot.js");navSettings.execute("app.js");navSettings.advance(base);
 navSettings.log.length=0;
 navSettings.b.ui.touch(1,{x:30,y:60});
 navSettings.b.ui.touch(1,{x:30,y:60});
@@ -662,14 +675,14 @@ assert(!navSettings.log.some(x=>x.op==="drawString"&&x.args[0]==="SETTINGS READY
 navSettings.advance(base+1);
 assert(navSettings.log.some(x=>x.op==="drawString"&&x.args[0]==="SETTINGS READY"));
 const navWake=environment(base);
-navWake.execute("app.js");navWake.log.length=0;
+navWake.execute("app.js");navWake.advance(base);navWake.log.length=0;
 navWake.b.emit("lcdPower",true);
 assert(navWake.log.some(x=>x.op==="drawString"&&x.args[0]==="Orbit..."));
 navWake.advance(base+1);
 assert([...navWake.timers.values()].some(x=>x.ms<=10000),
   "LCD wake must re-arm its idle timeout");
 const navButton=environment(base);
-navButton.execute("app.js");navButton.log.length=0;
+navButton.execute("app.js");navButton.advance(base);navButton.log.length=0;
 navButton.b.ui.btn();
 assert(navButton.log.some(x=>x.op==="drawString"&&x.args[0]==="Launcher..."));
 assert(!navButton.log.some(x=>x.op==="showLauncher"));
