@@ -95,7 +95,7 @@
   var renderTimer,renderGeneration=0,earthCacheReady=false,moonCacheReady=false,restReady=false;
   // Volatile, low-overhead profiler: no flash writes and no extra redraws.
   // Date.now() has 1 ms resolution; values below 1 ms round to zero.
-  var perf={full:{},staged:{},count:0};
+  var perf={full:{},staged:{},restParts:{},count:0};
   Bangle.orbitPerf=perf;
   function timed(target,key,fn){
     var start=Date.now(),out=fn(),dt=Date.now()-start;
@@ -958,7 +958,7 @@
     restService.draw(g,{nowMs:now,radiusPx:MOONORBIT,
       maxHeightPx:REST_MAX_HEIGHT,cx:EARTHX,cy:EARTHY,south:VIEW_SOUTH,
       currentAngleRad:SUNANG+(VIEW_SOUTH?sol.ha:-sol.ha),
-      isDayAt:restIsDayAt});
+      isDayAt:restIsDayAt,perf:perf.restParts});
   }
 
   function cancelProgressive(){
