@@ -2,7 +2,7 @@
 (function(back){
   var Storage=require("Storage");
   // Read-only version display: title is not a selectable button.
-  var VERSION="0.083";
+  var VERSION="0.084";
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
   var REST_ACTIVITY_DEFAULTS=[0.5,2,6,18];
   // Bangle.js 2 has a 3-bit colour screen (8 actual dial colours).
@@ -834,6 +834,11 @@
       m["Full Moon"]=row(f.moon);
       m["Full Dial"]=row(f.dial);
       m["Full Rest"]=row(f.rest);
+      var z=p.restParts||{};
+      m["Rest day"]=row(z.day);
+      m["Rest lines"]=row(z.lines);
+      m["Rest coords"]=row(z.coords);
+      m["Rest bars"]={value:0,min:0,max:0,format:function(){return String(z.bars||0);}};
       m["Stage total"]=row(q.total);
       m["Stage Earth"]=row(q.earth);
       m["Stage Moon"]=row(q.moon);
