@@ -498,7 +498,7 @@ function draw(graphics,engine,map){
   // Rotate each arc endpoint using constants to avoid extra trig calls.
   var step=dir*2*Math.PI/COUNT,cs=Math.cos(step),ss=Math.sin(step);
   var lastBucket=-2,ca=0,sa=0;
-  var perf=map.perf,bars=0;
+  var perf=map.perf,bars=0,drawEnabled=!map.diagnosticNoLines;
   function pointAt(bucket){
     // When bins are contiguous, reuse a single rotation rather than
     // recomputing sine/cosine twice for each of up to 288 bars.
@@ -513,11 +513,11 @@ function draw(graphics,engine,map){
   }
   function drawArc(bucket,color){
     pointAt(bucket);
-    graphics.setColor(color);
+    if(drawEnabled){graphics.setColor(color);
     graphics.drawLine(
       Math.round(map.cx+r*(ca*cs+sa*ss)),
       Math.round(map.cy+r*(sa*cs-ca*ss)),
-      Math.round(map.cx+r*ca),Math.round(map.cy+r*sa));
+      Math.round(map.cx+r*ca),Math.round(map.cy+r*sa));}
     bars++;
   }
   engine.visit(now,function(bucket,value){
@@ -526,9 +526,9 @@ function draw(graphics,engine,map){
     var endMs=(bucket+1)*SLOT_MS,outer=r+height*stageFor(value)/5;
     // Match the observer ray's geometric sunrise/sunset at this bar's time.
     var day=map.isDayAt&&map.isDayAt(endMs);
-    graphics.setColor(day?0x07E0:0xFFE0);
+    if(drawEnabled){graphics.setColor(day?0x07E0:0xFFE0);
     graphics.drawLine(Math.round(map.cx+r*ca),Math.round(map.cy+r*sa),
-      Math.round(map.cx+outer*ca),Math.round(map.cy+outer*sa));
+      Math.round(map.cx+outer*ca),Math.round(map.cy+outer*sa));}
     bars++;
   },function(bucket){
     drawArc(bucket,0xF800); // Confirmed no pulse: red.
