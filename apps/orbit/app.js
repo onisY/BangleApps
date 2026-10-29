@@ -93,6 +93,19 @@
   var restService;
   var busy=false,killed=false,minuteTimer,idleTimer,tapTimer,transitionTimer;
   var renderTimer,renderGeneration=0,earthCacheReady=false,moonCacheReady=false,restReady=false;
+  // Volatile, low-overhead profiler: no flash writes and no extra redraws.
+  // Date.now() has 1 ms resolution; values below 1 ms round to zero.
+  var perf={full:{},staged:{},count:0};
+  Bangle.orbitPerf=perf;
+  function timed(target,key,fn){
+    var start=Date.now(),out=fn(),dt=Date.now()-start;
+    target[key]=dt;
+    return out;
+  }
+  function endPerf(target,start){
+    target.total=Date.now()-start;
+    target.updated=Date.now();
+  }
   var mode="tenkyu",interactive=true,tapCount=0,resetOnWake=false;
   var selectedDayOffset=0,hasSelectedDate=false;
   var nativeDrawWidgets,widgetDrawWrapper;
@@ -961,6 +974,7 @@
     if(killed||mode!=="tenkyu")return;
     cancelProgressive();busy=true;
     var ticket=renderGeneration,step=0,sol,moon;
+    var perfStart=Date.now(),stageStart;
     TIMEBOX=undefined;
     lastClockMinute=Math.floor(Date.now()/60000);
     lastBaseBucket=Math.floor(Date.now()/300000);
@@ -973,10 +987,11 @@
       renderTimer=undefined;
       if(killed||mode!=="tenkyu"||ticket!==renderGeneration)return;
       try{
+        stageStart=Date.now();
         if(step===0){
           if(!earthCacheReady){buildEarthMapCache();earthCacheReady=true;}
           sol=safeSolar();
-          drawEarth(sol);
+          timed(perf.staged,"earth",function(){drawEarth(sol);});
         }else if(step===1){
           eclipseActive=updateEclipse();
           // The first minute timer was armed before eclipse discovery.
@@ -984,19 +999,24 @@
           if(eclipseActive)armMinute();
           drawEclipse(sol);
           if(!moonCacheReady){buildMoonCache();moonCacheReady=true;}
-          moon=drawMoon();
-          drawOrbitHours(sol);
+          moon=timed(perf.staged,"moon",drawMoon);
+          timed(perf.staged,"dial",function(){drawOrbitHours(sol);});
         }else{
           if(!restReady){initRest();restReady=true;}
-          drawRest(sol);drawObserver(sol);
+          timed(perf.staged,"rest",function(){drawRest(sol);});
+          drawObserver(sol);
           drawLocationStatus(moon);drawDateTime(moon);
           try{Bangle.drawWidgets();}catch(e){}
           drawHeaderClock();
         }
         try{g.flip();}catch(e){}
+        perf.staged["stage"+step]=Date.now()-stageStart;
         step++;
         if(step<3)renderTimer=setTimeout(nextLayer,0);
-        else busy=false;
+        else{
+          endPerf(perf.staged,perfStart);
+          busy=false;
+        }
       }catch(e){
         // A failed incremental stage must not leave touch permanently blocked.
         cancelProgressive();
@@ -1009,6 +1029,7 @@
   function drawBase(){
     cancelProgressive();
     busy=true;
+    var perfStart=Date.now();
     // A timer may request a normal redraw before the staged opening has
     // completed; build any missing caches only in that exceptional path.
     if(!earthCacheReady){buildEarthMapCache();earthCacheReady=true;}
@@ -1021,17 +1042,19 @@
     g.reset().setBgColor(BLACK).setColor(BLACK).clear();
     drawSun();
     var sol=safeSolar();
-    drawEarth(sol);
+    timed(perf.full,"earth",function(){drawEarth(sol);});
     drawEclipse(sol); // Earth's shadow first.
-    var moon=drawMoon();
-    drawOrbitHours(sol); // Dial numerals are behind the rest graph.
-    drawRest(sol); // Rest bars/arcs take priority over the Moon and dial.
+    var moon=timed(perf.full,"moon",drawMoon);
+    timed(perf.full,"dial",function(){drawOrbitHours(sol);});
+    timed(perf.full,"rest",function(){drawRest(sol);});
     drawObserver(sol); // Red observer marker stays above the rest graph.
     drawLocationStatus(moon);
     drawDateTime(moon);
     try{Bangle.drawWidgets();}catch(e){}
     drawHeaderClock();
     try{g.flip();}catch(err){}
+    endPerf(perf.full,perfStart);
+    perf.count++;
     busy=false;
   }
 
