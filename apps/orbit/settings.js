@@ -2,7 +2,7 @@
 (function(back){
   var Storage=require("Storage");
   // Read-only version display: title is not a selectable button.
-  var VERSION="0.087";
+  var VERSION="0.088";
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
   var REST_ACTIVITY_DEFAULTS=[0.5,2,6,18];
   // Bangle.js 2 has a 3-bit colour screen (8 actual dial colours).
@@ -839,9 +839,18 @@
       m["Rest detail"]={value:0,min:0,max:0,format:function(){return "Off";}};
       m["Rest bars"]={value:0,min:0,max:0,format:function(){return String(z.bars||0);}};
       m["No lines"]={value:0,min:0,max:0,format:function(){
-        var c=p.restCompare;return c?Math.round(c.noLines)+" ms":"--";}};
+        var c=p.restCompare||Storage.readJSON("orbit.perfdiag.json",1);return c&&typeof c.noLines==="number"?Math.round(c.noLines)+" ms":"--";}};
       m["Run no-lines test"]=function(){
-        if(Bangle.orbitRestCompare)Bangle.orbitRestCompare();
+        var fn=Bangle.orbitRestCompare;
+        if(typeof fn!=="function"){
+          E.showPrompt("Clock diagnostic unavailable. Open tenkyu first.",{title:"Draw timing"}).then(function(){showRenderDiagnostics(s);});
+          return;
+        }
+        var ms=fn();
+        // Persist only this one-off diagnostic result so the Settings UI
+        // can display it even if the clock runtime was replaced.
+        var result={noLines:ms,at:Date.now()};
+        Storage.writeJSON("orbit.perfdiag.json",result);
         showRenderDiagnostics(s);
       };
       m["Stage total"]=row(q.total);
