@@ -2,7 +2,7 @@
 (function(back){
   var Storage=require("Storage");
   // Read-only version display: title is not a selectable button.
-  var VERSION="0.085";
+  var VERSION="0.086";
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
   var REST_ACTIVITY_DEFAULTS=[0.5,2,6,18];
   // Bangle.js 2 has a 3-bit colour screen (8 actual dial colours).
