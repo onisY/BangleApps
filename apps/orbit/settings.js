@@ -2,7 +2,7 @@
 (function(back){
   var Storage=require("Storage");
   // Read-only version display: title is not a selectable button.
-  var VERSION="0.086";
+  var VERSION="0.087";
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
   var REST_ACTIVITY_DEFAULTS=[0.5,2,6,18];
   // Bangle.js 2 has a 3-bit colour screen (8 actual dial colours).
@@ -838,6 +838,12 @@
       // High-frequency diagnostic timers are disabled for performance.
       m["Rest detail"]={value:0,min:0,max:0,format:function(){return "Off";}};
       m["Rest bars"]={value:0,min:0,max:0,format:function(){return String(z.bars||0);}};
+      m["No lines"]={value:0,min:0,max:0,format:function(){
+        var c=p.restCompare;return c?Math.round(c.noLines)+" ms":"--";}};
+      m["Run no-lines test"]=function(){
+        if(Bangle.orbitRestCompare)Bangle.orbitRestCompare();
+        showRenderDiagnostics(s);
+      };
       m["Stage total"]=row(q.total);
       m["Stage Earth"]=row(q.earth);
       m["Stage Moon"]=row(q.moon);
