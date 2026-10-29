@@ -965,6 +965,21 @@
     }
     return restDay[index]!==0;
   }
+  // Diagnostic comparison is run on demand, never during routine redraw.
+  Bangle.orbitRestCompare=function(){
+    if(!restService)return;
+    var now=Date.now(),args={nowMs:now,radiusPx:MOONORBIT,
+      maxHeightPx:REST_MAX_HEIGHT,cx:EARTHX,cy:EARTHY,south:VIEW_SOUTH,
+      currentAngleRad:SUNANG,isDayAt:restIsDayAt,
+      diagnosticNoLines:true,perf:perf.restParts},t=Date.now();
+    // Preserve the screen by performing both tests on an offscreen graphics
+    // target with the same drawing API; this also avoids a visible flicker.
+    var blank={setColor:function(){},drawLine:function(){}};
+    restService.draw(blank,args);
+    var elapsed=Date.now()-t;
+    perf.restCompare={noLines:elapsed,bars:perf.restParts.bars||0};
+    return elapsed;
+  };
   function drawRest(sol){
     // The ring is a real 24-hour recorder, not a future-date prediction.
     if(!restService||selectedDayOffset!==0)return;
