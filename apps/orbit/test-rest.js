@@ -237,6 +237,19 @@ assert(app.log.some(e=>e.op==="flip"),
 app.advance(base); // Drain the three zero-delay stages.
 assert(app.log.some(e=>e.op==="fillPoly"),
   "Earth and Moon must appear on subsequent frames");
+// Only the NIGHT polygon resolution changes. Leave the white coastline,
+// polar cap and final white limb rendering in their existing order.
+const nightMaskAt=app.log.findIndex(e=>e.op==="fillPoly"&&
+  e.color===0x0008&&Array.isArray(e.args[0]));
+assert(nightMaskAt>=0,"Earth night mask must be painted");
+const nightMask=app.log[nightMaskAt].args[0];
+assert.strictEqual(nightMask.length,100,
+  "24 mask subdivisions should yield 50 vertices / 100 XY coordinates");
+assert(nightMask.length/2<=64,"Espruino fillPoly is limited to 64 points");
+assert(app.log.slice(nightMaskAt+1).some(e=>e.op==="drawPoly"&&e.color===0xFFFF),
+  "Preserve white coastlines above the night mask");
+assert(app.log.slice(nightMaskAt+1).some(e=>e.op==="fillCircle"&&e.color===0xFFFF),
+  "Preserve the white polar cap above the night mask");
 const initialFlipCount=app.log.filter(e=>e.op==="flip").length;
 assert(initialFlipCount>=4,"Opening must visibly flush each incremental stage");
 assert([...app.timers.values()].some(x=>x.ms<=10000),
@@ -292,7 +305,7 @@ assert.strictEqual(off.b.listenerCount("accel"),0);
 // Menus expose five-level height, seven 3-axis peak gates and four boundaries.
 const menus=[];app.events.showMenu=m=>menus.push(m);
 app.execute("settings.js")(()=>{});
-assert.strictEqual(menus.at(-1)[""].title,"tenkyu v0.081");
+assert.strictEqual(menus.at(-1)[""].title,"tenkyu v0.082");
 assert(!menus.at(-1)["Version"],"Version is a static title, not a button");
 menus.at(-1)["Rest graph"]();
 assert.strictEqual(menus.at(-1)["Max bar height"].max,14);
