@@ -88,6 +88,9 @@
   var nextEclipseCheck=0;
   // Once per 5-minute slot, cache day/night for the 288 recorded bars.
   var restDay=new Uint8Array(288),restDaySlot=new Uint32Array(288);
+  // 10-minute solar anchors. A stable pair covers two 5-minute bars;
+  // compute an exact bar only when sunrise/sunset lies between anchors.
+  var restAnchor=new Uint8Array(160),restAnchorSlot=new Uint32Array(160);
   var REST_ENABLED=cfg.restEnabled!==false;
   var REST_MAX_HEIGHT=Math.max(1,Math.min(14,isFinite(cfg.restBarHeight)?cfg.restBarHeight|0:10));
   var restService;
@@ -943,11 +946,22 @@
     }
     restService.configure(Storage.readJSON(CFGFILE,1)||{});
   }
+  function restAnchorDay(bucket){
+    var index=bucket%160;
+    if(restAnchorSlot[index]!==bucket){
+      restAnchorSlot[index]=bucket;
+      restAnchor[index]=solarPosition(bucket*600000,TESTLAT,TESTLON).el>=0?1:0;
+    }
+    return restAnchor[index];
+  }
   function restIsDayAt(ms){
     var slot=Math.floor(ms/300000),index=slot%288;
     if(restDaySlot[index]!==slot){
+      var anchor=Math.floor(ms/600000),a=restAnchorDay(anchor),
+          b=restAnchorDay(anchor+1);
+      // Preserve the original 5-minute solar boundary accuracy.
+      restDay[index]=a===b?a:(solarPosition(ms,TESTLAT,TESTLON).el>=0?1:0);
       restDaySlot[index]=slot;
-      restDay[index]=solarPosition(ms,TESTLAT,TESTLON).el>=0?1:0;
     }
     return restDay[index]!==0;
   }
