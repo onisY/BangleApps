@@ -2,7 +2,7 @@
 (function(back){
   var Storage=require("Storage");
   // Read-only version display: title is not a selectable button.
-  var VERSION="0.082";
+  var VERSION="0.083";
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
   var REST_ACTIVITY_DEFAULTS=[0.5,2,6,18];
   // Bangle.js 2 has a 3-bit colour screen (8 actual dial colours).
@@ -821,6 +821,27 @@
     m["Data"]=readOnly(last?last.coverageSec+" s":"--");
     E.showMenu(m);
   }
+  function showRenderDiagnostics(s){
+    var p=Bangle.orbitPerf;
+    function row(v){return {value:0,min:0,max:0,
+      format:function(){return v===undefined?"--":String(v)+" ms";}};}
+    var m={"":{title:"Draw timing"},"< Back":function(){restMenu(s);}};
+    if(!p)m["Status"]=row("Not measured");
+    else{
+      var f=p.full||{},q=p.staged||{};
+      m["Full total"]=row(f.total);
+      m["Full Earth"]=row(f.earth);
+      m["Full Moon"]=row(f.moon);
+      m["Full Dial"]=row(f.dial);
+      m["Full Rest"]=row(f.rest);
+      m["Stage total"]=row(q.total);
+      m["Stage Earth"]=row(q.earth);
+      m["Stage Moon"]=row(q.moon);
+      m["Stage Dial"]=row(q.dial);
+      m["Stage Rest"]=row(q.rest);
+    }
+    E.showMenu(m);
+  }
   function activityMenu(s){
     var cuts=restActivityCuts(s);
     var m={"":{title:"Rest levels"},"< Back":function(){restMenu(s);}};
@@ -848,7 +869,8 @@
       "Peak gate":thresholdMenu(s,"restThreshold"),
       "Stage boundaries":function(){activityMenu(s);},
       "Non-wear":function(){wearMenu(s);},
-      "Last check":function(){showRestDiagnostics(s);}
+      "Last check":function(){showRestDiagnostics(s);},
+      "Draw timing":function(){showRenderDiagnostics(s);}
     });
   }
 
