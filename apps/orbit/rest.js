@@ -498,9 +498,13 @@ function draw(graphics,engine,map){
   // Rotate each arc endpoint using constants to avoid extra trig calls.
   var step=dir*2*Math.PI/COUNT,cs=Math.cos(step),ss=Math.sin(step);
   var lastBucket=-2,ca=0,sa=0;
+  var perf=map.perf,dayMs=0,lineMs=0,coordMs=0,bars=0;
+  var timer=perf&&typeof getTime==="function"?function(){return getTime()*1000;}:null;
+  var t;
   function pointAt(bucket){
     // When bins are contiguous, reuse a single rotation rather than
     // recomputing sine/cosine twice for each of up to 288 bars.
+    if(timer)t=timer();
     if(bucket===lastBucket+1){
       var nc=ca*cs-sa*ss;
       sa=sa*cs+ca*ss;ca=nc;
@@ -509,28 +513,40 @@ function draw(graphics,engine,map){
       ca=Math.cos(a);sa=Math.sin(a);
     }
     lastBucket=bucket;
+    if(timer)coordMs+=timer()-t;
   }
   function drawArc(bucket,color){
     pointAt(bucket);
     graphics.setColor(color);
+    if(timer)t=timer();
     graphics.drawLine(
       Math.round(map.cx+r*(ca*cs+sa*ss)),
       Math.round(map.cy+r*(sa*cs-ca*ss)),
       Math.round(map.cx+r*ca),Math.round(map.cy+r*sa));
+    if(timer)lineMs+=timer()-t;
+    bars++;
   }
   engine.visit(now,function(bucket,value){
     // Plot at the interval END: a completed bar expires exactly 24 h later.
     pointAt(bucket);
     var endMs=(bucket+1)*SLOT_MS,outer=r+height*stageFor(value)/5;
     // Match the observer ray's geometric sunrise/sunset at this bar's time.
-    graphics.setColor(map.isDayAt&&map.isDayAt(endMs)?0x07E0:0xFFE0);
+    if(timer)t=timer();
+    var day=map.isDayAt&&map.isDayAt(endMs);
+    if(timer)dayMs+=timer()-t;
+    graphics.setColor(day?0x07E0:0xFFE0);
+    if(timer)t=timer();
     graphics.drawLine(Math.round(map.cx+r*ca),Math.round(map.cy+r*sa),
       Math.round(map.cx+outer*ca),Math.round(map.cy+outer*sa));
+    if(timer)lineMs+=timer()-t;
+    bars++;
   },function(bucket){
     drawArc(bucket,0xF800); // Confirmed no pulse: red.
   },function(bucket){
     drawArc(bucket,0xFFFF); // HRM failed: white.
   });
+  if(perf){perf.day=Math.round(dayMs);perf.lines=Math.round(lineMs);
+    perf.coords=Math.round(coordMs);perf.bars=bars;}
 }
 exports.create=create;
 exports.install=install;
