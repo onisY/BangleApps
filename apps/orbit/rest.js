@@ -532,7 +532,13 @@ function draw(graphics,engine,map){
     var x1=Math.round(map.cx+r*ca),y1=Math.round(map.cy+r*sa);
     var x2=Math.round(map.cx+outer*ca),y2=Math.round(map.cy+outer*sa);
     if(mode===2)return;
-    var day=map.isDayAt&&map.isDayAt((bucket+1)*SLOT_MS);
+    // Compare bucket indices only. The 24-hour history may cross midnight.
+    var sun=map.dayBuckets,day=false;
+    if(sun){
+      if(sun.polar)day=sun.polar>0;
+      else day=(bucket>=sun.first&&bucket<sun.last)||
+        (bucket>=sun.first-COUNT&&bucket<sun.last-COUNT);
+    }
     if(mode>=4){graphics.setColor(day?0x07E0:0xFFE0);
       graphics.drawLine(x1,y1,x2,y2);}
   },function(bucket){drawArc(bucket,0xF800);},
