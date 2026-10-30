@@ -970,38 +970,34 @@
     return t<duration;
   }
   // Diagnostic comparison is run on demand, never during routine redraw.
-  Bangle.orbitRestCompare=function(){
-    if(!restService)return;
-    var now=Date.now(),args={nowMs:now,radiusPx:MOONORBIT,
-      maxHeightPx:REST_MAX_HEIGHT,cx:EARTHX,cy:EARTHY,south:VIEW_SOUTH,
-      currentAngleRad:SUNANG,isDayAt:restIsDayAt,
-      diagnosticNoLines:true,perf:perf.restParts},t=Date.now();
-    // Preserve the screen by performing both tests on an offscreen graphics
-    // target with the same drawing API; this also avoids a visible flicker.
-    var blank={setColor:function(){},drawLine:function(){}};
-    restService.draw(blank,args);
-    var elapsed=Date.now()-t;
-    perf.restCompare={noLines:elapsed,bars:perf.restParts.bars||0};
-    return elapsed;
-  };
   function drawRest(sol){
-    // The ring is a real 24-hour recorder, not a future-date prediction.
     if(!restService||selectedDayOffset!==0)return;
     var now=Date.now();restService.sync(now);
-    var restStart=Date.now();
-    restService.draw(g,{nowMs:now,radiusPx:MOONORBIT,
+    var args={nowMs:now,radiusPx:MOONORBIT,
       maxHeightPx:REST_MAX_HEIGHT,cx:EARTHX,cy:EARTHY,south:VIEW_SOUTH,
       currentAngleRad:SUNANG+(VIEW_SOUTH?sol.ha:-sol.ha),
-      isDayAt:restIsDayAt,perf:perf.restParts});
-    var actualRestMs=Date.now()-restStart;
-    // Diagnostic runs once on the next real clock render, not in Settings.
-    if(Storage.read("orbit.perfrequest")){
-      Storage.erase("orbit.perfrequest");
-      var elapsed=Bangle.orbitRestCompare();
-      Storage.writeJSON("orbit.perfdiag.json",
-        {noLines:elapsed,fullRest:actualRestMs,
-         bars:perf.restParts.bars,at:Date.now()});
+      isDayAt:restIsDayAt,perf:perf.restParts};
+    var request=Storage.read("orbit.perfrequest");
+    if(!request){
+      restService.draw(g,args);
+      return;
     }
+    Storage.erase("orbit.perfrequest");
+    // ABBA comparison: real, no-op, no-op, real. All runs calculate
+    // exactly the same coordinates on the same synced history.
+    var blank={setColor:function(){},drawLine:function(){}};
+    var times=[],i,target,t;
+    for(i=0;i<4;i++){
+      target=(i===0||i===3)?g:blank;
+      t=Date.now();
+      restService.draw(target,args);
+      times.push(Date.now()-t);
+    }
+    Storage.writeJSON("orbit.perfdiag.json",{
+      real1:times[0],no1:times[1],no2:times[2],real2:times[3],
+      fullRest:(times[0]+times[3])/2,
+      noLines:(times[1]+times[2])/2,
+      bars:perf.restParts.bars,at:Date.now()});
   }
 
   function cancelProgressive(){
