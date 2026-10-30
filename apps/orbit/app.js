@@ -88,9 +88,9 @@
   var nextEclipseCheck=0;
   // Once per 5-minute slot, cache day/night for the 288 recorded bars.
   var restDay=new Uint8Array(288),restDaySlot=new Uint32Array(288);
-  // 10-minute solar anchors. A stable pair covers two 5-minute bars;
+  // 30-minute solar anchors. Stable intervals reuse a single solar result;
   // compute an exact bar only when sunrise/sunset lies between anchors.
-  var restAnchor=new Uint8Array(160),restAnchorSlot=new Uint32Array(160);
+  var restAnchor=new Uint8Array(56),restAnchorSlot=new Uint32Array(56);
   var REST_ENABLED=cfg.restEnabled!==false;
   var REST_MAX_HEIGHT=Math.max(1,Math.min(14,isFinite(cfg.restBarHeight)?cfg.restBarHeight|0:10));
   var restService;
@@ -947,17 +947,17 @@
     restService.configure(Storage.readJSON(CFGFILE,1)||{});
   }
   function restAnchorDay(bucket){
-    var index=bucket%160;
+    var index=bucket%56;
     if(restAnchorSlot[index]!==bucket){
       restAnchorSlot[index]=bucket;
-      restAnchor[index]=solarPosition(bucket*600000,TESTLAT,TESTLON).el>=0?1:0;
+      restAnchor[index]=solarPosition(bucket*1800000,TESTLAT,TESTLON).el>=0?1:0;
     }
     return restAnchor[index];
   }
   function restIsDayAt(ms){
     var slot=Math.floor(ms/300000),index=slot%288;
     if(restDaySlot[index]!==slot){
-      var anchor=Math.floor(ms/600000),a=restAnchorDay(anchor),
+      var anchor=Math.floor(ms/1800000),a=restAnchorDay(anchor),
           b=restAnchorDay(anchor+1);
       // Preserve the original 5-minute solar boundary accuracy.
       restDay[index]=a===b?a:(solarPosition(ms,TESTLAT,TESTLON).el>=0?1:0);
@@ -984,16 +984,19 @@
     // The ring is a real 24-hour recorder, not a future-date prediction.
     if(!restService||selectedDayOffset!==0)return;
     var now=Date.now();restService.sync(now);
+    var restStart=Date.now();
     restService.draw(g,{nowMs:now,radiusPx:MOONORBIT,
       maxHeightPx:REST_MAX_HEIGHT,cx:EARTHX,cy:EARTHY,south:VIEW_SOUTH,
       currentAngleRad:SUNANG+(VIEW_SOUTH?sol.ha:-sol.ha),
       isDayAt:restIsDayAt,perf:perf.restParts});
+    var actualRestMs=Date.now()-restStart;
     // Diagnostic runs once on the next real clock render, not in Settings.
     if(Storage.read("orbit.perfrequest")){
       Storage.erase("orbit.perfrequest");
       var elapsed=Bangle.orbitRestCompare();
       Storage.writeJSON("orbit.perfdiag.json",
-        {noLines:elapsed,bars:perf.restParts.bars,at:Date.now()});
+        {noLines:elapsed,fullRest:actualRestMs,
+         bars:perf.restParts.bars,at:Date.now()});
     }
   }
 
