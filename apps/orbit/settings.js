@@ -2,7 +2,7 @@
 (function(back){
   var Storage=require("Storage");
   // Read-only version display: title is not a selectable button.
-  var VERSION="0.091";
+  var VERSION="0.092";
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
   var REST_ACTIVITY_DEFAULTS=[0.5,2,6,18];
   // Bangle.js 2 has a 3-bit colour screen (8 actual dial colours).
@@ -843,6 +843,18 @@
         return c&&typeof c.fullRest==="number"?Math.round(c.fullRest)+" ms":"--";}};
       m["No lines"]={value:0,min:0,max:0,format:function(){
         var c=Storage.readJSON("orbit.perfdiag.json",1);return c&&typeof c.noLines==="number"?Math.round(c.noLines)+" ms":"--";}};
+      m["Real 1"]={value:0,min:0,max:0,format:function(){
+        var c=Storage.readJSON("orbit.perfdiag.json",1);
+        return c&&c.real1!==undefined?c.real1+" ms":"--";}};
+      m["No-op 1"]={value:0,min:0,max:0,format:function(){
+        var c=Storage.readJSON("orbit.perfdiag.json",1);
+        return c&&c.no1!==undefined?c.no1+" ms":"--";}};
+      m["No-op 2"]={value:0,min:0,max:0,format:function(){
+        var c=Storage.readJSON("orbit.perfdiag.json",1);
+        return c&&c.no2!==undefined?c.no2+" ms":"--";}};
+      m["Real 2"]={value:0,min:0,max:0,format:function(){
+        var c=Storage.readJSON("orbit.perfdiag.json",1);
+        return c&&c.real2!==undefined?c.real2+" ms":"--";}};
       m["Run no-lines test"]=function(){
         Storage.erase("orbit.perfdiag.json");
         Storage.write("orbit.perfrequest","1");
