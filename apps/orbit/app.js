@@ -944,30 +944,29 @@
     }
     restService.configure(Storage.readJSON(CFGFILE,1)||{});
   }
-  function restIsDayAt(ms){
-    // Recompute only when the local calendar date changes. For the last
-    // 24 hours, intentionally reuse today's times (5-minute display bins).
-    var d=new Date(),dayStart=new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime();
+  // Convert the day's sunrise and sunset to absolute five-minute
+  // bucket boundaries once; yesterday uses the same clock times.
+  var restSunFirst=0,restSunLast=0;
+  function prepareRestDayBuckets(now){
+    var d=new Date(now);
+    var dayStart=new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime();
     if(restSunDay!==dayStart){
       restSunDay=dayStart;
-      // Solar declination/equation of time at local noon, used to estimate
-      // the two crossings of geometric altitude zero.
       var noon=dayStart+12*3600000,sol=solarPosition(noon,TESTLAT,TESTLON);
       var rs=riseSetHourAngle(TESTLAT,sol.dec);
       restSunPolar=rs.polar?(rs.day?1:-1):0;
       if(!rs.polar){
         var h=rs.h0*180/Math.PI/15;
-        // Correct for longitude and the equation of time by evaluating
-        // the solar hour angle at local noon.
         var solarNoon=noon-sol.ha*12*3600000/Math.PI;
         restSunRise=solarNoon-h*3600000;
         restSunSet=solarNoon+h*3600000;
+        // A bar is labeled by its END instant: bucket b ends at
+        // (b+1)*300000. Preserve the old sunrise-inclusive rule.
+        restSunFirst=Math.ceil(restSunRise/300000)-1;
+        restSunLast=Math.ceil(restSunSet/300000)-1;
       }
     }
-    if(restSunPolar)return restSunPolar>0;
-    var t=((ms-restSunRise)%86400000+86400000)%86400000;
-    var duration=restSunSet-restSunRise;
-    return t<duration;
+    return {first:restSunFirst,last:restSunLast,polar:restSunPolar};
   }
   // Diagnostic comparison is run on demand, never during routine redraw.
   function drawRest(sol){
@@ -976,7 +975,7 @@
     var args={nowMs:now,radiusPx:MOONORBIT,
       maxHeightPx:REST_MAX_HEIGHT,cx:EARTHX,cy:EARTHY,south:VIEW_SOUTH,
       currentAngleRad:SUNANG+(VIEW_SOUTH?sol.ha:-sol.ha),
-      isDayAt:restIsDayAt,perf:perf.restParts};
+      dayBuckets:prepareRestDayBuckets(now),perf:perf.restParts};
     var request=Storage.read("orbit.perfrequest");
     if(!request){
       restService.draw(g,args);
