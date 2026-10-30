@@ -2,7 +2,7 @@
 (function(back){
   var Storage=require("Storage");
   // Read-only version display: title is not a selectable button.
-  var VERSION="0.088";
+  var VERSION="0.089";
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
   var REST_ACTIVITY_DEFAULTS=[0.5,2,6,18];
   // Bangle.js 2 has a 3-bit colour screen (8 actual dial colours).
@@ -822,7 +822,7 @@
     E.showMenu(m);
   }
   function showRenderDiagnostics(s){
-    var p=Bangle.orbitPerf;
+    var p=Bangle.orbitPerf||{full:{},staged:{},restParts:{}};
     function row(v){return {value:0,min:0,max:0,
       format:function(){return v===undefined?"--":String(v)+" ms";}};}
     var m={"":{title:"Draw timing"},"< Back":function(){restMenu(s);}};
@@ -839,19 +839,11 @@
       m["Rest detail"]={value:0,min:0,max:0,format:function(){return "Off";}};
       m["Rest bars"]={value:0,min:0,max:0,format:function(){return String(z.bars||0);}};
       m["No lines"]={value:0,min:0,max:0,format:function(){
-        var c=p.restCompare||Storage.readJSON("orbit.perfdiag.json",1);return c&&typeof c.noLines==="number"?Math.round(c.noLines)+" ms":"--";}};
+        var c=Storage.readJSON("orbit.perfdiag.json",1);return c&&typeof c.noLines==="number"?Math.round(c.noLines)+" ms":"--";}};
       m["Run no-lines test"]=function(){
-        var fn=Bangle.orbitRestCompare;
-        if(typeof fn!=="function"){
-          E.showPrompt("Clock diagnostic unavailable. Open tenkyu first.",{title:"Draw timing"}).then(function(){showRenderDiagnostics(s);});
-          return;
-        }
-        var ms=fn();
-        // Persist only this one-off diagnostic result so the Settings UI
-        // can display it even if the clock runtime was replaced.
-        var result={noLines:ms,at:Date.now()};
-        Storage.writeJSON("orbit.perfdiag.json",result);
-        showRenderDiagnostics(s);
+        Storage.erase("orbit.perfdiag.json");
+        Storage.write("orbit.perfrequest","1");
+        E.showAlert("Test queued. Return to tenkyu, then reopen Draw timing.", "Draw timing").then(function(){showRenderDiagnostics(s);});
       };
       m["Stage total"]=row(q.total);
       m["Stage Earth"]=row(q.earth);
