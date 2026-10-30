@@ -142,7 +142,7 @@
   var LOCSOURCE=(savedLocName==="GPS"||savedLocPref==="GPS")?"gps":
     ((savedLocName==="Custom"||savedLocPref==="Manual")?"manual":
     ((savedLocName||savedLocPref)?"place":
-    (cfg.locationSource||((cfg.locationMode===0)?"place":((cfg.locationMode===2)?"gps":"manual")))));
+    (cfg.locationSource||((cfg.locationMode===0)?"place":((cfg.locationMode===2)?"gps":"manual"))))));
   var LOCMODE=LOCSOURCE==="place"?0:(LOCSOURCE==="gps"?2:1);
   var LOCNAME=(LOCMODE===0?(savedLocName||savedLocPref||"Place"):"");
   var LOCCOUNTRY=(LOCMODE===0?(cfg.countryName||"Japan"):"");
@@ -997,6 +997,20 @@
       bars:perf.restParts.bars,at:Date.now()});
   }
 
+  function showProgressStatus(label,step,total){
+    if(killed||mode!=="tenkyu")return;
+    try{
+      var w=g.getWidth(),h=g.getHeight(),y=h-18;
+      g.setColor(BLACK).fillRect(0,y,w-1,h-1);
+      g.setBgColor(BLACK).setColor(WHITE).setFont("6x8",1).setFontAlign(-1,-1);
+      g.drawString(label,2,y+2);
+      var barX=2,barY=y+9,barW=Math.max(20,w-26),barH=3;
+      var fillW=Math.max(0,Math.round((barW*(step+1))/Math.max(1,total)));
+      g.setColor(0x4444).drawRect(barX,barY,barX+barW,barY+barH);
+      g.setColor(0x07E0).fillRect(barX+1,barY+1,barX+fillW,barY+barH-1);
+    }catch(e){}
+  }
+
   function cancelProgressive(){
     renderGeneration++;
     clear(renderTimer);renderTimer=undefined;
@@ -1018,6 +1032,7 @@
     drawSun();
     g.setColor(0x8410).drawCircle(EARTHX,EARTHY,MOONORBIT);
     g.setColor(CYAN).drawCircle(EARTHX,EARTHY,EARTHR);
+    showProgressStatus("Loading sky...",0,3);
     try{g.flip();}catch(e){}
     function nextLayer(){
       renderTimer=undefined;
@@ -1027,8 +1042,10 @@
         if(step===0){
           if(!earthCacheReady){buildEarthMapCache();earthCacheReady=true;}
           sol=safeSolar();
+          showProgressStatus("Earth...",0,3);
           timed(perf.staged,"earth",function(){drawEarth(sol);});
         }else if(step===1){
+          showProgressStatus("Moon...",1,3);
           eclipseActive=updateEclipse();
           // The first minute timer was armed before eclipse discovery.
           // Switch to 30-second updates when the initial shadow is active.
@@ -1038,6 +1055,7 @@
           moon=timed(perf.staged,"moon",drawMoon);
           timed(perf.staged,"dial",function(){drawOrbitHours(sol);});
         }else{
+          showProgressStatus("Final...",2,3);
           if(!restReady){initRest();restReady=true;}
           timed(perf.staged,"rest",function(){drawRest(sol);});
           drawObserver(sol);
@@ -1048,7 +1066,7 @@
         try{g.flip();}catch(e){}
         perf.staged["stage"+step]=Date.now()-stageStart;
         step++;
-        if(step<3)renderTimer=setTimeout(nextLayer,0);
+        if(step<3)renderTimer=setTimeout(nextLayer,12);
         else{
           endPerf(perf.staged,perfStart);
           busy=false;
@@ -1059,7 +1077,7 @@
         try{drawBase();}catch(ex){busy=false;}
       }
     }
-    renderTimer=setTimeout(nextLayer,0);
+    renderTimer=setTimeout(nextLayer,12);
   }
 
   function drawBase(){
