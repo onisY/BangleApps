@@ -983,20 +983,18 @@
       return;
     }
     Storage.erase("orbit.perfrequest");
-    // ABBA comparison: real, no-op, no-op, real. All runs calculate
-    // exactly the same coordinates on the same synced history.
+    // Staged diagnostic; only the last pass writes pixels.
     var blank={setColor:function(){},drawLine:function(){}};
-    var times=[],i,target,t;
-    for(i=0;i<4;i++){
-      target=(i===0||i===3)?g:blank;
+    var times=[],i,t;
+    for(i=0;i<=5;i++){
+      args.diagnosticStage=i;
       t=Date.now();
-      restService.draw(target,args);
+      restService.draw(i===5?g:blank,args);
       times.push(Date.now()-t);
     }
     Storage.writeJSON("orbit.perfdiag.json",{
-      real1:times[0],no1:times[1],no2:times[2],real2:times[3],
-      fullRest:(times[0]+times[3])/2,
-      noLines:(times[1]+times[2])/2,
+      visit:times[0],classify:times[1],geometry:times[2],
+      daylight:times[3],noLines:times[4],fullRest:times[5],
       bars:perf.restParts.bars,at:Date.now()});
   }
 
