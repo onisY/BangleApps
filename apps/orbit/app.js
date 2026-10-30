@@ -142,7 +142,7 @@
   var LOCSOURCE=(savedLocName==="GPS"||savedLocPref==="GPS")?"gps":
     ((savedLocName==="Custom"||savedLocPref==="Manual")?"manual":
     ((savedLocName||savedLocPref)?"place":
-    (cfg.locationSource||((cfg.locationMode===0)?"place":((cfg.locationMode===2)?"gps":"manual"))))));
+    (cfg.locationSource||((cfg.locationMode===0)?"place":((cfg.locationMode===2)?"gps":"manual")))));
   var LOCMODE=LOCSOURCE==="place"?0:(LOCSOURCE==="gps"?2:1);
   var LOCNAME=(LOCMODE===0?(savedLocName||savedLocPref||"Place"):"");
   var LOCCOUNTRY=(LOCMODE===0?(cfg.countryName||"Japan"):"");
@@ -1000,8 +1000,8 @@
   function showProgressStatus(label,step,total){
     if(killed||mode!=="tenkyu")return;
     try{
-      var w=g.getWidth(),h=g.getHeight(),y=h-18;
-      g.setColor(BLACK).fillRect(0,y,w-1,h-1);
+      var w=g.getWidth(),y=0;
+      g.setColor(BLACK).fillRect(0,y,w-1,23);
       g.setBgColor(BLACK).setColor(WHITE).setFont("6x8",1).setFontAlign(-1,-1);
       g.drawString(label,2,y+2);
       var barX=2,barY=y+9,barW=Math.max(20,w-26),barH=3;
@@ -1055,11 +1055,12 @@
           moon=timed(perf.staged,"moon",drawMoon);
           timed(perf.staged,"dial",function(){drawOrbitHours(sol);});
         }else{
-          showProgressStatus("Final...",2,3);
+          // Final pass restores the widget/header area below.
           if(!restReady){initRest();restReady=true;}
           timed(perf.staged,"rest",function(){drawRest(sol);});
           drawObserver(sol);
           drawLocationStatus(moon);drawDateTime(moon);
+          g.setColor(BLACK).fillRect(0,0,W-1,23);
           try{Bangle.drawWidgets();}catch(e){}
           drawHeaderClock();
         }
