@@ -498,7 +498,8 @@ function draw(graphics,engine,map){
   // Rotate each arc endpoint using constants to avoid extra trig calls.
   var step=dir*2*Math.PI/COUNT,cs=Math.cos(step),ss=Math.sin(step);
   var lastBucket=-2,ca=0,sa=0;
-  var perf=map.perf,bars=0,drawEnabled=!map.diagnosticNoLines;
+  var perf=map.perf,bars=0,drawEnabled=true;
+  // Diagnostic uses a no-op graphics object but performs identical geometry.
   function pointAt(bucket){
     // When bins are contiguous, reuse a single rotation rather than
     // recomputing sine/cosine twice for each of up to 288 bars.
