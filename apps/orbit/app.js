@@ -988,6 +988,13 @@
       maxHeightPx:REST_MAX_HEIGHT,cx:EARTHX,cy:EARTHY,south:VIEW_SOUTH,
       currentAngleRad:SUNANG+(VIEW_SOUTH?sol.ha:-sol.ha),
       isDayAt:restIsDayAt,perf:perf.restParts});
+    // Diagnostic runs once on the next real clock render, not in Settings.
+    if(Storage.read("orbit.perfrequest")){
+      Storage.erase("orbit.perfrequest");
+      var elapsed=Bangle.orbitRestCompare();
+      Storage.writeJSON("orbit.perfdiag.json",
+        {noLines:elapsed,bars:perf.restParts.bars,at:Date.now()});
+    }
   }
 
   function cancelProgressive(){
