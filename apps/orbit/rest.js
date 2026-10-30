@@ -491,21 +491,23 @@ function stageFor(percent){
 }
 function draw(graphics,engine,map){
   if(!engine)return;
-  // The selected maximum is now the stage-5 height.
+  // Diagnostic stages: 0=visit, 1=classify, 2=geometry,
+  // 3=geometry+day, 4=no-op graphics, 5=real graphics.
+  var mode=map.diagnosticStage===undefined?5:map.diagnosticStage;
+  var perf=map.perf,bars=0;
+  if(mode===0){
+    engine.visit(map.nowMs,function(){bars++;},
+      function(){bars++;},function(){bars++;});
+    if(perf)perf.bars=bars;
+    return;
+  }
   var r=map.radiusPx,height=Math.max(1,Math.min(map.maxHeightPx,14));
   var dir=map.south?1:-1,now=map.nowMs,scale=2*Math.PI/DAY_MS;
-  // One five-minute slot spans 1.25 degrees around the lunar orbit.
-  // Rotate each arc endpoint using constants to avoid extra trig calls.
   var step=dir*2*Math.PI/COUNT,cs=Math.cos(step),ss=Math.sin(step);
   var lastBucket=-2,ca=0,sa=0;
-  var perf=map.perf,bars=0,drawEnabled=true;
-  // Diagnostic uses a no-op graphics object but performs identical geometry.
   function pointAt(bucket){
-    // When bins are contiguous, reuse a single rotation rather than
-    // recomputing sine/cosine twice for each of up to 288 bars.
     if(bucket===lastBucket+1){
-      var nc=ca*cs-sa*ss;
-      sa=sa*cs+ca*ss;ca=nc;
+      var nc=ca*cs-sa*ss;sa=sa*cs+ca*ss;ca=nc;
     }else if(bucket!==lastBucket){
       var a=map.currentAngleRad-dir*(now-(bucket+1)*SLOT_MS)*scale;
       ca=Math.cos(a);sa=Math.sin(a);
@@ -513,29 +515,28 @@ function draw(graphics,engine,map){
     lastBucket=bucket;
   }
   function drawArc(bucket,color){
-    pointAt(bucket);
-    if(drawEnabled){graphics.setColor(color);
-    graphics.drawLine(
-      Math.round(map.cx+r*(ca*cs+sa*ss)),
-      Math.round(map.cy+r*(sa*cs-ca*ss)),
-      Math.round(map.cx+r*ca),Math.round(map.cy+r*sa));}
     bars++;
+    if(mode===1)return;
+    pointAt(bucket);
+    var x1=Math.round(map.cx+r*(ca*cs+sa*ss));
+    var y1=Math.round(map.cy+r*(sa*cs-ca*ss));
+    var x2=Math.round(map.cx+r*ca),y2=Math.round(map.cy+r*sa);
+    if(mode>=4){graphics.setColor(color);graphics.drawLine(x1,y1,x2,y2);}
   }
   engine.visit(now,function(bucket,value){
-    // Plot at the interval END: a completed bar expires exactly 24 h later.
-    pointAt(bucket);
-    var endMs=(bucket+1)*SLOT_MS,outer=r+height*stageFor(value)/5;
-    // Match the observer ray's geometric sunrise/sunset at this bar's time.
-    var day=map.isDayAt&&map.isDayAt(endMs);
-    if(drawEnabled){graphics.setColor(day?0x07E0:0xFFE0);
-    graphics.drawLine(Math.round(map.cx+r*ca),Math.round(map.cy+r*sa),
-      Math.round(map.cx+outer*ca),Math.round(map.cy+outer*sa));}
     bars++;
-  },function(bucket){
-    drawArc(bucket,0xF800); // Confirmed no pulse: red.
-  },function(bucket){
-    drawArc(bucket,0xFFFF); // HRM failed: white.
-  });
+    var stage=stageFor(value);
+    if(mode===1)return;
+    pointAt(bucket);
+    var outer=r+height*stage/5;
+    var x1=Math.round(map.cx+r*ca),y1=Math.round(map.cy+r*sa);
+    var x2=Math.round(map.cx+outer*ca),y2=Math.round(map.cy+outer*sa);
+    if(mode===2)return;
+    var day=map.isDayAt&&map.isDayAt((bucket+1)*SLOT_MS);
+    if(mode>=4){graphics.setColor(day?0x07E0:0xFFE0);
+      graphics.drawLine(x1,y1,x2,y2);}
+  },function(bucket){drawArc(bucket,0xF800);},
+    function(bucket){drawArc(bucket,0xFFFF);});
   if(perf)perf.bars=bars;
 }
 exports.create=create;
