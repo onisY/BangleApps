@@ -87,10 +87,8 @@
   var ECLIPSE_UPDATE_MS=30000,eclipseDisplay,eclipseActive=false,lastClockMinute=-1;
   var nextEclipseCheck=0;
   // Once per 5-minute slot, cache day/night for the 288 recorded bars.
-  var restDay=new Uint8Array(288),restDaySlot=new Uint32Array(288);
-  // 30-minute solar anchors. Stable intervals reuse a single solar result;
-  // compute an exact bar only when sunrise/sunset lies between anchors.
-  var restAnchor=new Uint8Array(56),restAnchorSlot=new Uint32Array(56);
+  // One local-day sunrise/sunset estimate; reused for all 288 rest bins.
+  var restSunDay=-1,restSunRise=0,restSunSet=0,restSunPolar=0;
   var REST_ENABLED=cfg.restEnabled!==false;
   var REST_MAX_HEIGHT=Math.max(1,Math.min(14,isFinite(cfg.restBarHeight)?cfg.restBarHeight|0:10));
   var restService;
@@ -946,24 +944,30 @@
     }
     restService.configure(Storage.readJSON(CFGFILE,1)||{});
   }
-  function restAnchorDay(bucket){
-    var index=bucket%56;
-    if(restAnchorSlot[index]!==bucket){
-      restAnchorSlot[index]=bucket;
-      restAnchor[index]=solarPosition(bucket*1800000,TESTLAT,TESTLON).el>=0?1:0;
-    }
-    return restAnchor[index];
-  }
   function restIsDayAt(ms){
-    var slot=Math.floor(ms/300000),index=slot%288;
-    if(restDaySlot[index]!==slot){
-      var anchor=Math.floor(ms/1800000),a=restAnchorDay(anchor),
-          b=restAnchorDay(anchor+1);
-      // Preserve the original 5-minute solar boundary accuracy.
-      restDay[index]=a===b?a:(solarPosition(ms,TESTLAT,TESTLON).el>=0?1:0);
-      restDaySlot[index]=slot;
+    // Recompute only when the local calendar date changes. For the last
+    // 24 hours, intentionally reuse today's times (5-minute display bins).
+    var d=new Date(),dayStart=new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime();
+    if(restSunDay!==dayStart){
+      restSunDay=dayStart;
+      // Solar declination/equation of time at local noon, used to estimate
+      // the two crossings of geometric altitude zero.
+      var noon=dayStart+12*3600000,sol=solarPosition(noon,TESTLAT,TESTLON);
+      var rs=riseSetHourAngle(TESTLAT,sol.dec);
+      restSunPolar=rs.polar?(rs.day?1:-1):0;
+      if(!rs.polar){
+        var h=rs.h0*180/Math.PI/15;
+        // Correct for longitude and the equation of time by evaluating
+        // the solar hour angle at local noon.
+        var solarNoon=noon-sol.ha*12*3600000/Math.PI;
+        restSunRise=solarNoon-h*3600000;
+        restSunSet=solarNoon+h*3600000;
+      }
     }
-    return restDay[index]!==0;
+    if(restSunPolar)return restSunPolar>0;
+    var t=((ms-restSunRise)%86400000+86400000)%86400000;
+    var duration=restSunSet-restSunRise;
+    return t<duration;
   }
   // Diagnostic comparison is run on demand, never during routine redraw.
   Bangle.orbitRestCompare=function(){
