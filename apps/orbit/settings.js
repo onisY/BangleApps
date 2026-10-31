@@ -95,7 +95,11 @@
     var list;
     try{
       var q=JPI[pi];
-      if(q)list=JSON.parse(Storage.read(JPFILE,q[0],q[1])||"[]");
+      if(q){
+        var raw=Storage.read(JPFILE,q[0],q[1]);
+        if(raw)list=JSON.parse(raw);
+        raw=undefined;
+      }
     }catch(e){list=undefined;}
     if(!list||!list.length)list=P[pi][1]||[];
     jpPrefCache=pi;jpMunicipalities=list;
