@@ -138,7 +138,7 @@ function create(options){
     if(!ok)return NO_DATA;
     if(!wearEnabled||motion)return percent;
     if(still){
-      if(hr===HR_FOUND||hr===HR_PENDING&&holdPulse===HR_FOUND)return 100;
+      if(hr===HR_FOUND)return percent;
       if(hr===HR_FAILED||hr===HR_PENDING&&holdPulse===HR_FAILED)return HRM_FAILED;
       return NOT_WORN;
     }
@@ -417,7 +417,7 @@ function install(bangle,storage,events,clock){
       if(p){
         if(p.hasData){
           failedAttempts=0;engine.absentPulse(p.bucket,p.maxConfidence);
-          engine.sync(done);scheduleProbe(p.bucket+1);
+          engine.sync(done);scheduleProbe(p.bucket+3);
         }else{
           failProbe(p.bucket);engine.sync(done);
         }
