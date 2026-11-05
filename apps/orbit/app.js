@@ -127,6 +127,7 @@
   var TESTLAT=Math.max(-90,Math.min(90,+cfg.manualLat));
   var TESTLON=Math.max(-180,Math.min(180,+cfg.manualLon));
   var VIEW_SOUTH=!!cfg.viewSide;
+  var EARTH_TEXTURE=Math.max(0,Math.min(2,cfg.earthTexture|0));
   var DATEPOS=cfg.datePos|0,TIMEPOS=cfg.timePos|0,DATESIZE=cfg.dateSize|0,TIMESIZE=cfg.timeSize|0;
   var TIMEBOX,lastBaseBucket=-1;
   var TIMESOURCE=cfg.timeSource===1?1:0;
@@ -625,6 +626,27 @@
     g.setColor(BLACK).setPixel(sx,sy);
   }
 
+  function drawEarthMesh(ca,sa){
+    /* Orthographic polar view: 30-degree longitude spokes, latitude 30/60 rings. */
+    var i,r,angle,x,y,x2,y2;
+    g.setColor(WHITE);
+    for(i=0;i<12;i++){
+      angle=ca; // replaced below with rotation angle
+      angle=Math.atan2(sa,ca)+i*Math.PI/6;
+      x=EARTHX+Math.round(EARTHR*Math.cos(angle));
+      y=EARTHY+Math.round(EARTHR*Math.sin(angle));
+      g.drawLine(EARTHX,EARTHY,x,y);
+      /* A second offset line provides an approximately 2px-wide spoke. */
+      x2=Math.round(Math.sin(angle));y2=-Math.round(Math.cos(angle));
+      g.drawLine(EARTHX+x2,EARTHY+y2,x+x2,y+y2);
+    }
+    for(i=30;i<=60;i+=30){
+      r=Math.max(1,Math.round(EARTHR*Math.cos(rad(i))));
+      g.drawCircle(EARTHX,EARTHY,r);
+      if(r>1)g.drawCircle(EARTHX,EARTHY,r-1);
+    }
+  }
+
   function drawEarth(sol){
     /* Use native vertex transforms when available; otherwise use cached JS transforms. */
     buildLightingInto(sol.dec,EARTHX,EARTHY);
@@ -638,7 +660,7 @@
     HEMI_MAT[2]=-sa; HEMI_MAT[3]=ca;
     HEMI_MAT[4]=EARTHX; HEMI_MAT[5]=EARTHY;
 
-    if(HEMI_NATIVE){
+    if(EARTH_TEXTURE===1&&HEMI_NATIVE){
       try{
         for(i=0;i<HEMI_XY.length;i++)
           HEMI_SCREEN[i]=g.transformVertices(HEMI_XY[i],HEMI_MAT);
@@ -648,7 +670,7 @@
         HEMI_NATIVE=false;
       }
     }
-    if(!HEMI_NATIVE){
+    if(EARTH_TEXTURE===1&&!HEMI_NATIVE){
       for(i=0;i<HEMI_XY.length;i++)
         mapPolyInto(HEMI_XY[i],HEMI_SCREEN[i],ca,sa,EARTHX,EARTHY);
       for(i=0;i<HEMI_WATER_XY.length;i++)
@@ -656,6 +678,7 @@
     }
 
     g.setColor(CYAN).fillCircle(EARTHX,EARTHY,EARTHR);
+    if(EARTH_TEXTURE===1){
     g.setColor(GREEN);
     for(i=0;i<HEMI_SCREEN.length;i++)g.fillPoly(HEMI_SCREEN[i]);
 
@@ -670,6 +693,10 @@
     if(HEMI_WATER_SCREEN.length)g.drawPoly(HEMI_WATER_SCREEN[0],true);
 
     g.fillCircle(EARTHX,EARTHY,HEMI_ICE_R);
+    }else if(EARTH_TEXTURE===2){
+      drawEarthMesh(ca,sa);
+    }
+    g.setColor(WHITE);
     g.drawPoly(LIGHTTERM,false);
     g.drawCircle(EARTHX,EARTHY,EARTHR);
   }
@@ -1040,7 +1067,7 @@
       try{
         stageStart=Date.now();
         if(step===0){
-          if(!earthCacheReady){buildEarthMapCache();earthCacheReady=true;}
+          if(!earthCacheReady){if(EARTH_TEXTURE===1)buildEarthMapCache();earthCacheReady=true;}
           sol=safeSolar();
           showProgressStatus("Earth...",0,3);
           timed(perf.staged,"earth",function(){drawEarth(sol);});
@@ -1087,7 +1114,7 @@
     var perfStart=Date.now();
     // A timer may request a normal redraw before the staged opening has
     // completed; build any missing caches only in that exceptional path.
-    if(!earthCacheReady){buildEarthMapCache();earthCacheReady=true;}
+    if(!earthCacheReady){if(EARTH_TEXTURE===1)buildEarthMapCache();earthCacheReady=true;}
     if(!moonCacheReady){buildMoonCache();moonCacheReady=true;}
     if(!restReady){initRest();restReady=true;}
     TIMEBOX=undefined;
