@@ -574,9 +574,9 @@
   }
 
   function drawNaturalEarth(angle){
-    var scale=EARTHR/64,opts=earthMapOptions(angle,scale);
+    var scale=EARTHR/48,opts=earthMapOptions(angle,scale);
     if(!VIEW_SOUTH){
-      /* 128px North-polar texture: one 2bpp palette image instead of
+      /* Experimental 96px North-polar texture: one 2bpp palette image instead of
          three independently transformed monochrome images. */
       if(!EARTH_NORTH){
         EARTH_NORTH=require("orbit.north");
@@ -617,7 +617,7 @@
           earthMapOptions(mapA,EARTHR/32));
       }else{
         g.drawImage(EARTH_NORTH_MASKS[1],EARTHX,EARTHY,
-          earthMapOptions(mapA,EARTHR/64));
+          earthMapOptions(mapA,EARTHR/48));
       }
     }else{
       if(EARTH_TEXTURE===2)drawEarthMesh(ca,sa);
