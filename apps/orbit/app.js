@@ -627,22 +627,24 @@
   }
 
   function drawEarthMesh(ca,sa){
-    /* Orthographic polar view: 30-degree longitude spokes, latitude 30/60 rings. */
-    var i,r,angle,x,y,x2,y2;
-    g.setColor(WHITE);
+    /* 30-degree polar mesh; blue 3-pixel strokes on black. */
+    var i,r,angle,x,y,dx,dy,rotation=Math.atan2(sa,ca);
+    g.setColor(BLUE);
     for(i=0;i<12;i++){
-      angle=Math.atan2(sa,ca)+i*Math.PI/6;
+      angle=rotation+i*Math.PI/6;
       x=EARTHX+Math.round(EARTHR*Math.cos(angle));
       y=EARTHY+Math.round(EARTHR*Math.sin(angle));
+      dx=Math.round(Math.sin(angle));
+      dy=-Math.round(Math.cos(angle));
       g.drawLine(EARTHX,EARTHY,x,y);
-      /* A second offset line provides an approximately 2px-wide spoke. */
-      x2=Math.round(Math.sin(angle));y2=-Math.round(Math.cos(angle));
-      g.drawLine(EARTHX+x2,EARTHY+y2,x+x2,y+y2);
+      g.drawLine(EARTHX+dx,EARTHY+dy,x+dx,y+dy);
+      g.drawLine(EARTHX-dx,EARTHY-dy,x-dx,y-dy);
     }
     for(i=30;i<=60;i+=30){
-      r=Math.max(1,Math.round(EARTHR*Math.cos(rad(i))));
+      r=Math.max(2,Math.round(EARTHR*Math.cos(rad(i))));
+      g.drawCircle(EARTHX,EARTHY,r-1);
       g.drawCircle(EARTHX,EARTHY,r);
-      if(r>1)g.drawCircle(EARTHX,EARTHY,r-1);
+      g.drawCircle(EARTHX,EARTHY,r+1);
     }
   }
 
@@ -676,7 +678,7 @@
         mapPolyInto(HEMI_WATER_XY[i],HEMI_WATER_SCREEN[i],ca,sa,EARTHX,EARTHY);
     }
 
-    g.setColor(CYAN).fillCircle(EARTHX,EARTHY,EARTHR);
+    g.setColor(EARTH_TEXTURE===2?BLACK:CYAN).fillCircle(EARTHX,EARTHY,EARTHR);
     if(EARTH_TEXTURE===1){
     g.setColor(GREEN);
     for(i=0;i<HEMI_SCREEN.length;i++)g.fillPoly(HEMI_SCREEN[i]);
@@ -694,12 +696,16 @@
     g.fillCircle(EARTHX,EARTHY,HEMI_ICE_R);
     }else {
       if(EARTH_TEXTURE===2)drawEarthMesh(ca,sa);
-      /* Shadow must cover both solid and mesh textures, including grid lines. */
-      g.setColor(DARKBLUE).fillPoly(LIGHTNIGHT);
+      /* On the black mesh, night masking hides the grid while preserving the terminator. */
+      g.setColor(EARTH_TEXTURE===2?BLACK:DARKBLUE).fillPoly(LIGHTNIGHT);
     }
-    g.setColor(WHITE);
+    g.setColor(EARTH_TEXTURE===2?BLUE:WHITE);
     g.drawPoly(LIGHTTERM,false);
-    g.drawCircle(EARTHX,EARTHY,EARTHR);
+    if(EARTH_TEXTURE===2){
+      g.drawCircle(EARTHX,EARTHY,EARTHR-1);
+      g.drawCircle(EARTHX,EARTHY,EARTHR);
+      g.drawCircle(EARTHX,EARTHY,EARTHR+1);
+    }else g.drawCircle(EARTHX,EARTHY,EARTHR);
   }
 
   function moonData(nowMs){
