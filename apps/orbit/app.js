@@ -692,7 +692,9 @@
 
     g.setColor(EARTH_TEXTURE===2?BLACK:CYAN).fillCircle(EARTHX,EARTHY,EARTHR);
     if(EARTH_TEXTURE===1){
-    drawNaturalEarth(baseA);
+    /* SVG polar maps have fixed prime-meridian directions, unlike the old lon-relative polygons. */
+    var mapA=baseA+(VIEW_SOUTH?1:-1)*(Math.PI/2-rad(TESTLON));
+    drawNaturalEarth(mapA);
     /* The geographical masks replace the former hand-drawn polygons. */
     /*
     g.setColor(GREEN);
@@ -713,7 +715,7 @@
     g.setColor(DARKBLUE).fillPoly(LIGHTNIGHT);
     /* Coastline overlay after shadow: night coast remains visible. */
     g.setColor(WHITE);
-    g.drawImage(EARTH_MASKS[3],EARTHX,EARTHY,{rotate:baseA,scale:EARTHR/32});
+    g.drawImage(EARTH_MASKS[3],EARTHX,EARTHY,{rotate:mapA,scale:EARTHR/32});
     }else {
       if(EARTH_TEXTURE===2)drawEarthMesh(ca,sa);
       /* Solid retains its shadow; mesh stays visible on both sides. */
