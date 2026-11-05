@@ -6,7 +6,7 @@ exports.get=function(south){
   var side=south?1:0;
   if(!images[side]){
     images[side]=M[side].map(function(s){
-      return {width:64,height:64,bpp:1,buffer:atob(s),transparent:0};
+      return {width:64,height:64,bpp:1,buffer:(function(){var b=atob(s.replace(/=+$/,"")+"==");while(b.length<512)b+="\\x00";return b.substr(0,512);})(),transparent:0};
     });
   }
   return images[side];
