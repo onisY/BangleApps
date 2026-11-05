@@ -2,19 +2,19 @@
 (function(back){
   var Storage=require("Storage");
   // Read-only version display: title is not a selectable button.
-  var VERSION="0.096";
+  var VERSION="0.097";
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
-  var REST_ACTIVITY_DEFAULTS=[0.5,2,6,18];
+  var REST_ACTIVITY_DEFAULTS=[1,2,6,18];
   // Bangle.js 2 has a 3-bit colour screen (8 actual dial colours).
   var DIAL_COLOR_NAMES=["White","Red","Green","Blue","Yellow","Cyan","Magenta","Black"];
   var DIAL_COLOR_VALUES=[0xFFFF,0xF800,0x07E0,0x001F,0xFFE0,0x07FF,0xF81F,0];
   function restActivityCuts(s){
-    var a=[],prev=0;
+    var a=[],prev=-1;
     for(var i=0;i<4;i++){
       var n=+s["restActivityT"+(i+1)];
-      if(!isFinite(n)||n<=prev)n=REST_ACTIVITY_DEFAULTS[i];
-      if(n<=prev)n=prev+0.1;
-      n=Math.round(n*1000)/1000;
+      if(!isFinite(n))n=REST_ACTIVITY_DEFAULTS[i];
+      n=Math.round(n);
+      n=Math.max(prev+1,Math.min(996+i,n));
       a.push(n);prev=n;
     }
     return a;
@@ -868,19 +868,37 @@
     }
     E.showMenu(m);
   }
+  function activityDigitMenu(s,k){
+    var cuts=restActivityCuts(s),key="restActivityT"+(k+1),n=cuts[k];
+    var m={"":{title:"Boundary "+(k+1)},"< Back":function(){activityMenu(s);}};
+    [100,10,1].forEach(function(place){
+      var label=place===100?"Hundreds":place===10?"Tens":"Ones";
+      m[label]={value:Math.floor(n/place)%10,min:0,max:9,step:1,wrap:true,
+        format:function(v){return String(v);},
+        onchange:function(v){
+          var old=restActivityCuts(s)[k];
+          var next=old-(Math.floor(old/place)%10)*place+v*place;
+          var low=k?restActivityCuts(s)[k-1]+1:0;
+          var high=k<3?restActivityCuts(s)[k+1]-1:999;
+          if(next<low||next>high){
+            E.showAlert("Allowed: "+low+" to "+high,"Boundary")
+              .then(function(){activityDigitMenu(s,k);});
+            return;
+          }
+          s[key]=next;applyRest(s);
+          setTimeout(function(){activityDigitMenu(s,k);},10);
+        }
+      };
+    });
+    m["Value"]={value:0,min:0,max:0,format:function(){return ("00"+restActivityCuts(s)[k]).slice(-3);}};
+    E.showMenu(m);
+  }
   function activityMenu(s){
     var cuts=restActivityCuts(s);
     var m={"":{title:"Rest levels"},"< Back":function(){restMenu(s);}};
     for(var i=0;i<4;i++)(function(k){
-      m["L"+(5-k)+"/"+(4-k)+" boundary"]={
-        value:cuts[k],min:k?+(cuts[k-1]+0.1).toFixed(3):0.1,
-        max:k<3?+(cuts[k+1]-0.1).toFixed(3):500,
-        step:0.1,format:function(v){return v.toFixed(1)+" g";},
-        onchange:function(v){
-          s["restActivityT"+(k+1)]=+v.toFixed(3);
-          applyRest(s);
-          setTimeout(function(){activityMenu(s);},10);
-        }
+      m["L"+(5-k)+"/"+(4-k)+"  "+("00"+cuts[k]).slice(-3)]=function(){
+        activityDigitMenu(s,k);
       };
     })(i);
     E.showMenu(m);
