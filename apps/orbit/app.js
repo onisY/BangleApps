@@ -631,7 +631,6 @@
     var i,r,angle,x,y,x2,y2;
     g.setColor(WHITE);
     for(i=0;i<12;i++){
-      angle=ca; // replaced below with rotation angle
       angle=Math.atan2(sa,ca)+i*Math.PI/6;
       x=EARTHX+Math.round(EARTHR*Math.cos(angle));
       y=EARTHY+Math.round(EARTHR*Math.sin(angle));
@@ -693,8 +692,10 @@
     if(HEMI_WATER_SCREEN.length)g.drawPoly(HEMI_WATER_SCREEN[0],true);
 
     g.fillCircle(EARTHX,EARTHY,HEMI_ICE_R);
-    }else if(EARTH_TEXTURE===2){
-      drawEarthMesh(ca,sa);
+    }else {
+      if(EARTH_TEXTURE===2)drawEarthMesh(ca,sa);
+      /* Shadow must cover both solid and mesh textures, including grid lines. */
+      g.setColor(DARKBLUE).fillPoly(LIGHTNIGHT);
     }
     g.setColor(WHITE);
     g.drawPoly(LIGHTTERM,false);
