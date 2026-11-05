@@ -128,6 +128,7 @@
   var TESTLON=Math.max(-180,Math.min(180,+cfg.manualLon));
   var VIEW_SOUTH=!!cfg.viewSide;
   var EARTH_TEXTURE=Math.max(0,Math.min(2,cfg.earthTexture|0));
+  var EARTH_MAP,EARTH_MASKS;
   var DATEPOS=cfg.datePos|0,TIMEPOS=cfg.timePos|0,DATESIZE=cfg.dateSize|0,TIMESIZE=cfg.timeSize|0;
   var TIMEBOX,lastBaseBucket=-1;
   var TIMESOURCE=cfg.timeSource===1?1:0;
@@ -648,6 +649,17 @@
     }
   }
 
+  function drawNaturalEarth(angle){
+    /* Masks are fixed seasonal vector-derived regions: land, sea ice, glacier. */
+    if(!EARTH_MAP){EARTH_MAP=require("orbit.earth");EARTH_MASKS=EARTH_MAP.get(VIEW_SOUTH);}
+    var scale=EARTHR/32;
+    var colors=[GREEN,0xBDF7,WHITE];
+    for(var k=0;k<3;k++){
+      g.setColor(colors[k]);
+      g.drawImage(EARTH_MASKS[k],EARTHX,EARTHY,{rotate:angle,scale:scale});
+    }
+  }
+
   function drawEarth(sol){
     /* Use native vertex transforms when available; otherwise use cached JS transforms. */
     buildLightingInto(sol.dec,EARTHX,EARTHY);
@@ -661,7 +673,7 @@
     HEMI_MAT[2]=-sa; HEMI_MAT[3]=ca;
     HEMI_MAT[4]=EARTHX; HEMI_MAT[5]=EARTHY;
 
-    if(EARTH_TEXTURE===1&&HEMI_NATIVE){
+    if(false&&EARTH_TEXTURE===1&&HEMI_NATIVE){
       try{
         for(i=0;i<HEMI_XY.length;i++)
           HEMI_SCREEN[i]=g.transformVertices(HEMI_XY[i],HEMI_MAT);
@@ -671,7 +683,7 @@
         HEMI_NATIVE=false;
       }
     }
-    if(EARTH_TEXTURE===1&&!HEMI_NATIVE){
+    if(false&&EARTH_TEXTURE===1&&!HEMI_NATIVE){
       for(i=0;i<HEMI_XY.length;i++)
         mapPolyInto(HEMI_XY[i],HEMI_SCREEN[i],ca,sa,EARTHX,EARTHY);
       for(i=0;i<HEMI_WATER_XY.length;i++)
@@ -680,6 +692,9 @@
 
     g.setColor(EARTH_TEXTURE===2?BLACK:CYAN).fillCircle(EARTHX,EARTHY,EARTHR);
     if(EARTH_TEXTURE===1){
+    drawNaturalEarth(baseA);
+    /* The geographical masks replace the former hand-drawn polygons. */
+    /*
     g.setColor(GREEN);
     for(i=0;i<HEMI_SCREEN.length;i++)g.fillPoly(HEMI_SCREEN[i]);
 
@@ -694,6 +709,8 @@
     if(HEMI_WATER_SCREEN.length)g.drawPoly(HEMI_WATER_SCREEN[0],true);
 
     g.fillCircle(EARTHX,EARTHY,HEMI_ICE_R);
+    */
+    g.setColor(DARKBLUE).fillPoly(LIGHTNIGHT);
     }else {
       if(EARTH_TEXTURE===2)drawEarthMesh(ca,sa);
       /* On the black mesh, night masking hides the grid while preserving the terminator. */
@@ -1074,7 +1091,7 @@
       try{
         stageStart=Date.now();
         if(step===0){
-          if(!earthCacheReady){if(EARTH_TEXTURE===1)buildEarthMapCache();earthCacheReady=true;}
+          if(!earthCacheReady){/* map now comes from fixed flash masks */earthCacheReady=true;}
           sol=safeSolar();
           showProgressStatus("Earth...",0,3);
           timed(perf.staged,"earth",function(){drawEarth(sol);});
