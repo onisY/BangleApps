@@ -711,10 +711,13 @@
     g.fillCircle(EARTHX,EARTHY,HEMI_ICE_R);
     */
     g.setColor(DARKBLUE).fillPoly(LIGHTNIGHT);
+    /* Coastline overlay after shadow: night coast remains visible. */
+    g.setColor(WHITE);
+    g.drawImage(EARTH_MASKS[3],EARTHX,EARTHY,{rotate:baseA,scale:EARTHR/32});
     }else {
       if(EARTH_TEXTURE===2)drawEarthMesh(ca,sa);
-      /* On the black mesh, night masking hides the grid while preserving the terminator. */
-      g.setColor(EARTH_TEXTURE===2?BLACK:DARKBLUE).fillPoly(LIGHTNIGHT);
+      /* Solid retains its shadow; mesh stays visible on both sides. */
+      if(EARTH_TEXTURE!==2)g.setColor(DARKBLUE).fillPoly(LIGHTNIGHT);
     }
     g.setColor(EARTH_TEXTURE===2?BLUE:WHITE);
     g.drawPoly(LIGHTTERM,false);
