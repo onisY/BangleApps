@@ -1,4 +1,4 @@
-/* tenkyu 0.04 (orbit storage) */
+/* tenkyu 0.105 (orbit storage) */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbit.json";
@@ -128,7 +128,8 @@
   var TESTLON=Math.max(-180,Math.min(180,+cfg.manualLon));
   var VIEW_SOUTH=!!cfg.viewSide;
   var EARTH_TEXTURE=Math.max(0,Math.min(2,cfg.earthTexture|0));
-  var EARTH_MAP,EARTH_MASKS;
+  var EARTH_MAP,EARTH_MASKS,EARTH_NORTH,EARTH_NORTH_MASKS;
+  var EARTH_IMG_OPT={rotate:0,scale:1};
   var DATEPOS=cfg.datePos|0,TIMEPOS=cfg.timePos|0,DATESIZE=cfg.dateSize|0,TIMESIZE=cfg.timeSize|0;
   var TIMEBOX,lastBaseBucket=-1;
   var TIMESOURCE=cfg.timeSource===1?1:0;
@@ -154,60 +155,6 @@
   cfg=undefined;
   var LIGHTSPAN=[],LIGHTBX=[],LIGHTBY=[],LIGHTLIMB=[],LIGHTSTEPS=24,LUX=0,LUY=0,LVX=0,LVY=0;
   var LIGHTTERM=[],LIGHTNIGHT=[];
-
-  /* Simplified hemisphere geometry balances recognition and redraw cost. */
-  var HEMI_LAND_N=[
-    /* North America incl. Alaska and Mexico.  Mexico is intentionally
-       exaggerated slightly so the peninsula/waist remains visible at ~30 px radius. */
-    [72,-168,65,-154,58,-143,55,-136,49,-127,39,-123,32,-117,
-     29,-115,25,-112,22,-108,19,-105,16,-96,18,-90,21,-87,
-     22,-91,20,-97,24,-101,27,-98,29,-90,27,-82,32,-80,
-     39,-74,49,-64,59,-56,67,-72,74,-96,74,-130],
-    /* Greenland */
-    [59,-46,67,-57,78,-52,83,-30,75,-18,65,-31],
-    /* Eurasia */
-    [43,-1,54,2,63,31,71,60,72,100,67,140,59,175,47,145,40,130,32,123,
-     24,117,13,106,10,95,20,82,31,63,35,37,41,21,44,11],
-    /* North Africa */
-    [36,-6,37,10,34,25,27,34,20,25,25,5,31,-8],
-    /* Japan main islands, exaggerated slightly for the 176 px display */
-    [31,129,33,131,34,134,35,137,38,141,41,142,40,139,37,136,34,133],
-    /* Hokkaido */
-    [41.5,140,43.5,143,45.5,145,45,142],
-    /* Great Britain */
-    [50,-5,53,-4,57,-4.5,58,-1,54,-1,50.5,-1]
-  ];
-
-  var HEMI_LAND_S=[
-    /* South America */
-    [-2,-80,-8,-79,-15,-76,-22,-71,-30,-72,-38,-73,-46,-75,
-     -53,-70,-56,-66,-52,-60,-45,-55,-36,-52,-28,-49,-20,-44,
-     -12,-38,-5,-35,0,-45],
-    /* Southern Africa */
-    [0,9,-7,12,-15,13,-23,16,-30,18,-35,20,-34,27,-29,32,
-     -22,35,-15,39,-8,40,-2,35,0,29],
-    /* Australia */
-    [-12,113,-16,121,-20,129,-18,137,-22,145,-28,153,-35,151,
-     -39,145,-38,136,-34,128,-31,116,-24,113],
-    /* Madagascar */
-    [-12,49,-16,50,-21,48,-26,45,-23,43,-17,44],
-    /* New Zealand */
-    [-34,172,-39,176,-44,170,-47,168,-43,166,-38,169]
-  ];
-
-  /* Hudson Bay is a sea cutout inside the North America polygon. */
-  var HEMI_WATER_N=[
-    [64,-95,62,-88,58,-80,53,-79,51,-85,54,-94,59,-97]
-  ];
-
-  var HEMI_WATER_S=[];
-  var HEMI_LAND=VIEW_SOUTH?HEMI_LAND_S:HEMI_LAND_N;
-  var HEMI_WATER=VIEW_SOUTH?HEMI_WATER_S:HEMI_WATER_N;
-  var HEMI_XY=[],HEMI_WATER_XY=[],HEMI_SCREEN=[],HEMI_WATER_SCREEN=[],HEMI_ICE_R=0;
-  /* Redraw only coastlines that remain useful at this display scale. */
-  var HEMI_COAST=VIEW_SOUTH?[0,1,2,3,4]:[0,1,2,4];
-  var HEMI_MAT=[1,0,0,1,0,0];
-  var HEMI_NATIVE=(typeof g.transformVertices==="function");
 
   function clear(t){if(t)clearTimeout(t);}
   function pad(n){return n<10?"0"+n:""+n;}
@@ -437,36 +384,6 @@
     LIGHTNIGHT=new Array((LIGHTSTEPS+1)*4);
   }
 
-  function buildEarthMapCache(){
-    /* Precompute map coordinates and reuse screen buffers to limit allocation/GC. */
-    HEMI_XY=[];HEMI_WATER_XY=[];HEMI_SCREEN=[];HEMI_WATER_SCREEN=[];
-
-    function cacheSet(srcSet,dstSet,screenSet){
-      for(var k=0;k<srcSet.length;k++){
-        var src=srcSet[k],dst=[],scr=new Array(src.length);
-        for(var i=0;i<src.length;i+=2){
-          var rr=EARTHR*Math.cos(rad(src[i]));
-          var da=(VIEW_SOUTH?1:-1)*rad(src[i+1]-TESTLON);
-          dst.push(rr*Math.cos(da),rr*Math.sin(da));
-        }
-        dstSet.push(dst);
-        screenSet.push(scr);
-      }
-    }
-
-    cacheSet(HEMI_LAND,HEMI_XY,HEMI_SCREEN);
-    cacheSet(HEMI_WATER,HEMI_WATER_XY,HEMI_WATER_SCREEN);
-    HEMI_ICE_R=Math.max(2,Math.round(EARTHR*Math.cos(rad(VIEW_SOUTH?65:78))));
-  }
-
-  function mapPolyInto(src,p,ca,sa,cx,cy){
-    for(var i=0;i<src.length;i+=2){
-      var lx=src[i],ly=src[i+1];
-      p[i]=(cx+lx*ca-ly*sa+0.5)|0;
-      p[i+1]=(cy+lx*sa+ly*ca+0.5)|0;
-    }
-  }
-
   function buildLightingInto(dec,cx,cy){
     /* Reuse fixed arrays instead of allocating term/night polygons each redraw. */
     var sd=Math.sin(dec)*(VIEW_SOUTH?-1:1),i,u,x,y,j=0;
@@ -649,77 +566,62 @@
     }
   }
 
+  function earthMapOptions(angle,scale){
+    /* One reusable options object; image coordinates are centred by rotation. */
+    EARTH_IMG_OPT.rotate=angle;
+    EARTH_IMG_OPT.scale=scale;
+    return EARTH_IMG_OPT;
+  }
+
   function drawNaturalEarth(angle){
-    /* Masks are fixed seasonal vector-derived regions: land, sea ice, glacier. */
-    if(!EARTH_MAP){EARTH_MAP=require("orbit.earth");EARTH_MASKS=EARTH_MAP.get(VIEW_SOUTH);}
-    var scale=EARTHR/32;
-    var colors=[GREEN,0xBDF7,WHITE];
-    for(var k=0;k<3;k++){
-      g.setColor(colors[k]);
-      g.drawImage(EARTH_MASKS[k],EARTHX,EARTHY,{rotate:angle,scale:scale});
+    var scale=EARTHR/64,opts=earthMapOptions(angle,scale);
+    if(!VIEW_SOUTH){
+      /* 128px North-polar texture: one 2bpp palette image instead of
+         three independently transformed monochrome images. */
+      if(!EARTH_NORTH){
+        EARTH_NORTH=require("orbit.north");
+        EARTH_NORTH_MASKS=EARTH_NORTH.get();
+      }
+      g.drawImage(EARTH_NORTH_MASKS[0],EARTHX,EARTHY,opts);
+      return;
+    }
+    /* Retain the existing South-polar map until its 128px conversion. */
+    if(!EARTH_MAP){
+      EARTH_MAP=require("orbit.earth");
+      EARTH_MASKS=EARTH_MAP.get(true);
+    }
+    var colors=[GREEN,CYAN,WHITE],i;
+    opts.scale=EARTHR/32;
+    for(i=0;i<3;i++){
+      g.setColor(colors[i]);
+      g.drawImage(EARTH_MASKS[i],EARTHX,EARTHY,opts);
     }
   }
 
   function drawEarth(sol){
-    /* Use native vertex transforms when available; otherwise use cached JS transforms. */
     buildLightingInto(sol.dec,EARTHX,EARTHY);
-
     var sunAng=Math.atan2(SUNY-EARTHY,SUNX-EARTHX);
     var baseA=sunAng+(VIEW_SOUTH?sol.ha:-sol.ha);
     var ca=Math.cos(baseA),sa=Math.sin(baseA);
-    var i;
-
-    HEMI_MAT[0]=ca; HEMI_MAT[1]=sa;
-    HEMI_MAT[2]=-sa; HEMI_MAT[3]=ca;
-    HEMI_MAT[4]=EARTHX; HEMI_MAT[5]=EARTHY;
-
-    if(false&&EARTH_TEXTURE===1&&HEMI_NATIVE){
-      try{
-        for(i=0;i<HEMI_XY.length;i++)
-          HEMI_SCREEN[i]=g.transformVertices(HEMI_XY[i],HEMI_MAT);
-        for(i=0;i<HEMI_WATER_XY.length;i++)
-          HEMI_WATER_SCREEN[i]=g.transformVertices(HEMI_WATER_XY[i],HEMI_MAT);
-      }catch(ex){
-        HEMI_NATIVE=false;
-      }
-    }
-    if(false&&EARTH_TEXTURE===1&&!HEMI_NATIVE){
-      for(i=0;i<HEMI_XY.length;i++)
-        mapPolyInto(HEMI_XY[i],HEMI_SCREEN[i],ca,sa,EARTHX,EARTHY);
-      for(i=0;i<HEMI_WATER_XY.length;i++)
-        mapPolyInto(HEMI_WATER_XY[i],HEMI_WATER_SCREEN[i],ca,sa,EARTHX,EARTHY);
-    }
-
-    g.setColor(EARTH_TEXTURE===2?BLACK:CYAN).fillCircle(EARTHX,EARTHY,EARTHR);
-    if(EARTH_TEXTURE===1){
-    /* SVG polar maps have fixed prime-meridian directions, unlike the old lon-relative polygons. */
     var mapA=baseA+(VIEW_SOUTH?1:-1)*(Math.PI/2-rad(TESTLON));
-    drawNaturalEarth(mapA);
-    /* The geographical masks replace the former hand-drawn polygons. */
-    /*
-    g.setColor(GREEN);
-    for(i=0;i<HEMI_SCREEN.length;i++)g.fillPoly(HEMI_SCREEN[i]);
 
-    g.setColor(CYAN);
-    for(i=0;i<HEMI_WATER_SCREEN.length;i++)g.fillPoly(HEMI_WATER_SCREEN[i]);
-
-    g.setColor(DARKBLUE).fillPoly(LIGHTNIGHT);
-
-    g.setColor(WHITE);
-    for(i=0;i<HEMI_COAST.length;i++)
-      g.drawPoly(HEMI_SCREEN[HEMI_COAST[i]],true);
-    if(HEMI_WATER_SCREEN.length)g.drawPoly(HEMI_WATER_SCREEN[0],true);
-
-    g.fillCircle(EARTHX,EARTHY,HEMI_ICE_R);
-    */
-    g.setColor(DARKBLUE).fillPoly(LIGHTNIGHT);
-    /* Coastline overlay after shadow: night coast remains visible. */
-    g.setColor(WHITE);
-    g.drawImage(EARTH_MASKS[3],EARTHX,EARTHY,{rotate:mapA,scale:EARTHR/32});
-    }else {
+    /* Ocean is a cheap solid disk; land/sea-ice/ice-sheet are image pixels. */
+    g.setColor(EARTH_TEXTURE===2?BLACK:BLUE).fillCircle(EARTHX,EARTHY,EARTHR);
+    if(EARTH_TEXTURE===1){
+      drawNaturalEarth(mapA);
+      /* Darken the night hemisphere, then restore outlines on both sides. */
+      g.setColor(DARKBLUE).fillPoly(LIGHTNIGHT);
+      g.setColor(WHITE);
+      if(VIEW_SOUTH){
+        g.drawImage(EARTH_MASKS[3],EARTHX,EARTHY,
+          earthMapOptions(mapA,EARTHR/32));
+      }else{
+        g.drawImage(EARTH_NORTH_MASKS[1],EARTHX,EARTHY,
+          earthMapOptions(mapA,EARTHR/64));
+      }
+    }else{
       if(EARTH_TEXTURE===2)drawEarthMesh(ca,sa);
-      /* Solid retains its shadow; mesh stays visible on both sides. */
-      if(EARTH_TEXTURE!==2)g.setColor(DARKBLUE).fillPoly(LIGHTNIGHT);
+      else g.setColor(DARKBLUE).fillPoly(LIGHTNIGHT);
     }
     g.setColor(EARTH_TEXTURE===2?BLUE:WHITE);
     g.drawPoly(LIGHTTERM,false);
@@ -1143,7 +1045,7 @@
     var perfStart=Date.now();
     // A timer may request a normal redraw before the staged opening has
     // completed; build any missing caches only in that exceptional path.
-    if(!earthCacheReady){if(EARTH_TEXTURE===1)buildEarthMapCache();earthCacheReady=true;}
+    if(!earthCacheReady){earthCacheReady=true;}
     if(!moonCacheReady){buildMoonCache();moonCacheReady=true;}
     if(!restReady){initRest();restReady=true;}
     TIMEBOX=undefined;
