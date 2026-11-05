@@ -2,7 +2,7 @@
 (function(back){
   var Storage=require("Storage");
   // Read-only version display: title is not a selectable button.
-  var VERSION="0.097";
+  var VERSION="0.098";
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
   var REST_ACTIVITY_DEFAULTS=[1,2,6,18];
   // Bangle.js 2 has a 3-bit colour screen (8 actual dial colours).
@@ -149,6 +149,7 @@
     set("orbitHourEnabled",s.orbitHourEnabled===undefined?false:s.orbitHourEnabled!==false);
     if(DIAL_COLOR_VALUES.indexOf(s.orbitHourColor)<0)set("orbitHourColor",0xFFFF);
     set("restEco",s.restEco===true);
+    set("earthTexture",Math.max(0,Math.min(2,s.earthTexture|0)));
     s.sunSize=Math.max(6,Math.min(15,s.sunSize|0));
     s.earthSize=Math.max(25,Math.min(50,s.earthSize|0));
     s.moonSize=Math.max(14,Math.min(16,s.moonSize|0));
@@ -742,6 +743,10 @@
       "View side":{value:s.viewSide,min:0,max:1,step:1,
         format:function(v){return v?"South":"North";},
         onchange:function(v){s.viewSide=v?1:0;write(CFG,s);}
+      },
+      "Earth texture":{value:s.earthTexture|0,min:0,max:2,step:1,
+        format:function(v){return ["Solid","Land","30deg mesh"][v];},
+        onchange:function(v){s.earthTexture=v|0;write(CFG,s);}
       },
       "Sun size":{value:s.sunSize,min:6,max:15,step:1,onchange:function(v){s.sunSize=v;write(CFG,s);}},
       "Earth size":{value:s.earthSize,min:25,max:50,step:1,onchange:function(v){
