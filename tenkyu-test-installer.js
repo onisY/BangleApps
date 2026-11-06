@@ -19,6 +19,7 @@
         var meta=await response.json();
         if(meta.id!=="orbit"||meta.version!=="0.105")throw Error("Unexpected test metadata");
         var entries=(meta.storage||[]).concat(meta.data||[]).filter(function(x){return !!x.url;});
+        if(entries.length<10||!entries.some(function(x){return x.name==="orbit.north";}))throw Error("Incomplete tenkyu metadata");
         var files=await Promise.all(entries.map(async function(entry){
           if(!/^[a-zA-Z0-9_.-]+$/.test(entry.url))throw Error("Unsafe filename");
           var r=await fetch(ROOT+entry.url,{cache:"no-store"});
