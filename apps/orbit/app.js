@@ -623,23 +623,33 @@
       if(EARTH_TEXTURE===2)drawEarthMesh(ca,sa);
       else g.setColor(DARKBLUE).fillPoly(LIGHTNIGHT);
     }
-    /* Experimental photo-guided sea cuts. These are screen-relative, NOT
-       georeferenced: trial only, removable without changing the texture.
-       Two blue strokes match the user's red annotations at this viewing
-       angle. Do not apply to the South view or non-texture Earth modes. */
+    /* Photo-guided narrow water channels (trial).
+       Blue centerline + white 1px banks; keep island bitmap intact.
+       Fixed to the user's reference view, not geographic rotation.
+       The two strokes replace the previous unbordered blue lines. */
     if(EARTH_TEXTURE===1&&!VIEW_SOUTH){
-      g.setColor(BLUE);
       var rr=EARTHR,ex=EARTHX,ey=EARTHY;
-      /* Upper short mark: approx x=+0.18..+0.38, y=-0.51..-0.47. */
-      g.drawLine(ex+Math.round(rr*0.18),ey-Math.round(rr*0.51),
-                 ex+Math.round(rr*0.38),ey-Math.round(rr*0.47));
-      /* Lower curved mark: approx x=-0.02..+0.28, y=-0.35. */
-      g.drawLine(ex-Math.round(rr*0.02),ey-Math.round(rr*0.34),
-                 ex+Math.round(rr*0.05),ey-Math.round(rr*0.38));
-      g.drawLine(ex+Math.round(rr*0.05),ey-Math.round(rr*0.38),
-                 ex+Math.round(rr*0.14),ey-Math.round(rr*0.36));
-      g.drawLine(ex+Math.round(rr*0.14),ey-Math.round(rr*0.36),
-                 ex+Math.round(rr*0.28),ey-Math.round(rr*0.37));
+      var ux0=ex+Math.round(rr*0.18),uy0=ey-Math.round(rr*0.51);
+      var ux1=ex+Math.round(rr*0.38),uy1=ey-Math.round(rr*0.47);
+      var lx0=ex-Math.round(rr*0.02),ly0=ey-Math.round(rr*0.34);
+      var lx1=ex+Math.round(rr*0.05),ly1=ey-Math.round(rr*0.38);
+      var lx2=ex+Math.round(rr*0.14),ly2=ey-Math.round(rr*0.36);
+      var lx3=ex+Math.round(rr*0.28),ly3=ey-Math.round(rr*0.37);
+      g.setColor(WHITE);
+      /* Two flanks are shifted one pixel up and down, not wide fills. */
+      g.drawLine(ux0,uy0-1,ux1,uy1-1);
+      g.drawLine(ux0,uy0+1,ux1,uy1+1);
+      g.drawLine(lx0,ly0-1,lx1,ly1-1);
+      g.drawLine(lx1,ly1-1,lx2,ly2-1);
+      g.drawLine(lx2,ly2-1,lx3,ly3-1);
+      g.drawLine(lx0,ly0+1,lx1,ly1+1);
+      g.drawLine(lx1,ly1+1,lx2,ly2+1);
+      g.drawLine(lx2,ly2+1,lx3,ly3+1);
+      g.setColor(BLUE);
+      g.drawLine(ux0,uy0,ux1,uy1);
+      g.drawLine(lx0,ly0,lx1,ly1);
+      g.drawLine(lx1,ly1,lx2,ly2);
+      g.drawLine(lx2,ly2,lx3,ly3);
     }
     g.setColor(EARTH_TEXTURE===2?BLUE:WHITE);
     g.drawPoly(LIGHTTERM,false);
