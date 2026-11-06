@@ -623,6 +623,24 @@
       if(EARTH_TEXTURE===2)drawEarthMesh(ca,sa);
       else g.setColor(DARKBLUE).fillPoly(LIGHTNIGHT);
     }
+    /* Experimental photo-guided sea cuts. These are screen-relative, NOT
+       georeferenced: trial only, removable without changing the texture.
+       Two blue strokes match the user's red annotations at this viewing
+       angle. Do not apply to the South view or non-texture Earth modes. */
+    if(EARTH_TEXTURE===1&&!VIEW_SOUTH){
+      g.setColor(BLUE);
+      var rr=EARTHR,ex=EARTHX,ey=EARTHY;
+      /* Upper short mark: approx x=+0.18..+0.38, y=-0.51..-0.47. */
+      g.drawLine(ex+Math.round(rr*0.18),ey-Math.round(rr*0.51),
+                 ex+Math.round(rr*0.38),ey-Math.round(rr*0.47));
+      /* Lower curved mark: approx x=-0.02..+0.28, y=-0.35. */
+      g.drawLine(ex-Math.round(rr*0.02),ey-Math.round(rr*0.34),
+                 ex+Math.round(rr*0.05),ey-Math.round(rr*0.38));
+      g.drawLine(ex+Math.round(rr*0.05),ey-Math.round(rr*0.38),
+                 ex+Math.round(rr*0.14),ey-Math.round(rr*0.36));
+      g.drawLine(ex+Math.round(rr*0.14),ey-Math.round(rr*0.36),
+                 ex+Math.round(rr*0.28),ey-Math.round(rr*0.37));
+    }
     g.setColor(EARTH_TEXTURE===2?BLUE:WHITE);
     g.drawPoly(LIGHTTERM,false);
     if(EARTH_TEXTURE===2){
