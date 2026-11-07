@@ -574,9 +574,9 @@
   }
 
   function drawNaturalEarth(angle){
-    var scale=EARTHR/48,opts=earthMapOptions(angle,scale);
+    var scale=EARTHR/64,opts=earthMapOptions(angle,scale);
     if(!VIEW_SOUTH){
-      /* Experimental 96px North-polar texture: one 2bpp palette image instead of
+      /* 128px North-polar texture: one 2bpp palette image instead of
          three independently transformed monochrome images. */
       if(!EARTH_NORTH){
         EARTH_NORTH=require("orbit.north");
@@ -617,39 +617,11 @@
           earthMapOptions(mapA,EARTHR/32));
       }else{
         g.drawImage(EARTH_NORTH_MASKS[1],EARTHX,EARTHY,
-          earthMapOptions(mapA,EARTHR/48));
+          earthMapOptions(mapA,EARTHR/64));
       }
     }else{
       if(EARTH_TEXTURE===2)drawEarthMesh(ca,sa);
       else g.setColor(DARKBLUE).fillPoly(LIGHTNIGHT);
-    }
-    /* Photo-guided narrow water channels (trial).
-       Blue centerline + white 1px banks; keep island bitmap intact.
-       Fixed to the user's reference view, not geographic rotation.
-       The two strokes replace the previous unbordered blue lines. */
-    if(EARTH_TEXTURE===1&&!VIEW_SOUTH){
-      var rr=EARTHR,ex=EARTHX,ey=EARTHY;
-      var ux0=ex+Math.round(rr*0.18),uy0=ey-Math.round(rr*0.51);
-      var ux1=ex+Math.round(rr*0.38),uy1=ey-Math.round(rr*0.47);
-      var lx0=ex-Math.round(rr*0.02),ly0=ey-Math.round(rr*0.34);
-      var lx1=ex+Math.round(rr*0.05),ly1=ey-Math.round(rr*0.38);
-      var lx2=ex+Math.round(rr*0.14),ly2=ey-Math.round(rr*0.36);
-      var lx3=ex+Math.round(rr*0.28),ly3=ey-Math.round(rr*0.37);
-      g.setColor(WHITE);
-      /* Two flanks are shifted one pixel up and down, not wide fills. */
-      g.drawLine(ux0,uy0-1,ux1,uy1-1);
-      g.drawLine(ux0,uy0+1,ux1,uy1+1);
-      g.drawLine(lx0,ly0-1,lx1,ly1-1);
-      g.drawLine(lx1,ly1-1,lx2,ly2-1);
-      g.drawLine(lx2,ly2-1,lx3,ly3-1);
-      g.drawLine(lx0,ly0+1,lx1,ly1+1);
-      g.drawLine(lx1,ly1+1,lx2,ly2+1);
-      g.drawLine(lx2,ly2+1,lx3,ly3+1);
-      g.setColor(BLUE);
-      g.drawLine(ux0,uy0,ux1,uy1);
-      g.drawLine(lx0,ly0,lx1,ly1);
-      g.drawLine(lx1,ly1,lx2,ly2);
-      g.drawLine(lx2,ly2,lx3,ly3);
     }
     g.setColor(EARTH_TEXTURE===2?BLUE:WHITE);
     g.drawPoly(LIGHTTERM,false);
