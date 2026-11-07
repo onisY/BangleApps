@@ -4,7 +4,7 @@
  */
 (function(){
   "use strict";
-  var COMMIT="d035a3fc38bb94ac2c447dc6f3591429786d7388";
+  var COMMIT="80111dd73fc61709c606eafd6ef3ce9191c0ab76";
   var ROOT="https://raw.githubusercontent.com/onisY/BangleApps/"+COMMIT+"/apps/orbit/";
   var button=document.getElementById("installtenkyutest");
   if(!button)return;
