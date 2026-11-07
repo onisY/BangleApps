@@ -7,9 +7,9 @@
 <label>回転角度 <output id="deg">0°</output> <input id="angle" type="range" min="0" max="359" value="0"></label>
 <label>地球の半径（画面画素） <output id="rad">45</output> <input id="radius" type="range" min="25" max="50" value="45"></label>
 <label><input id="coast" type="checkbox" checked style="width:auto"> 白い海岸線を重ねる</label>
-<section><figure><figcaption>128×128の地図データ（8倍拡大）</figcaption><canvas id="raw" width="1024" height="1024" style="width:440px"></canvas></figure>
+<section><figure><figcaption>元SVG（北極中心・原画）</figcaption><canvas id="source" width="512" height="512" style="width:352px"></canvas></figure><figure><figcaption>128×128の地図データ（8倍拡大）</figcaption><canvas id="raw" width="1024" height="1024" style="width:440px"></canvas></figure>
 <figure><figcaption>Bangle画面相当（画素を拡大表示）</figcaption><canvas id="watch" width="352" height="352" style="width:352px"></canvas></figure></section>
-<p id="status">地図データを読み込み中…</p><small>試験版の地図ファイルを指定コミットから取得。地図座標と回転・縮小時の画素のつぶれを分けて観察できます。実機のGraphics.drawImageの補間や夜側の陰影を完全再現するものではありません。</small>
+<p id="status">地図データを読み込み中…</p><p id="source-status">元SVGを読み込み中…</p><p><small>元SVGの円形地球（中心606.14,610.65、半径559.35）を切り出して表示します。青い海域が元画像に存在しても128px画像で消えているなら、縮小処理の問題です。128pxでは残るのに右側の小画面で消えるなら、描画時の縮小の問題です。</small></p><small>試験版の地図ファイルを指定コミットから取得。地図座標と回転・縮小時の画素のつぶれを分けて観察できます。実機のGraphics.drawImageの補間や夜側の陰影を完全再現するものではありません。</small>
 <script>window.exports={};</script>
 <script src="https://cdn.jsdelivr.net/gh/onisY/BangleApps@80111dd73fc61709c606eafd6ef3ce9191c0ab76/apps/orbit/earth-north-128.js"></script>
 <script>
@@ -39,5 +39,22 @@ function redraw(){var a=+document.getElementById("angle").value,r=+document.getE
 ["angle","radius","coast"].forEach(function(id){document.getElementById(id).addEventListener("input",redraw);});
 redraw();status.textContent="読み込み成功。地図は128×128、4色＋海岸線マスクです。";
 }catch(e){status.textContent="診断エラー: "+e.message;}
+})();
+</script>
+<script>
+(function(){
+"use strict";
+var img=new Image(),status=document.getElementById("source-status");
+img.crossOrigin="anonymous";
+img.onload=function(){
+  var canvas=document.getElementById("source"),ctx=canvas.getContext("2d");
+  // Crop exactly the source SVG's 559.35-unit-radius polar globe.
+  var x=606.14-559.35,y=610.65-559.35,d=2*559.35;
+  ctx.clearRect(0,0,512,512);
+  ctx.drawImage(img,x,y,d,d,0,0,512,512);
+  status.textContent="元SVGの読み込み成功。左から原画、128px地図、時計相当の順です。";
+};
+img.onerror=function(){status.textContent="元SVGを読み込めませんでした。公開反映やネットワーク接続を確認してください。";};
+img.src="https://cdn.jsdelivr.net/gh/onisY/BangleApps@80111dd73fc61709c606eafd6ef3ce9191c0ab76/apps/orbit/northern_hemisphere_winter.svg";
 })();
 </script></body></html>
