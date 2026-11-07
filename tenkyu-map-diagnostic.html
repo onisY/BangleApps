@@ -9,7 +9,7 @@
 <label><input id="coast" type="checkbox" checked style="width:auto"> 白い海岸線を重ねる</label>
 <section><figure><figcaption>元SVG（北極中心・原画）</figcaption><canvas id="source" width="512" height="512" style="width:352px"></canvas></figure><figure><figcaption>128×128の地図データ（8倍拡大）</figcaption><canvas id="raw" width="1024" height="1024" style="width:440px"></canvas></figure>
 <figure><figcaption>Bangle画面相当（画素を拡大表示）</figcaption><canvas id="watch" width="352" height="352" style="width:352px"></canvas></figure></section>
-<p id="status">地図データを読み込み中…</p><p id="source-status">元SVGを読み込み中…</p><p><small>元SVGの円形地球（中心606.14,610.65、半径559.35）を切り出して表示します。青い海域が元画像に存在しても128px画像で消えているなら、縮小処理の問題です。128pxでは残るのに右側の小画面で消えるなら、描画時の縮小の問題です。</small></p><small>試験版の地図ファイルを指定コミットから取得。地図座標と回転・縮小時の画素のつぶれを分けて観察できます。実機のGraphics.drawImageの補間や夜側の陰影を完全再現するものではありません。</small>
+<p id="status">地図データを読み込み中…</p><p id="source-status">元SVGはリポジトリに同梱されていません。原画との比較には、元のSVGファイルを選択してください。</p><label>元SVGファイル（任意） <input type="file" id="source-file" accept=".svg,image/svg+xml" style="width:auto"></label><p><small>元SVGの円形地球（中心606.14,610.65、半径559.35）を切り出して表示します。青い海域が元画像に存在しても128px画像で消えているなら、縮小処理の問題です。128pxでは残るのに右側の小画面で消えるなら、描画時の縮小の問題です。</small></p><small>試験版の地図ファイルを指定コミットから取得。地図座標と回転・縮小時の画素のつぶれを分けて観察できます。実機のGraphics.drawImageの補間や夜側の陰影を完全再現するものではありません。</small>
 <script>window.exports={};</script>
 <script src="https://cdn.jsdelivr.net/gh/onisY/BangleApps@80111dd73fc61709c606eafd6ef3ce9191c0ab76/apps/orbit/earth-north-128.js"></script>
 <script>
@@ -55,6 +55,12 @@ img.onload=function(){
   status.textContent="元SVGの読み込み成功。左から原画、128px地図、時計相当の順です。";
 };
 img.onerror=function(){status.textContent="元SVGを読み込めませんでした。公開反映やネットワーク接続を確認してください。";};
-img.src="https://cdn.jsdelivr.net/gh/onisY/BangleApps@80111dd73fc61709c606eafd6ef3ce9191c0ab76/apps/orbit/northern_hemisphere_winter.svg";
+document.getElementById("source-file").addEventListener("change",function(){
+  var file=this.files&&this.files[0];if(!file)return;
+  var url=URL.createObjectURL(file);
+  img.onload=(function(original){return function(){original();URL.revokeObjectURL(url);};})(img.onload);
+  img.onerror=function(){status.textContent="選択したSVGを読み込めませんでした。";URL.revokeObjectURL(url);};
+  img.src=url;
+});
 })();
 </script></body></html>
