@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>tenkyu 北半球地図 診断</title>
+<style>body{background:#151a27;color:#eef1f7;font:16px system-ui,sans-serif;max-width:840px;margin:20px auto;padding:0 14px}canvas{image-rendering:pixelated;max-width:100%;background:#001c7b;border:1px solid #637188}section{display:flex;flex-wrap:wrap;gap:20px}figure{margin:0}figcaption{margin:6px 0}label{display:block;margin:15px 0}input{width:min(350px,90vw)}small{color:#b4c3d5}a{color:#8bd4ff}</style></head><body>
+<h1>tenkyu 地図データ診断</h1>
+<p>地図の元データと、回転・縮小した表示を比較します。Bangleには書き込みません。</p>
+<label>回転角度 <output id="deg">0°</output> <input id="angle" type="range" min="0" max="359" value="0"></label>
+<label>地球の半径（画面画素） <output id="rad">45</output> <input id="radius" type="range" min="25" max="50" value="45"></label>
+<label><input id="coast" type="checkbox" checked style="width:auto"> 白い海岸線を重ねる</label>
+<section><figure><figcaption>128×128の地図データ（8倍拡大）</figcaption><canvas id="raw" width="1024" height="1024" style="width:440px"></canvas></figure>
+<figure><figcaption>Bangle画面相当（画素を拡大表示）</figcaption><canvas id="watch" width="352" height="352" style="width:352px"></canvas></figure></section>
+<p id="status">地図データを読み込み中…</p><small>試験版の地図ファイルを指定コミットから取得。地図座標と回転・縮小時の画素のつぶれを分けて観察できます。実機のGraphics.drawImageの補間や夜側の陰影を完全再現するものではありません。</small>
+<script>window.exports={};</script>
+<script src="https://raw.githubusercontent.com/onisY/BangleApps/80111dd73fc61709c606eafd6ef3ce9191c0ab76/apps/orbit/earth-north-128.js"></script>
+<script>
+(function(){
+"use strict";
+var status=document.getElementById("status"),raw=document.getElementById("raw"),watch=document.getElementById("watch");
+if(!window.exports||typeof window.exports.get!=="function"){status.textContent="地図の読み込みに失敗しました。";return;}
+try{
+var imgs=window.exports.get(),b=new Uint8Array(imgs[0].buffer),c=new Uint8Array(imgs[1].buffer);
+var palette=[[0,30,120],[0,115,0],[0,255,255],[255,255,255]];
+function pixel(x,y){if(x<0||y<0||x>=128||y>=128)return 0;var i=y*128+x;return(b[i>>2]>>(6-2*(i&3)))&3;}
+function coast(x,y){if(x<0||y<0||x>=128||y>=128)return 0;var i=y*128+x;return(c[i>>3]>>(7-(i&7)))&1;}
+function paint(canvas,angle,radius){
+var ctx=canvas.getContext("2d"),w=canvas.width,h=canvas.height,im=ctx.createImageData(w,h),d=im.data,cs=Math.cos(angle),sn=Math.sin(angle),show=document.getElementById("coast").checked;
+for(var y=0;y<h;y++)for(var x=0;x<w;x++){
+var px=x-w/2,py=y-h/2,xx,yy,inside=true;
+if(canvas===raw){xx=Math.floor(x/8);yy=Math.floor(y/8);}
+else {var dx=px/2,dy=py/2;inside=dx*dx+dy*dy<=radius*radius;xx=Math.floor(64+(cs*dx+sn*dy)*64/radius);yy=Math.floor(64+(-sn*dx+cs*dy)*64/radius);}
+var v=inside?pixel(xx,yy):0,color=palette[v],idx=(y*w+x)*4;
+if(!inside)color=[20,25,40];
+else if(show&&coast(xx,yy))color=[255,255,255];
+d[idx]=color[0];d[idx+1]=color[1];d[idx+2]=color[2];d[idx+3]=255;
+}
+ctx.putImageData(im,0,0);
+}
+function redraw(){var a=+document.getElementById("angle").value,r=+document.getElementById("radius").value;document.getElementById("deg").textContent=a+"°";document.getElementById("rad").textContent=r;paint(raw,0,64);paint(watch,a*Math.PI/180,r);}
+["angle","radius","coast"].forEach(function(id){document.getElementById(id).addEventListener("input",redraw);});
+redraw();status.textContent="読み込み成功。地図は128×128、4色＋海岸線マスクです。";
+}catch(e){status.textContent="診断エラー: "+e.message;}
+})();
+</script></body></html>
