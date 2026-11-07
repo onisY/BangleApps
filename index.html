@@ -153,6 +153,24 @@
         </p><p>
           <button class="btn tooltip" id="newGithubIssue" data-tooltip="Create a new issue on GitHub">New issue on GitHub</button>
         </p>
+        <h3>tenkyu 地図診断</h3>
+        <p>元の128×128地図と時計画面相当の縮小・回転結果を比較します。Bangleへの接続・書き込みは不要です。</p>
+        <p><button class="btn" id="tenkyu-map-open" type="button">地図診断を開く／閉じる</button></p>
+        <div id="tenkyu-map-panel" style="display:none;border:1px solid #b5b5b5;padding:12px;margin-bottom:18px">
+          <label>回転角度 <output id="tenkyu-map-angle-value">0°</output>
+            <input id="tenkyu-map-angle" type="range" min="0" max="359" value="0" style="width:95%"></label>
+          <label>地球半径 <output id="tenkyu-map-radius-value">45</output>px
+            <input id="tenkyu-map-radius" type="range" min="25" max="50" value="45" style="width:95%"></label>
+          <label><input type="checkbox" id="tenkyu-map-coast" checked> 海岸線を表示</label>
+          <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:10px">
+            <figure style="margin:0;max-width:100%"><figcaption>128×128地図（4倍表示）</figcaption>
+              <canvas id="tenkyu-map-raw" width="512" height="512" style="width:256px;max-width:100%;image-rendering:pixelated;background:#001e78"></canvas></figure>
+            <figure style="margin:0;max-width:100%"><figcaption>時計相当（2倍表示）</figcaption>
+              <canvas id="tenkyu-map-watch" width="352" height="352" style="width:256px;max-width:100%;image-rendering:pixelated;background:#001e78"></canvas></figure>
+          </div>
+          <p id="tenkyu-map-status" role="status">開くと地図データを読み込みます。</p>
+          <small>試験ブランチの地図データを読み取ります。実機の回転補間、昼夜の陰影、ほかの描画要素は再現しません。</small>
+        </div>
         <h3>Settings</h3>
         <div class="form-group">
           <label class="form-switch">
@@ -245,6 +263,100 @@
     <script src="core/js/appinfo.js"></script>
     <script src="core/js/index.js"></script>
     <script src="core/js/pwa.js" defer></script>
+    <script>
+    /* tenkyu map diagnostic is embedded in the main uploader page.
+       No separate GitHub Pages URL, eval, or watch connection required. */
+    (function(){
+      "use strict";
+      var toggle=document.getElementById("tenkyu-map-open");
+      var panel=document.getElementById("tenkyu-map-panel");
+      var status=document.getElementById("tenkyu-map-status");
+      var data=null,coast=null,loading=false;
+      function decode64(s){
+        var bin=atob(s),out=new Uint8Array(4096),i=0,j=0,h,n,v;
+        while(i<bin.length){
+          h=bin.charCodeAt(i++);
+          if(h<128){n=h+1;while(n--)out[j++]=bin.charCodeAt(i++);}
+          else{n=h-126;v=bin.charCodeAt(i++);while(n--)out[j++]=v;}
+        }
+        if(j!==4096)throw Error("color length mismatch: "+j);
+        return out;
+      }
+      function decodeCoast(s){
+        var bin=atob(s),out=new Uint8Array(2048),i=0,p=0,on=0,n,k,shift,j;
+        while(i<bin.length){
+          n=0;shift=0;
+          do{k=bin.charCodeAt(i++);n|=(k&127)<<shift;shift+=7;}while(k&128);
+          if(on)for(j=0;j<n;j++)out[(p+j)>>3]|=128>>((p+j)&7);
+          p+=n;on^=1;
+        }
+        if(p!==16384)throw Error("coast length mismatch: "+p);
+        return out;
+      }
+      function sample(x,y){
+        if(x<0||y<0||x>=128||y>=128)return 0;
+        var i=y*128+x;
+        return (data[i>>2]>>(6-2*(i&3)))&3;
+      }
+      function edge(x,y){
+        if(x<0||y<0||x>=128||y>=128)return false;
+        var i=y*128+x;
+        return !!(coast[i>>3]&(128>>(i&7)));
+      }
+      function paint(canvas,angle,radius,raw,showCoast){
+        var ctx=canvas.getContext("2d"),w=canvas.width,h=canvas.height;
+        var im=ctx.createImageData(w,h),d=im.data;
+        var palette=[[0,30,120],[0,115,0],[0,255,255],[255,255,255]];
+        var cs=Math.cos(angle),sn=Math.sin(angle);
+        for(var y=0;y<h;y++)for(var x=0;x<w;x++){
+          var xx,yy,inside=true;
+          if(raw){xx=Math.floor(x/4);yy=Math.floor(y/4);}
+          else{
+            var dx=(x-w/2)/2,dy=(y-h/2)/2;
+            inside=dx*dx+dy*dy<=radius*radius;
+            xx=Math.floor(64+(cs*dx+sn*dy)*64/radius);
+            yy=Math.floor(64+(-sn*dx+cs*dy)*64/radius);
+          }
+          var c=inside?palette[sample(xx,yy)]:[20,25,40];
+          if(inside&&showCoast&&edge(xx,yy))c=[255,255,255];
+          var i=(y*w+x)*4;
+          d[i]=c[0];d[i+1]=c[1];d[i+2]=c[2];d[i+3]=255;
+        }
+        ctx.putImageData(im,0,0);
+      }
+      function render(){
+        if(!data||!coast)return;
+        var a=+document.getElementById("tenkyu-map-angle").value;
+        var r=+document.getElementById("tenkyu-map-radius").value;
+        var edgeOn=document.getElementById("tenkyu-map-coast").checked;
+        document.getElementById("tenkyu-map-angle-value").textContent=a+"°";
+        document.getElementById("tenkyu-map-radius-value").textContent=r;
+        paint(document.getElementById("tenkyu-map-raw"),0,64,true,edgeOn);
+        paint(document.getElementById("tenkyu-map-watch"),a*Math.PI/180,r,false,edgeOn);
+      }
+      toggle.addEventListener("click",function(){
+        var opening=panel.style.display==="none";
+        panel.style.display=opening?"block":"none";
+        if(!opening||data){if(opening)render();return;}
+        if(loading)return;
+        loading=true;status.textContent="地図データを読み込み中…";
+        fetch("https://cdn.jsdelivr.net/gh/onisY/BangleApps@80111dd73fc61709c606eafd6ef3ce9191c0ab76/apps/orbit/earth-north-128.js")
+        .then(function(r){if(!r.ok)throw Error("HTTP "+r.status);return r.text();})
+        .then(function(src){
+          var match=src.match(/var DATA=(\[[^\n]+\]);/);
+          if(!match)throw Error("map payload not found");
+          var packed=JSON.parse(match[1]);
+          data=decode64(packed[0]);coast=decodeCoast(packed[1]);
+          status.textContent="地図データ読み込み成功（128×128）。";
+          render();
+        }).catch(function(e){status.textContent="読み込みエラー: "+e.message;})
+        .finally(function(){loading=false;});
+      });
+      ["tenkyu-map-angle","tenkyu-map-radius","tenkyu-map-coast"].forEach(function(id){
+        document.getElementById(id).addEventListener("input",render);
+      });
+    })();
+    </script>
     <script src="gadgetbridge.js"></script>
     <script src="emulator.js"></script>
   </body>
