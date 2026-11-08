@@ -514,6 +514,17 @@ function draw(graphics,engine,map){
     }
     lastBucket=bucket;
   }
+  // A non-wear interval has the same radial reach as rest stage 5,
+  // but is colored red instead of green/yellow.
+  function drawNonWearBar(bucket){
+    bars++;
+    if(mode===1)return;
+    pointAt(bucket);
+    var x1=Math.round(map.cx+r*ca),y1=Math.round(map.cy+r*sa);
+    var x2=Math.round(map.cx+(r+height)*ca);
+    var y2=Math.round(map.cy+(r+height)*sa);
+    if(mode>=4){graphics.setColor(0xF800);graphics.drawLine(x1,y1,x2,y2);}
+  }
   function drawArc(bucket,color){
     bars++;
     if(mode===1)return;
@@ -541,7 +552,7 @@ function draw(graphics,engine,map){
     }
     if(mode>=4){graphics.setColor(day?0x07E0:0xFFE0);
       graphics.drawLine(x1,y1,x2,y2);}
-  },function(bucket){drawArc(bucket,0xF800);},
+  },function(bucket){drawNonWearBar(bucket);},
     function(bucket){drawArc(bucket,0xFFFF);});
   if(perf)perf.bars=bars;
 }
