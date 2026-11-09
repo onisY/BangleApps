@@ -419,7 +419,7 @@ function runWear(pulse,zAt=()=>1,cfg={}){
 }
 const nw=runWear();assert.strictEqual(nw.b.orbitRest.getEngine().level(base/S),0);
 assert.strictEqual(nw.b.orbitRest.getDiagnostics().recent.at(-1).reason,"nonwear");
-// Non-wear (FE) is a red *one-pixel arc on the lunar orbit*, never a bar.
+// Non-wear (FE) is a red stage-5-length radial bar, distinct from rest green/yellow.
 // No-data (FF) must not be drawn red. The original five-stage bars remain.
 function restStrokes(engine,ms){
   const lines=[];let ink;
@@ -434,8 +434,8 @@ assert.strictEqual(arcLines.length,1);
 assert.strictEqual(arcLines[0].color,0xF800);
 const [x1,y1,x2,y2]=arcLines[0].points;
 assert(Math.abs(Math.hypot(x1-85,y1-90)-70)<1,"Red start must lie on the orbit");
-assert(Math.abs(Math.hypot(x2-85,y2-90)-70)<1,"Red end must lie on the orbit");
-assert(Math.hypot(x1-x2,y1-y2)<=3,"Five-minute arc must stay short");
+assert(Math.abs(Math.hypot(x2-85,y2-90)-80)<1.1,"Red end must reach the same radius as rest stage 5");
+assert(Math.hypot(x1-x2,y1-y2)>=9,"Non-wear must draw a radial bar, not a short arc");
 const missing=r.create({wearEnabled:true,nowMs:base});
 feed(missing,base,base+100000);
 missing.sync(base+S);
@@ -449,16 +449,17 @@ assert.deepStrictEqual(restStrokes(restoredNonWear,base+S+1000),arcLines,
 const normalBar=restStrokes(high,base+S*2);
 assert(normalBar.length===1&&normalBar[0].color===0x07E0,
   "Normal motion must retain its green radial bar");
-// Full-day absence paints 288 joined red chords on the existing orbit.
+// Full-day absence paints 288 red radial bars at full stage-5 length.
 const allOff=r.create({saved:{v:3,end:base/S+287,
   levels:"fe".repeat(288)},nowMs:base+S*288+1000});
 const allOffLines=restStrokes(allOff,base+S*288+1000);
 assert.strictEqual(allOffLines.length,288);
 assert(allOffLines.every(x=>x.color===0xF800));
-for(let i=1;i<allOffLines.length;i++)
-  assert.deepStrictEqual(allOffLines[i-1].points.slice(2),
-    allOffLines[i].points.slice(0,2),
-    "Adjacent non-wear arcs must join without angular gaps");
+for(const line of allOffLines){
+  const [ax,ay,bx,by]=line.points;
+  assert(Math.abs(Math.hypot(ax-85,ay-90)-70)<1.1);
+  assert(Math.abs(Math.hypot(bx-85,by-90)-80)<1.1);
+}
 // A legacy v2 code 00 is "missing", not a red non-wear interval.
 const legacyMissing=r.create({saved:{v:2,end:base/S,
   levels:"ff".repeat(287)+"00"},nowMs:base+S+1000});
