@@ -1,4 +1,4 @@
-/* tenkyu 0.107 (orbit storage) */
+/* tenkyu 0.108 (orbit storage) */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbit.json";
@@ -1325,6 +1325,7 @@
         /* Rebuild Earth when shadow moves/disappears: no accumulated black trail.
            Far from eclipse, keep the original five-minute base refresh. */
         if(wasActive||eclipseActive||Math.floor(Date.now()/300000)!==lastBaseBucket||
+           (REST_ENABLED&&typeof Bangle.isCharging==="function"&&Bangle.isCharging())||
            (safeSolar().el>=0)!==lastObserverDay)drawBase();
         else if(Math.floor(Date.now()/60000)!==lastClockMinute){
           lastClockMinute=Math.floor(Date.now()/60000);
@@ -1333,6 +1334,16 @@
         armMinute();
       }
     },tick-(Date.now()%tick)+25);
+  }
+
+  // Charger transitions are rare; refresh the active graph immediately,
+  // while keeping the boot-owned rest recorder independent of the clock.
+  function onChargingChange(){
+    if(killed||mode!=="tenkyu"||selectedDayOffset!==0)return;
+    if(typeof Bangle.isLCDOn==="function"&&!Bangle.isLCDOn())return;
+    setTimeout(function(){
+      if(!killed&&mode==="tenkyu"&&!busy)drawBase();
+    },50);
   }
 
   function cleanup(){
@@ -1350,6 +1361,7 @@
     try{Bangle.removeListener("faceUp",onFaceUp);}catch(e){}
     try{Bangle.removeListener("twist",onTwist);}catch(e){}
     try{Bangle.removeListener("lcdPower",onLCD);}catch(e){}
+    try{Bangle.removeListener("charging",onChargingChange);}catch(e){}
     try{E.removeListener("kill",cleanup);}catch(e){}
   }
 
@@ -1364,6 +1376,7 @@
   Bangle.on("faceUp",onFaceUp);
   Bangle.on("twist",onTwist);
   Bangle.on("lcdPower",onLCD);
+  Bangle.on("charging",onChargingChange);
   E.on("kill",cleanup);
   try{Bangle.setLocked(false);}catch(e){}
   drawProgressively();
