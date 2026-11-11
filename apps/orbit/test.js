@@ -141,6 +141,35 @@ assert.strictEqual(redMoonRims(app).length,1);
 assert.strictEqual(redMoonRims(appHarness(true,"2025-03-29T10:47:00Z")).length,1); // partial only
 assert.strictEqual(redMoonRims(appHarness(true,"2024-04-23T12:00:00Z")).length,0); // no eclipse
 
+function sunDiscs(a){
+  // The default face is an 8 px disk; the tiny sunspot is excluded.
+  return a.log.filter(x=>x.op==="fillCircle"&&x.args[2]===8&&
+    (x.color===0xFFE0||x.color===0xF800));
+}
+function assertSunColor(date,enabled,expected){
+  const clock=appHarness(enabled,date),sun=sunDiscs(clock);
+  assert(sun.length>0,"The Sun must be drawn");
+  assert.strictEqual(sun[0].color,0xFFE0,
+    "Immediate opening frame remains yellow before lazy eclipse check");
+  assert.strictEqual(sun.at(-1).color,expected,
+    "Final Sun color must reflect eclipse anywhere on Earth");
+}
+assertSunColor("2024-04-08T18:17:18.300Z",true,0xF800); // total
+assertSunColor("2023-10-14T18:00:00Z",true,0xF800); // annular
+assertSunColor("2025-03-29T10:47:00Z",true,0xF800); // partial-only
+assertSunColor("2024-04-23T12:00:00Z",true,0xFFE0); // none
+assertSunColor("2024-04-08T18:17:18.300Z",false,0xFFE0); // disabled
+// A global eclipse ending must restore yellow at the next scheduled redraw.
+const ending=appHarness(true,"2024-04-08T18:17:18.300Z");
+const endTick=[...ending.timers.values()].find(t=>t.ms>10000&&t.ms<=30025);
+assert(endTick,"Active eclipse must schedule 30-second checks");
+ending.timers.clear();
+ending.advance(15*86400000); // Far beyond the end of this eclipse
+endTick.f();
+assert.strictEqual(sunDiscs(ending).at(-1).color,0xFFE0,
+  "Sun must return to yellow when global eclipse ends");
+
+
 assert(app.reads.includes("orbit.ecldata"));
 const lastShadow=app.log.reduce((last,x,i)=>x.op==="setPixel"&&x.color===0?i:last,-1);
 const red=app.log.findIndex(x=>x.op==="fillCircle"&&x.color===0xF800&&x.args[2]===2);
@@ -153,7 +182,7 @@ app.events.lcdPower(false);assert(app.timers.size===0);
 const off=appHarness(false,refs[1].date);assert(!off.reads.some(n=>n.startsWith("orbit.ecl")));
 assert.strictEqual(redMoonRims(off).length,0);
 assert([...off.timers.values()][0].ms>30000);
-console.log("PASS: lunar example, NASA centers, partial/annular/night/full-Moon, shading/cache/layers/timer/off/LCD.");
+console.log("PASS: lunar example, NASA centers, partial/annular/night/full-Moon, red Sun and return, shading/cache/layers/timer/off/LCD.");
 if(process.argv[2]==="--preview"){
   fs.writeFileSync(process.argv[3],JSON.stringify([
     {title:"Total 2024",log:appHarness(true,refs[1].date).log},
