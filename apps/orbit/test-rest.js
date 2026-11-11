@@ -629,6 +629,36 @@ assert(nw.b.orbitRest.getEngine().snapshot().levels.endsWith("fe"));
 assert.deepStrictEqual(nw.power,[[base+270000,1,"orbitrest"],[base+S,0,"orbitrest"]]);
 assert.strictEqual(nw.b.listenerCount("HRM"),1,
   "Shared HRM listener stays attached for readings from other apps");
+// L5/L4 boundary with one decimal: stage 4 must bypass the optical
+// pulse check even when the 3-axis second-mean vector barely drifts.
+const stage4Quiet=environment(base,{restWearEnabled:true,restThreshold:.027,
+  restActivityT1:.1,restActivityT2:2,restActivityT3:6,restActivityT4:18});
+stage4Quiet.execute("boot.js");
+for(let t=0;t<=S;t+=80){
+  stage4Quiet.advance(base+t);
+  const spike=(t%8000===0)?0.045:0;
+  stage4Quiet.b.emit("accel",{x:spike,y:0,z:1});
+}
+const stage4Engine=stage4Quiet.b.orbitRest.getEngine();
+assert.strictEqual(stage4Engine.snapshot().levels.slice(-2),"3c",
+  "Rest 4 is identified before attempting non-wear verification");
+assert.strictEqual(stage4Engine.getDiagnostics().recent.at(-1).motion,false);
+assert.strictEqual(stage4Engine.getDiagnostics().recent.at(-1).reason,"rest_1_to_4");
+assert.deepStrictEqual(stage4Quiet.power,[],
+  "Do not power the heart-rate sensor for rest stages 1-4");
+const stillUnknown=r.create({wearEnabled:true,activityThresholds:[.1,2,6,18]});
+feed(stillUnknown,base,base+S);
+assert.strictEqual(stillUnknown.snapshot().levels.slice(-2),"64",
+  "Even rest 5 cannot be marked nonwear before a confidence result arrives");
+stillUnknown.absentPulse(base/S,20);
+assert.strictEqual(stillUnknown.snapshot().levels.slice(-2),"fe",
+  "An HRM reading below confidence threshold establishes nonwear for rest 5");
+const stillGood=r.create({wearEnabled:true,activityThresholds:[.1,2,6,18]});
+feed(stillGood,base,base+S);
+stillGood.detectedPulse(base/S,96);
+assert.strictEqual(stillGood.snapshot().levels.slice(-2),"64",
+  "Reliable HRM on rest 5 confirms worn, not nonwear");
+
 // Motion detected before the HRM window must save all optical LED energy.
 const moving=runWear(null,t=>({x:.6+.02*t/S,y:.8,z:0}));
 assert.deepStrictEqual(moving.power,[],
