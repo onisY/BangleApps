@@ -310,7 +310,7 @@ assert.strictEqual(off.b.listenerCount("accel"),0);
 // Menus expose five-level height, seven 3-axis peak gates and four boundaries.
 const menus=[];app.events.showMenu=m=>menus.push(m);
 app.execute("settings.js")(()=>{});
-assert.strictEqual(menus.at(-1)[""].title,"tenkyu v0.082");
+assert.strictEqual(menus.at(-1)[""].title,"tenkyu v0.109");
 assert(!menus.at(-1)["Version"],"Version is a static title, not a button");
 menus.at(-1)["Rest graph"]();
 assert.strictEqual(menus.at(-1)["Max bar height"].max,14);
@@ -320,12 +320,20 @@ const q=menus.at(-1)["Peak gate"];
 assert.strictEqual(q.max,6);
 for(let i=0;i<7;i++){q.onchange(i);assert.strictEqual(app.cfg.restThreshold,r.thresholds[i]);}
 menus.at(-1)["Stage boundaries"]();
-assert.deepStrictEqual([1,2,3,4].map(i=>app.cfg["restActivityT"+i]),r.activityDefaults);
-const newLevel=menus.at(-1)["L5/4 boundary"];
-newLevel.onchange(.6);
-assert.strictEqual(app.cfg.restActivityT1,.6);
+assert.deepStrictEqual([1,2,3,4].map(i=>app.cfg["restActivityT"+i]),[1,2,6,18]);
+const newLevelName=Object.keys(menus.at(-1)).find(x=>x.startsWith("L5/4  "));
+assert.strictEqual(newLevelName,"L5/4  1.0");
+menus.at(-1)[newLevelName]();
+assert(menus.at(-1)["Tenths"],"Only L5/4 has a tenths digit");
+menus.at(-1)["Tenths"].onchange(5);
+assert.strictEqual(app.cfg.restActivityT1,1.5);
 assert.strictEqual(app.cfg.restActivityT2,2);
+menus.at(-1)["< Back"](); // Boundary digit menu -> rest stages
+const otherBoundary=Object.keys(menus.at(-1)).find(x=>x.startsWith("L4/3  "));
+menus.at(-1)[otherBoundary]();
+assert(!menus.at(-1)["Tenths"],"Other boundaries stay integer");
 menus.at(-1)["< Back"]();
+menus.at(-1)["< Back"](); // Rest stages -> Rest graph
 menus.at(-1)["Non-wear"]();
 menus.at(-1)["3D drift"].onchange(0);
 assert.strictEqual(app.cfg.restWearThreshold,.001);
@@ -575,11 +583,11 @@ for(let t=3000;t<=S;t+=1000){
 }
 assert.strictEqual(lateStart.b.orbitRest.getEngine().snapshot().levels.slice(-2),"fe");
 assert.strictEqual(lateStart.b.orbitRest.getDiagnostics().recent.at(-1).reason,"nonwear");
-// Unknown/failed pulse on a motionless clock is non-wear (FE), not stage 5.
+// Without an HRM confidence result, even still stage-5 is pending (not non-wear).
 const skipped=r.create({wearEnabled:true,wearThresholdG:.009,nowMs:base});
 feed(skipped,base,base+S);
-assert.strictEqual(skipped.snapshot().levels.slice(-2),"fe");
-assert.strictEqual(skipped.getDiagnostics().recent.at(-1).reason,"nonwear_hrm_unknown");
+assert.strictEqual(skipped.snapshot().levels.slice(-2),"64");
+assert.strictEqual(skipped.getDiagnostics().recent.at(-1).reason,"pulse_pending_rest5");
 const failed=r.create({wearEnabled:true,nowMs:base});
 feed(failed,base,base+S);
 failed.failedProbe(base/S);
@@ -726,7 +734,7 @@ for(let t=0;t<=S;t+=1000){
 }
 badAxis.absentPulse(base/S);badAxis.sync(base+S);
 assert.strictEqual(badAxis.snapshot().levels.slice(-2),"fe",
-  "One missing XYZ reading must not hide non-wear red arc");
+  "One missing XYZ reading must not hide non-wear grey bar");
 const repeatedMissing=r.create({wearEnabled:true});
 for(let t=0;t<=S;t+=1000)
   repeatedMissing.sample(t%3000===0?{z:1}:{x:0,y:0,z:1},base+t);
@@ -746,8 +754,8 @@ for(let t=271000;t<=S;t+=1000){
   delayed.advance(base+t);delayed.b.emit("accel",{x:0,y:0,z:1});
   if(t===280000)delayed.b.emit("HRM",{bpm:0,confidence:0});
 }
-assert.strictEqual(delayed.b.orbitRest.getEngine().snapshot().levels.slice(-2),"fe");
-assert.strictEqual(delayed.b.orbitRest.getDiagnostics().recent.at(-1).reason,"nonwear_hrm_unknown");
+assert.strictEqual(delayed.b.orbitRest.getEngine().snapshot().levels.slice(-2),"64");
+assert.strictEqual(delayed.b.orbitRest.getDiagnostics().recent.at(-1).reason,"pulse_pending_rest5");
 delayed.advance(base+S+3500);
 assert.strictEqual(delayed.b.orbitRest.getEngine().snapshot().levels.slice(-2),"fe");
 assert.strictEqual(delayed.b.orbitRest.getDiagnostics().recent.at(-1).reason,"nonwear");
@@ -845,7 +853,7 @@ assert.strictEqual(perf.snapshot().v,3);
 console.log("Accelerometer CPU benchmark: "+benchSamples+
   " synthetic 12.5 Hz samples in "+(Date.now()-benchStart)+" ms (Node runtime; not watch power)");
 console.log("PASS: tap/calendar/settings/wake/launcher immediate acknowledgement,");
-console.log("motion-first HRM-independent bars, still/no-pulse stage 0, still/pulse stage 5,");
+console.log("rest5-only non-wear after XYZ+HRM confidence, rest1-4 without HRM, charging override,");
 console.log("robust slot finalization, three-way HRM status,");
 console.log("bounded persisted diagnostics, 3-axis stillness and 1s filtering,");
 console.log("five-stage 3D peak amplitude sum, v3 storage, early HRM-off,");
