@@ -42,7 +42,7 @@ jobs:
           node-version: 18.x
 
       - name: Verify tenkyu nonwear and settings regressions
-        run: node apps/orbit/test-rest.js
+        run: node apps/orbit/test.js
 
       - name: Clone EspruinoWebIDE (pinned)
         run: |
