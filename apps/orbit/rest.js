@@ -5,6 +5,9 @@
  */
 var SLOT_MS=300000,COUNT=288,DAY_MS=SLOT_MS*COUNT;
 var HRM_FAILED=253,NOT_WORN=254,NO_DATA=255;
+var CHARGE_BASE=101,CHARGE_END=201; // Battery percentage 0..100%.
+function batteryPercent(v){return isFinite(v)?Math.round(Math.max(0,Math.min(100,+v))):0;}
+function chargingCode(v){return CHARGE_BASE+batteryPercent(v);}
 var HR_PENDING=0,HR_FOUND=1,HR_ABSENT=2,HR_FAILED=3;
 var MAX_GAP_MS=2500,MIN_COVERAGE_MS=270000;
 var THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
@@ -45,7 +48,8 @@ function wearConfig(s){return {enabled:s.restWearEnabled!==false,
 
 /* Rest history retains 0..100 presentation codes for v2/v3 compatibility.
  * New results are quantized into 0,20,40,60,100 (stages 1..5).
- * 253=HRM failed (white); 254=unworn (red); 255=missing XYZ (blank).
+ * 101..201=charging (red 0..100% radial bar).
+ * 253=HRM failed (white); 254=unworn (grey); 255=missing XYZ (blank).
  * Old percentages keep their displayed stages.
  */
 function create(options){
@@ -58,7 +62,8 @@ function create(options){
   var vecSX=0,vecSY=0,vecSZ=0,vecCount=0,vecSecond=-1;
   var vecRefX,vecRefY,vecRefZ,vecMaxD2=0;
   var closedBucket=-1,closedStill=false,closedVectorOK=false,
-    closedPercent=0,closedPulse=HR_PENDING,closedMotion=false;
+    closedPercent=0,closedPulse=HR_PENDING,closedMotion=false,closedCharge=-1;
+  var charging=false,chargePercent=0,chargedThisBucket=-1;
   var current=-1,covered=0,activity=0,peakCount=0,lastMs,lastValid=false;
   var wearEnabled=!!options.wearEnabled,holdEnabled=!!options.holdEnabled,pulseState=HR_PENDING;
   var holdPulse=HR_PENDING,holdX,holdY,holdZ,lastX,lastY,lastZ,holdRun=0;
@@ -159,16 +164,26 @@ function create(options){
     }
     return "accel_uncertain";
   }
+  function setCharging(active,pct){
+    if(!!active!==charging)clearHold();
+    charging=!!active;
+    if(charging){
+      chargePercent=batteryPercent(pct);
+      chargedThisBucket=chargePercent;
+    }
+  }
   function updateClosed(){
     if(closedBucket<0||stamps[closedBucket%COUNT]!==closedBucket)return;
-    var v=chooseLevel(closedVectorOK,closedStill,closedMotion,closedPulse,closedPercent);
+    var v=closedCharge>=0?chargingCode(closedCharge):
+      chooseLevel(closedVectorOK,closedStill,closedMotion,closedPulse,closedPercent);
     levels[closedBucket%COUNT]=v;
     for(var j=diag.length-1;j>=0;j--)if(diag[j].bucket===closedBucket){
       diag[j].pulse=closedPulse;diag[j].confidence=closedConfidence;diag[j].result=v;
-      diag[j].reason=makeReason(closedVectorOK,closedStill,closedMotion,closedPulse);
+      diag[j].reason=closedCharge>=0?"charging":
+        makeReason(closedVectorOK,closedStill,closedMotion,closedPulse);
       break;
     }
-    if(closedVectorOK&&closedStill&&closedPulse!==HR_PENDING)
+    if(closedCharge<0&&closedVectorOK&&closedStill&&closedPulse!==HR_PENDING)
       establishHold(closedPulse);
     if(save)save();
   }
@@ -198,8 +213,10 @@ function create(options){
       var corrected=closedVectorOK?activity300(activity,covered):undefined;
       closedPercent=activityLevel(corrected===undefined?activity:corrected,cuts);
       closedPulse=pulseState;closedConfidence=pulseConfidence;
+      closedCharge=chargedThisBucket;
       i=current%COUNT;stamps[i]=current;
-      levels[i]=chooseLevel(closedVectorOK,closedStill,closedMotion,closedPulse,closedPercent);
+      levels[i]=closedCharge>=0?chargingCode(closedCharge):
+        chooseLevel(closedVectorOK,closedStill,closedMotion,closedPulse,closedPercent);
       diag.push({bucket:current,coverageSec:Math.round(covered/1000),
         driftG:Math.round(Math.sqrt(vecMaxD2)*10000)/10000,
         motion:closedMotion,
@@ -207,9 +224,10 @@ function create(options){
         activity300:corrected===undefined?null:Math.round(corrected*1000)/1000,
         peaks:peakCount,valid:closedVectorOK,pulse:closedPulse,confidence:closedConfidence,
         result:levels[i],
-        reason:makeReason(closedVectorOK,closedStill,closedMotion,closedPulse)});
+        reason:closedCharge>=0?"charging":
+          makeReason(closedVectorOK,closedStill,closedMotion,closedPulse)});
       if(diag.length>12)diag.shift();
-      if(closedVectorOK&&closedStill&&closedPulse!==HR_PENDING)
+      if(closedCharge<0&&closedVectorOK&&closedStill&&closedPulse!==HR_PENDING)
         establishHold(closedPulse);
       changed=true;
     }else if(current>=0&&target<current){
@@ -217,6 +235,7 @@ function create(options){
       clearHold();closedBucket=-1;changed=true;
     }
     current=target;covered=0;activity=0;peakCount=0;resetPeak();resetVector();
+    chargedThisBucket=charging?chargePercent:-1;
     // No persistent gap-failure flag: covered duration is authoritative.
     pulseState=HR_PENDING;pulseConfidence=-1;
     if(changed&&save)save();
@@ -279,13 +298,15 @@ function create(options){
   function failedProbe(bucket){markProbe(bucket,HR_FAILED);}
   function level(bucket){return stamps[bucket%COUNT]===bucket?
     (levels[bucket%COUNT]>100?0:levels[bucket%COUNT]):0;}
-  function visit(ms,fn,onNonWear,onFailure){
+  function visit(ms,fn,onNonWear,onFailure,onCharging){
     var end=Math.floor(ms/SLOT_MS)-1,b,v;
     for(b=end-COUNT+1;b<=end;b++)if(b>=0&&stamps[b%COUNT]===b){
       v=levels[b%COUNT];
       if(v<=100)fn(b,v);
       else if(v===NOT_WORN&&onNonWear)onNonWear(b);
       else if(v===HRM_FAILED&&onFailure)onFailure(b);
+      else if(v>=CHARGE_BASE&&v<=CHARGE_END&&onCharging)
+        onCharging(b,v-CHARGE_BASE);
       // Missing XYZ coverage (255) is always transparent.
     }
   }
@@ -301,7 +322,8 @@ function create(options){
       active:{metric:2,bucket:current,gate:threshold,cuts:cuts,
         covered:covered,activity:activity,peakCount:peakCount}};
   }
-  return {sample:sample,sync:sync,absentPulse:absentPulse,detectedPulse:detectedPulse,
+  return {sample:sample,sync:sync,setCharging:setCharging,
+    absentPulse:absentPulse,detectedPulse:detectedPulse,
     failedProbe:failedProbe,visit:visit,snapshot:snapshot,level:level,
     getDiagnostics:function(){return {bucket:current,coverageSec:Math.round(covered/1000),
       driftG:Math.round(Math.sqrt(vecMaxD2)*10000)/10000,
@@ -315,15 +337,40 @@ function create(options){
       ms>=lastMs&&ms-lastMs<=MAX_GAP_MS;},
     getWearHold:function(){return holdPulse;},
     getLive:function(){return {bucket:current,covered:covered,peaks:peakCount,
-      activity:activity,level:activityLevel(activity,cuts)};}};
+      activity:activity,level:activityLevel(activity,cuts),
+       charging:charging,chargePercent:chargePercent};}};
 }
 function install(bangle,storage,events,clock){
   clock=clock||function(){return Date.now();};
   if(bangle.orbitRest)return bangle.orbitRest;
   var engine,enabled=false,configKey,api,wear,probe,timer,failedAttempts=0;
   var sampleMs=0,nextSampleAt=0,sharedPulseCount=0;
+  var charging=false,chargePercent=0,nextBatteryAt=0;
   var HR_ID="orbitrest";
   function persist(){if(engine)try{storage.writeJSON("orbit.rest.json",engine.snapshot());}catch(e){}}
+  function isCharging(){
+    try{return typeof bangle.isCharging==="function"&&!!bangle.isCharging();}
+    catch(e){return false;}
+  }
+  function getBattery(){
+    try{return batteryPercent(events&&typeof events.getBattery==="function"?
+      events.getBattery():chargePercent);}
+    catch(e){return chargePercent;}
+  }
+  function onCharging(state){
+    if(!enabled||!engine)return;
+    var now=clock();
+    engine.sync(now);
+    charging=!!state;nextBatteryAt=now+60000;
+    if(charging){
+      chargePercent=getBattery();
+      engine.setCharging(true,chargePercent);
+      stopProbe();
+    }else{
+      engine.setCharging(false,chargePercent);
+      failedAttempts=0;stopProbe();scheduleProbe();
+    }
+  }
   function onAccel(a){
     var now=clock();
     if(sampleMs){
@@ -333,8 +380,18 @@ function install(bangle,storage,events,clock){
       nextSampleAt=nextSampleAt&&now-nextSampleAt<=sampleMs?
         nextSampleAt+sampleMs:now+sampleMs;
     }
+    if(now>=nextBatteryAt){
+      nextBatteryAt=now+60000;
+      var state=isCharging();
+      if(state!==charging)onCharging(state);
+      else if(charging){
+        chargePercent=getBattery();
+        engine.setCharging(true,chargePercent);
+      }
+    }
     var wasFailed=engine.getWearHold()===HR_FAILED;
     engine.sample(a,now);
+    if(charging)return;
     if(wasFailed&&engine.getWearHold()!==HR_FAILED){
       // Motion or a sensor-data gap invalidates the prior failure verdict.
       failedAttempts=0;stopProbe();scheduleProbe(Math.floor(now/SLOT_MS)+1);
@@ -347,7 +404,7 @@ function install(bangle,storage,events,clock){
     // Subscribe once for the lifetime of the boot-owned recorder.
     // Events from another HRM user are accepted without powering the
     // optical sensor on. An existing, good pulse avoids a new probe.
-    if(!enabled||!wear.enabled||!h||!isFinite(h.bpm)||h.bpm<0||
+    if(!enabled||charging||!wear.enabled||!h||!isFinite(h.bpm)||h.bpm<0||
        !isFinite(h.confidence))return;
     if(probe){
       probe.hasData=true;
@@ -378,7 +435,7 @@ function install(bangle,storage,events,clock){
   function failProbe(bucket){
     engine.failedProbe(bucket);
     failedAttempts++;
-    if(!enabled||!wear.enabled)return;
+    if(!enabled||charging||!wear.enabled)return;
     var delay=failedAttempts===1?60000:900000;
     timer=setTimeout(function(){
       timer=undefined;
@@ -393,6 +450,7 @@ function install(bangle,storage,events,clock){
     },delay);
   }
   function beginProbe(bucket,end){
+    if(charging)return;
     var begin=clock();
     if(!engine.hasRecentAccel(begin)||engine.hasMotion(Math.floor(begin/SLOT_MS))){
       failedAttempts=0;scheduleProbe(Math.floor(begin/SLOT_MS)+1);return;
@@ -425,7 +483,7 @@ function install(bangle,storage,events,clock){
     },Math.max(1,end-clock()));
   }
   function scheduleProbe(minBucket){
-    if(!enabled||!wear.enabled)return;
+    if(!enabled||charging||!wear.enabled)return;
     var now=clock(),bucket=Math.max(Math.floor(now/SLOT_MS),minBucket||0);
     var start=(bucket+1)*SLOT_MS-wear.seconds*1000;
     if(start<now){bucket++;start+=SLOT_MS;}
@@ -454,24 +512,27 @@ function install(bangle,storage,events,clock){
     if(enabled){
       bangle.removeListener("accel",onAccel);
       bangle.removeListener("HRM",onHRM);
+      bangle.removeListener("charging",onCharging);
       persist();
     }
     enabled=on;configKey=key;wear=w;failedAttempts=0;sharedPulseCount=0;
-    sampleMs=eco?200:0;nextSampleAt=0;
+    sampleMs=eco?200:0;nextSampleAt=0;nextBatteryAt=0;charging=false;
     if(on){
       engine=create({thresholdG:t,activityThresholds:stages,
         wearThresholdG:w.z,wearEnabled:w.enabled,holdEnabled:w.hold,
         nowMs:clock(),saved:storage.readJSON("orbit.rest.json",1),onCommit:persist});
       bangle.on("accel",onAccel);
+      bangle.on("charging",onCharging);
       if(w.enabled)bangle.on("HRM",onHRM);
-      scheduleProbe();
+      onCharging(isCharging());
     }else engine=undefined;
   }
   api={configure:configure,save:persist,isEnabled:function(){return enabled;},
     draw:function(graphics,map){draw(graphics,engine,map);},
     getDiagnostics:function(){
       var d=engine?engine.getDiagnostics():{disabled:true};
-      d.sharedPulseCount=sharedPulseCount;return d;
+      d.sharedPulseCount=sharedPulseCount;d.charging=charging;
+      d.chargePercent=chargePercent;return d;
     },
     getEngine:function(){return engine;},
     isProbing:function(){return !!probe;},
@@ -480,6 +541,7 @@ function install(bangle,storage,events,clock){
   if(events)events.on("kill",function(){
     stopProbe();
     bangle.removeListener("HRM",onHRM);
+    bangle.removeListener("charging",onCharging);
     persist();
   });
   configure(storage.readJSON("orbit.json",1)||{});
@@ -497,7 +559,8 @@ function draw(graphics,engine,map){
   var perf=map.perf,bars=0;
   if(mode===0){
     engine.visit(map.nowMs,function(){bars++;},
-      function(){bars++;},function(){bars++;});
+      function(){bars++;},function(){bars++;},function(){bars++;});
+    if(engine.getLive&&engine.getLive().charging)bars++;
     if(perf)perf.bars=bars;
     return;
   }
@@ -523,6 +586,15 @@ function draw(graphics,engine,map){
     var x2=Math.round(map.cx+r*ca),y2=Math.round(map.cy+r*sa);
     if(mode>=4){graphics.setColor(color);graphics.drawLine(x1,y1,x2,y2);}
   }
+  function drawRadial(bucket,color,pct){
+    bars++;
+    if(mode===1)return;
+    pointAt(bucket);
+    var outer=r+height*pct/100;
+    var x1=Math.round(map.cx+r*ca),y1=Math.round(map.cy+r*sa);
+    var x2=Math.round(map.cx+outer*ca),y2=Math.round(map.cy+outer*sa);
+    if(mode>=4){graphics.setColor(color);graphics.drawLine(x1,y1,x2,y2);}
+  }
   engine.visit(now,function(bucket,value){
     bars++;
     var stage=stageFor(value);
@@ -542,16 +614,21 @@ function draw(graphics,engine,map){
     if(mode>=4){graphics.setColor(day?0x07E0:0xFFE0);
       graphics.drawLine(x1,y1,x2,y2);}
   },function(bucket){
-    // Unworn intervals use the *same radial length* as rest stage 5.
-    // Keep the existing unworn code (254), HRM logic and history format.
+    drawRadial(bucket,0x8410,100); // Nonwear grey, same length as stage 5.
+  },function(bucket){drawArc(bucket,0xFFFF);},
+    function(bucket,pct){drawRadial(bucket,0xF800,pct);});
+  // Show the active charging window immediately, without waiting five minutes.
+  var live=engine.getLive&&engine.getLive();
+  if(live&&live.charging&&live.bucket===Math.floor(now/SLOT_MS)){
     bars++;
-    if(mode===1)return;
-    pointAt(bucket);
-    var x1=Math.round(map.cx+r*ca),y1=Math.round(map.cy+r*sa);
-    var x2=Math.round(map.cx+(r+height)*ca);
-    var y2=Math.round(map.cy+(r+height)*sa);
-    if(mode>=4){graphics.setColor(0xF800);graphics.drawLine(x1,y1,x2,y2);}
-  },function(bucket){drawArc(bucket,0xFFFF);});
+    if(mode>=2){
+      var a=map.currentAngleRad,cc=Math.cos(a),ss=Math.sin(a);
+      var x1=Math.round(map.cx+r*cc),y1=Math.round(map.cy+r*ss);
+      var outer=r+height*live.chargePercent/100;
+      var x2=Math.round(map.cx+outer*cc),y2=Math.round(map.cy+outer*ss);
+      if(mode>=4){graphics.setColor(0xF800);graphics.drawLine(x1,y1,x2,y2);}
+    }
+  }
   if(perf)perf.bars=bars;
 }
 exports.create=create;
@@ -562,7 +639,8 @@ exports.activity300=activity300;
 exports.activityThresholds=activityThresholds;
 exports.stageFor=stageFor;
 exports.constants={slotMs:SLOT_MS,count:COUNT,maxGapMs:MAX_GAP_MS,minCoverageMs:MIN_COVERAGE_MS,
-  hrmFailed:HRM_FAILED,unworn:NOT_WORN,noData:NO_DATA};
+  hrmFailed:HRM_FAILED,unworn:NOT_WORN,noData:NO_DATA,
+  chargeBase:CHARGE_BASE,chargeEnd:CHARGE_END};
 
 
 exports.thresholdG=thresholdG;
