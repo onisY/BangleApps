@@ -419,8 +419,8 @@ function runWear(pulse,zAt=()=>1,cfg={}){
 }
 const nw=runWear();assert.strictEqual(nw.b.orbitRest.getEngine().level(base/S),0);
 assert.strictEqual(nw.b.orbitRest.getDiagnostics().recent.at(-1).reason,"nonwear");
-// Non-wear (FE) is a red *one-pixel arc on the lunar orbit*, never a bar.
-// No-data (FF) must not be drawn red. The original five-stage bars remain.
+// Non-wear (FE) is a full stage-5-length red radial bar, distinct from rest stages.
+// No-data (FF) must stay invisible, and the original five-stage bars remain.
 function restStrokes(engine,ms){
   const lines=[];let ink;
   const graphics={setColor:c=>{ink=c;return graphics;},
@@ -429,13 +429,13 @@ function restStrokes(engine,ms){
     cx:85,cy:90,south:false,currentAngleRad:0,isDayAt:()=>true});
   return lines;
 }
-const arcLines=restStrokes(nw.b.orbitRest.getEngine(),base+S+1000);
-assert.strictEqual(arcLines.length,1);
-assert.strictEqual(arcLines[0].color,0xF800);
-const [x1,y1,x2,y2]=arcLines[0].points;
-assert(Math.abs(Math.hypot(x1-85,y1-90)-70)<1,"Red start must lie on the orbit");
-assert(Math.abs(Math.hypot(x2-85,y2-90)-70)<1,"Red end must lie on the orbit");
-assert(Math.hypot(x1-x2,y1-y2)<=3,"Five-minute arc must stay short");
+const nonWearBars=restStrokes(nw.b.orbitRest.getEngine(),base+S+1000);
+assert.strictEqual(nonWearBars.length,1);
+assert.strictEqual(nonWearBars[0].color,0xF800);
+const [x1,y1,x2,y2]=nonWearBars[0].points;
+assert(Math.abs(Math.hypot(x1-85,y1-90)-70)<1.1,"Red bar must start on orbit");
+assert(Math.abs(Math.hypot(x2-85,y2-90)-80)<1.1,"Red bar must reach rest stage-5 length");
+assert(Math.hypot(x1-x2,y1-y2)>=9,"Red non-wear must be radial, not a short arc");
 const missing=r.create({wearEnabled:true,nowMs:base});
 feed(missing,base,base+100000);
 missing.sync(base+S);
@@ -444,21 +444,24 @@ assert.deepStrictEqual(restStrokes(missing,base+S+1000),[],
   "Unknown data must not be painted red");
 const restoredNonWear=r.create({saved:nw.b.orbitRest.getEngine().snapshot(),
   nowMs:base+S+1000});
-assert.deepStrictEqual(restStrokes(restoredNonWear,base+S+1000),arcLines,
-  "Unworn red arcs must survive saving and reopening the clock");
+assert.deepStrictEqual(restStrokes(restoredNonWear,base+S+1000),nonWearBars,
+  "Unworn red bars must survive saving and reopening the clock");
 const normalBar=restStrokes(high,base+S*2);
 assert(normalBar.length===1&&normalBar[0].color===0x07E0,
   "Normal motion must retain its green radial bar");
-// Full-day absence paints 288 joined red chords on the existing orbit.
+// Full-day absence paints 288 full-length red radial bars.
 const allOff=r.create({saved:{v:3,end:base/S+287,
   levels:"fe".repeat(288)},nowMs:base+S*288+1000});
 const allOffLines=restStrokes(allOff,base+S*288+1000);
 assert.strictEqual(allOffLines.length,288);
 assert(allOffLines.every(x=>x.color===0xF800));
-for(let i=1;i<allOffLines.length;i++)
-  assert.deepStrictEqual(allOffLines[i-1].points.slice(2),
-    allOffLines[i].points.slice(0,2),
-    "Adjacent non-wear arcs must join without angular gaps");
+for(const line of allOffLines){
+  const [ax,ay,bx,by]=line.points;
+  assert(Math.abs(Math.hypot(ax-85,ay-90)-70)<1.1,
+    "Full-day unworn bar must start at the orbit");
+  assert(Math.abs(Math.hypot(bx-85,by-90)-80)<1.1,
+    "Full-day unworn bar must have rest stage-5 length");
+}
 // A legacy v2 code 00 is "missing", not a red non-wear interval.
 const legacyMissing=r.create({saved:{v:2,end:base/S,
   levels:"ff".repeat(287)+"00"},nowMs:base+S+1000});
@@ -703,6 +706,35 @@ assert(navButton.log.some(x=>x.op==="drawString"&&x.args[0]==="Launcher..."));
 assert(!navButton.log.some(x=>x.op==="showLauncher"));
 navButton.advance(base+1);
 assert(navButton.log.some(x=>x.op==="showLauncher"));
+// Clock h:m must never add a leading zero to either hour or minute.
+const timeAtNineFive=new Date(2026,9,19,9,5).getTime();
+const shortTime=environment(timeAtNineFive,{restEnabled:false,timePos:1,datePos:2});
+shortTime.execute("app.js");shortTime.advance(timeAtNineFive+100);
+assert(shortTime.log.some(x=>x.op==="drawString"&&x.args[0]==="9:5"),
+  "Clock time must be h:m without zero padding");
+
+// The immutable 128px North-polar bitmap contains Earth-relative water cuts.
+// These texture cells rotate with the globe: no screen-fixed strait strokes.
+const northMap=require("./earth-north-128.js").get();
+assert.strictEqual(northMap[0].width,128);
+assert.strictEqual(northMap[0].height,128);
+assert.strictEqual(northMap[0].buffer.byteLength,4096);
+assert.strictEqual(northMap[1].buffer.byteLength,2048);
+assert.strictEqual(northMap[0].palette[1],0x05A0,"Land uses the muted green palette");
+const packedNorth=new Uint8Array(northMap[0].buffer);
+function northPixel(x,y){
+  const q=y*128+x;
+  return (packedNorth[q>>2]>>(6-2*(q&3)))&3;
+}
+const straitCells=[[60,104],[61,104],[62,104],[63,104],[64,104],[65,104],
+  [58,115],[59,115],[60,115],[61,115],[63,115],[62,114],[63,114]];
+for(const [x,y] of straitCells)
+  assert.strictEqual(northPixel(x,y),0,
+    "Corrected water channel must be ocean at "+x+","+y);
+for(const [x,y] of [[61,101],[70,104],[57,114],[60,116]])
+  assert.strictEqual(northPixel(x,y),1,
+    "Nearby land must be retained at "+x+","+y);
+
 // Repeated 12.5 Hz accelerometer events should not allocate growing sample arrays.
 const perf=r.create({thresholdG:.027});
 const benchStart=Date.now(),benchSamples=15000;

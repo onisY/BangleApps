@@ -541,8 +541,17 @@ function draw(graphics,engine,map){
     }
     if(mode>=4){graphics.setColor(day?0x07E0:0xFFE0);
       graphics.drawLine(x1,y1,x2,y2);}
-  },function(bucket){drawArc(bucket,0xF800);},
-    function(bucket){drawArc(bucket,0xFFFF);});
+  },function(bucket){
+    // Unworn intervals use the *same radial length* as rest stage 5.
+    // Keep the existing unworn code (254), HRM logic and history format.
+    bars++;
+    if(mode===1)return;
+    pointAt(bucket);
+    var x1=Math.round(map.cx+r*ca),y1=Math.round(map.cy+r*sa);
+    var x2=Math.round(map.cx+(r+height)*ca);
+    var y2=Math.round(map.cy+(r+height)*sa);
+    if(mode>=4){graphics.setColor(0xF800);graphics.drawLine(x1,y1,x2,y2);}
+  },function(bucket){drawArc(bucket,0xFFFF);});
   if(perf)perf.bars=bars;
 }
 exports.create=create;

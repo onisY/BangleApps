@@ -1,4 +1,4 @@
-/* tenkyu 0.105 (orbit storage) */
+/* tenkyu 0.106 (orbit storage) */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbit.json";
@@ -158,6 +158,7 @@
 
   function clear(t){if(t)clearTimeout(t);}
   function pad(n){return n<10?"0"+n:""+n;}
+  function formatClockTime(d){return d.h+":"+d.mi;}
   function rad(d){return d*Math.PI/180;}
   function deg(r){return r*180/Math.PI;}
   function virtualNowMs(){return Date.now()+selectedDayOffset*86400000;}
@@ -448,7 +449,7 @@
     if(killed||mode!=="tenkyu"||(DATEPOS!==0&&TIMEPOS!==0))return;
     if(TIMEPOS===0)TIMEBOX=undefined;
     var gap=topFreeGap();if(!gap)return;
-    var d=displayParts(virtualNowMs()),date=pad(d.m)+pad(d.d),time=pad(d.h)+pad(d.mi);
+    var d=displayParts(virtualNowMs()),date=pad(d.m)+pad(d.d),time=formatClockTime(d);
     var size=20,showDate=DATEPOS===0,showTime=TIMEPOS===0,space=(showDate&&showTime)?" ":"";
     var txt=(showDate?date:"")+space+(showTime?time:"");
     var maxW=Math.max(1,gap[1]-gap[0]-2);
@@ -471,7 +472,7 @@
     var d=displayParts(virtualNowMs()),date=pad(d.m)+pad(d.d);
     g.setFont("Vector",DATESIZE);var dw=hasDate?g.stringWidth(date):0;
     g.setFont("Vector",TIMESIZE);var tw=0;
-    if(hasTime)for(var digit=0;digit<10;digit++)tw=Math.max(tw,g.stringWidth(""+digit)*4);
+    if(hasTime)tw=g.stringWidth("88:88"); // Allow h:m including a colon.
     var w=Math.max(dw,tw),h=(hasDate?DATESIZE+1:0)+(hasDate&&hasTime?2:0)+(hasTime?TIMESIZE+1:0);
     var right=pos===2,x=right?W-2-w:2,y=pos===2?SUNY+SUNR+SUNRAY+3:25;
     if(moonHitsRect(m,x,y,w,h)){
@@ -503,7 +504,7 @@
     var b=TIMEBOX,d=displayParts(virtualNowMs());
     g.setColor(WHITE).fillRect(b.x,b.y,b.x+b.w-1,b.y+b.h-1);
     g.setBgColor(WHITE).setColor(BLACK).setFont("Vector",b.size).setFontAlign(b.align,-1);
-    g.drawString(pad(d.h)+pad(d.mi),b.tx,b.ty);
+    g.drawString(formatClockTime(d),b.tx,b.ty);
   }
 
   function installWidgetRedrawHook(){
