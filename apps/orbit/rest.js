@@ -88,6 +88,9 @@ function create(options){
       covered=Math.max(0,Math.min(SLOT_MS,+old.active.covered||0));
       activity=Math.max(0,+old.active.activity||0);
       peakCount=Math.max(0,+old.active.peakCount||0);
+      if(isFinite(old.active.charge)&&old.active.charge>=0&&
+         old.active.charge<=100)
+        chargedThisBucket=batteryPercent(old.active.charge);
     }
   }
   function resetPeak(){
@@ -320,7 +323,8 @@ function create(options){
     }
     return {v:3,end:end,levels:out,diag:diag,
       active:{metric:2,bucket:current,gate:threshold,cuts:cuts,
-        covered:covered,activity:activity,peakCount:peakCount}};
+        covered:covered,activity:activity,peakCount:peakCount,
+        charge:chargedThisBucket}};
   }
   return {sample:sample,sync:sync,setCharging:setCharging,
     absentPulse:absentPulse,detectedPulse:detectedPulse,
@@ -345,7 +349,7 @@ function install(bangle,storage,events,clock){
   if(bangle.orbitRest)return bangle.orbitRest;
   var engine,enabled=false,configKey,api,wear,probe,timer,failedAttempts=0;
   var sampleMs=0,nextSampleAt=0,sharedPulseCount=0;
-  var charging=false,chargePercent=0,nextBatteryAt=0;
+  var charging=false,chargePercent=0,nextBatteryAt=0,chargeTimer;
   var HR_ID="orbitrest";
   function persist(){if(engine)try{storage.writeJSON("orbit.rest.json",engine.snapshot());}catch(e){}}
   function isCharging(){
@@ -357,19 +361,36 @@ function install(bangle,storage,events,clock){
       events.getBattery():chargePercent);}
     catch(e){return chargePercent;}
   }
+  function stopChargeTimer(){
+    if(chargeTimer!==undefined){clearTimeout(chargeTimer);chargeTimer=undefined;}
+  }
+  function chargeTick(){
+    chargeTimer=undefined;
+    if(!enabled||!charging||!engine)return;
+    if(!isCharging()){onCharging(false);return;}
+    var now=clock();
+    chargePercent=getBattery();
+    engine.setCharging(true,chargePercent);
+    engine.sync(now); // Works even without accelerometer events.
+    nextBatteryAt=now+60000;
+    chargeTimer=setTimeout(chargeTick,60000);
+  }
   function onCharging(state){
     if(!enabled||!engine)return;
     var now=clock();
     engine.sync(now);
+    stopChargeTimer();
     charging=!!state;nextBatteryAt=now+60000;
     if(charging){
       chargePercent=getBattery();
       engine.setCharging(true,chargePercent);
       stopProbe();
+      chargeTimer=setTimeout(chargeTick,60000);
     }else{
       engine.setCharging(false,chargePercent);
       failedAttempts=0;stopProbe();scheduleProbe();
     }
+    persist(); // Recover an unfinished charge interval after reboot.
   }
   function onAccel(a){
     var now=clock();
@@ -384,10 +405,6 @@ function install(bangle,storage,events,clock){
       nextBatteryAt=now+60000;
       var state=isCharging();
       if(state!==charging)onCharging(state);
-      else if(charging){
-        chargePercent=getBattery();
-        engine.setCharging(true,chargePercent);
-      }
     }
     if(charging){
       // The charging bucket is already classified as non-worn.
@@ -513,7 +530,7 @@ function install(bangle,storage,events,clock){
     var eco=s.restEco===true;
     var key=JSON.stringify([t,w,stages,eco]);
     if(on===enabled&&(!on||key===configKey))return;
-    stopProbe();
+    stopProbe();stopChargeTimer();
     if(enabled){
       bangle.removeListener("accel",onAccel);
       bangle.removeListener("HRM",onHRM);
@@ -544,7 +561,7 @@ function install(bangle,storage,events,clock){
     sync:function(ms){if(engine)engine.sync(ms);}};
   bangle.orbitRest=api;
   if(events)events.on("kill",function(){
-    stopProbe();
+    stopProbe();stopChargeTimer();
     bangle.removeListener("HRM",onHRM);
     bangle.removeListener("charging",onCharging);
     persist();
