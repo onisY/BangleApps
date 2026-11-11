@@ -182,6 +182,112 @@ app.events.lcdPower(false);assert(app.timers.size===0);
 const off=appHarness(false,refs[1].date);assert(!off.reads.some(n=>n.startsWith("orbit.ecl")));
 assert.strictEqual(redMoonRims(off).length,0);
 assert([...off.timers.values()][0].ms>30000);
+// Stage-5-gated non-wear regression. Source tests are never installed on Bangle.
+const wearR=require("./rest.js"),wearS=wearR.constants.slotMs;
+const wearBase=Math.floor(Date.parse("2026-11-11T12:00:00Z")/wearS)*wearS;
+function wearHarness(spike,kind) {
+  let now=wearBase,charging=false,battery=68,next=0;
+  const tasks=new Map(),listeners={},power=[];
+  const setT=(fn,ms)=>{const id=++next;tasks.set(id,{fn,at:now+ms});return id;};
+  const clearT=id=>tasks.delete(id);
+  const module={};
+  new Function("exports","setTimeout","clearTimeout",
+    fs.readFileSync(path.join(__dirname,"rest.js"),"utf8"))(module,setT,clearT);
+  const watch={
+    on:(name,fn)=>(listeners[name]??=[]).push(fn),
+    removeListener:(name,fn)=>listeners[name]=(listeners[name]||[]).filter(v=>v!==fn),
+    isCharging:()=>charging,isHRMOn:()=>false,
+    setHRMPower:(state,id)=>{power.push([now-wearBase,state,id]);return !!state;}
+  };
+  const events={on:()=>{},getBattery:()=>battery};
+  const saved={};
+  const store={
+    readJSON:n=>n==="orbit.json"?{
+      restEnabled:true,restWearEnabled:true,restActivityT1:.1,
+      restActivityT2:2,restActivityT3:6,restActivityT4:18,
+      restThreshold:.027,restWearThreshold:.009,restPulseConfidence:90
+    }:saved[n],
+    writeJSON:(n,v)=>{saved[n]=JSON.parse(JSON.stringify(v));}
+  };
+  const service=module.install(watch,store,events,()=>now);
+  const send=(n,v)=>(listeners[n]||[]).slice().forEach(fn=>fn(v));
+  function advance(to) {
+    for(let i=0;i<50;i++){
+      const due=[...tasks.entries()].filter(([,v])=>v.at<=to)
+        .sort((a,b)=>a[1].at-b[1].at)[0];
+      if(!due){now=to;return;}
+      tasks.delete(due[0]);now=due[1].at;due[1].fn();
+    }
+    throw Error("Unexpected wear timer loop");
+  }
+  for(let t=0;t<=wearS;t+=80){
+    advance(wearBase+t);
+    if(t===200000&&kind==="charge"){charging=true;send("charging",true);}
+    const x=spike&&Math.floor(t/80)%100===0?spike:0;
+    send("accel",{x,y:0,z:1});
+    if(t===280000&&kind==="good")send("HRM",{bpm:72,confidence:95});
+    if(t===280000&&kind==="low"&&power.some(v=>v[1]===1))
+      send("HRM",{bpm:0,confidence:0});
+  }
+  advance(wearBase+wearS+80);
+  return {level:service.getEngine().snapshot().levels.slice(-2),
+    diag:service.getDiagnostics().recent.at(-1),power,service};
+}
+const wornRest4=wearHarness(.045,"low");
+assert.strictEqual(wornRest4.level,"3c","Activity level 4 survives low HRM confidence");
+assert.strictEqual(wornRest4.diag.reason,"rest_1_to_4");
+assert.strictEqual(wornRest4.diag.motion,false,
+  "Activity 4 can have little vector drift");
+assert.deepStrictEqual(wornRest4.power,[],
+  "Optical HRM may run only after activity 5 and static XYZ gate");
+const nonWornRest5=wearHarness(0,"low");
+assert.strictEqual(nonWornRest5.level,"fe");
+assert(nonWornRest5.power.some(v=>v[1]===1));
+const wornRest5=wearHarness(0,"good");
+assert.strictEqual(wornRest5.level,"64");
+assert(wornRest5.power.some(v=>v[1]===1));
+const chargeDuringRest=wearHarness(0,"charge");
+assert.strictEqual(chargeDuringRest.level,(101+68).toString(16));
+assert.deepStrictEqual(chargeDuringRest.power,[],
+  "Charging must override rest and stop optical HRM");
+const pendingRest5=wearR.create({nowMs:wearBase,wearEnabled:true,
+  activityThresholds:[.1,2,6,18]});
+for(let t=0;t<=wearS;t+=1000)
+  pendingRest5.sample({x:0,y:0,z:1},wearBase+t);
+pendingRest5.sync(wearBase+wearS);
+assert.strictEqual(pendingRest5.snapshot().levels.slice(-2),"64",
+  "Without a confidence measurement, rest 5 is not automatically nonwear");
+pendingRest5.absentPulse(wearBase/wearS,12);
+assert.strictEqual(pendingRest5.snapshot().levels.slice(-2),"fe");
+
+// Only the L5/L4 activity boundary is configurable to one decimal place.
+const wearConfig={restEnabled:false,coordVersion:2,locationSource:"manual",
+  manualLat:35,manualLon:139,restActivityT1:1,restActivityT2:2,
+  restActivityT3:6,restActivityT4:18};
+const wearMenus=[],wearStorage={
+  readJSON:n=>n==="orbit.json"?wearConfig:{},
+  writeJSON:()=>{},read:()=>undefined
+};
+const wearContext={require:n=>n==="Storage"?wearStorage:undefined,
+  Bangle:{setGPSPower(){}},E:{showMenu:m=>wearMenus.push(m),on(){}},
+  setTimeout:fn=>{fn();return 0;},clearTimeout:()=>{}};
+const wearMenuFn=vm.runInNewContext(
+  fs.readFileSync(path.join(__dirname,"settings.js"),"utf8"),wearContext);
+wearMenuFn(()=>{});
+wearMenus.at(-1)["Rest graph"]();
+wearMenus.at(-1)["Stage boundaries"]();
+const stage5Label=Object.keys(wearMenus.at(-1)).find(n=>n.startsWith("L5/4  "));
+wearMenus.at(-1)[stage5Label]();
+assert(wearMenus.at(-1)["Tenths"]);
+wearMenus.at(-1)["Tenths"].onchange(5);
+assert.strictEqual(wearConfig.restActivityT1,1.5);
+assert.deepStrictEqual([wearConfig.restActivityT2,wearConfig.restActivityT3,
+  wearConfig.restActivityT4],[2,6,18]);
+wearMenus.at(-1)["< Back"]();
+const stage4Label=Object.keys(wearMenus.at(-1)).find(n=>n.startsWith("L4/3  "));
+wearMenus.at(-1)[stage4Label]();
+assert(!wearMenus.at(-1)["Tenths"]);
+
 console.log("PASS: lunar example, NASA centers, partial/annular/night/full-Moon, red Sun and return, shading/cache/layers/timer/off/LCD.");
 if(process.argv[2]==="--preview"){
   fs.writeFileSync(process.argv[3],JSON.stringify([
