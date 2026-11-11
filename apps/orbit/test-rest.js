@@ -184,6 +184,9 @@ function environment(start,config={},data,extraModules){
     {get:(o,k)=>k in o?o[k]:k==="transformVertices"?undefined:(...args)=>{
       if(k==="setColor")color=args[0];log.push({op:k,args,color});return g;}});
   const b=new EventEmitter(),events=new EventEmitter(),locks=[],lights=[];
+  let charging=false,battery=0;
+  b.isCharging=()=>charging;
+  events.getBattery=()=>battery;
   for(const n of ["setGPSPower","loadWidgets","drawWidgets"])
     b[n]=()=>{};
   b.setUI=ui=>{b.ui=ui;};
@@ -218,6 +221,8 @@ function environment(start,config={},data,extraModules){
     now=t;
   }
   return {b,events,log,timers,cfg,store,storage,placeReads,
+    setCharging:(state,pct)=>{charging=!!state;battery=pct;b.emit("charging",charging);},
+    setBattery:pct=>{battery=pct;},
     placeIndexLoads:()=>placeIndexLoads,
     execute,power,locks,lights,advance,writes:()=>writes,setNow:t=>now=t,
     feed:(end,a=quiet)=>{for(let t=now;t<=end;t+=800){now=t;b.emit("accel",a);}now=end;}};
@@ -507,6 +512,34 @@ liveCharge.sync(base);liveCharge.setCharging(true,60);
 assert.strictEqual(restStrokes(liveCharge,base+150000).length,1,
   "Current charging interval must be displayed without waiting 5 minutes");
 assert.strictEqual(restStrokes(liveCharge,base+150000)[0].color,0xF800);
+
+// Boot recorder observes the hardware charger without starting HRM.
+const chargedWatch=environment(base,{restWearEnabled:true});
+chargedWatch.execute("boot.js");
+assert.strictEqual(chargedWatch.b.listenerCount("charging"),1);
+chargedWatch.setCharging(true,55);
+assert.strictEqual(chargedWatch.b.orbitRest.getEngine().getLive().charging,true);
+chargedWatch.setBattery(62);
+chargedWatch.feed(base+S);
+assert.strictEqual(chargedWatch.b.orbitRest.getEngine().snapshot().levels.slice(-2),
+  (101+62).toString(16),"Charging records the last sampled percentage");
+assert.strictEqual(chargedWatch.b.orbitRest.getDiagnostics().recent.at(-1).reason,
+  "charging");
+assert.strictEqual(chargedWatch.power.filter(x=>x[1]===1).length,0,
+  "Charging must never turn on optical HRM");
+chargedWatch.setCharging(false,62);
+chargedWatch.feed(base+2*S);
+const afterUnplug=chargedWatch.b.orbitRest.getEngine().snapshot().levels.slice(-2);
+assert(!(parseInt(afterUnplug,16)>=101&&parseInt(afterUnplug,16)<=201),
+  "Unplugging must restore normal 3D motion/HRM classification");
+// Initial charging state must be read even if the event occurred before boot.
+const chargingAtBoot=environment(base,{restWearEnabled:true});
+chargingAtBoot.setCharging(true,80);
+chargingAtBoot.execute("boot.js");
+assert.strictEqual(chargingAtBoot.b.orbitRest.getEngine().getLive().chargePercent,80);
+chargingAtBoot.advance(base+S);
+chargingAtBoot.b.emit("accel",quiet);
+assert.strictEqual(chargingAtBoot.b.orbitRest.getEngine().snapshot().levels.slice(-2),"b5");
 
 // 297 seconds are more than 270s coverage and are valid for non-wear.
 // Previous code incorrectly required a sample within 2.5s of the slot start.
