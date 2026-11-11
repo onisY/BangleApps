@@ -184,6 +184,9 @@ function environment(start,config={},data,extraModules){
     {get:(o,k)=>k in o?o[k]:k==="transformVertices"?undefined:(...args)=>{
       if(k==="setColor")color=args[0];log.push({op:k,args,color});return g;}});
   const b=new EventEmitter(),events=new EventEmitter(),locks=[],lights=[];
+  let charging=false,battery=0;
+  b.isCharging=()=>charging;
+  events.getBattery=()=>battery;
   for(const n of ["setGPSPower","loadWidgets","drawWidgets"])
     b[n]=()=>{};
   b.setUI=ui=>{b.ui=ui;};
@@ -218,6 +221,8 @@ function environment(start,config={},data,extraModules){
     now=t;
   }
   return {b,events,log,timers,cfg,store,storage,placeReads,
+    setCharging:(state,pct)=>{charging=!!state;battery=pct;b.emit("charging",charging);},
+    setBattery:pct=>{battery=pct;},
     placeIndexLoads:()=>placeIndexLoads,
     execute,power,locks,lights,advance,writes:()=>writes,setNow:t=>now=t,
     feed:(end,a=quiet)=>{for(let t=now;t<=end;t+=800){now=t;b.emit("accel",a);}now=end;}};
@@ -419,7 +424,7 @@ function runWear(pulse,zAt=()=>1,cfg={}){
 }
 const nw=runWear();assert.strictEqual(nw.b.orbitRest.getEngine().level(base/S),0);
 assert.strictEqual(nw.b.orbitRest.getDiagnostics().recent.at(-1).reason,"nonwear");
-// Non-wear (FE) is a full stage-5-length red radial bar, distinct from rest stages.
+// Non-wear (FE) is a grey full stage-5-length bar; charging is red by battery %.
 // No-data (FF) must stay invisible, and the original five-stage bars remain.
 function restStrokes(engine,ms){
   const lines=[];let ink;
@@ -431,11 +436,11 @@ function restStrokes(engine,ms){
 }
 const nonWearBars=restStrokes(nw.b.orbitRest.getEngine(),base+S+1000);
 assert.strictEqual(nonWearBars.length,1);
-assert.strictEqual(nonWearBars[0].color,0xF800);
+assert.strictEqual(nonWearBars[0].color,0x8410);
 const [x1,y1,x2,y2]=nonWearBars[0].points;
-assert(Math.abs(Math.hypot(x1-85,y1-90)-70)<1.1,"Red bar must start on orbit");
-assert(Math.abs(Math.hypot(x2-85,y2-90)-80)<1.1,"Red bar must reach rest stage-5 length");
-assert(Math.hypot(x1-x2,y1-y2)>=9,"Red non-wear must be radial, not a short arc");
+assert(Math.abs(Math.hypot(x1-85,y1-90)-70)<1.1,"Grey bar must start on orbit");
+assert(Math.abs(Math.hypot(x2-85,y2-90)-80)<1.1,"Grey bar must reach rest stage-5 length");
+assert(Math.hypot(x1-x2,y1-y2)>=9,"Grey non-wear must be radial, not a short arc");
 const missing=r.create({wearEnabled:true,nowMs:base});
 feed(missing,base,base+100000);
 missing.sync(base+S);
@@ -445,16 +450,16 @@ assert.deepStrictEqual(restStrokes(missing,base+S+1000),[],
 const restoredNonWear=r.create({saved:nw.b.orbitRest.getEngine().snapshot(),
   nowMs:base+S+1000});
 assert.deepStrictEqual(restStrokes(restoredNonWear,base+S+1000),nonWearBars,
-  "Unworn red bars must survive saving and reopening the clock");
+  "Unworn grey bars must survive saving and reopening the clock");
 const normalBar=restStrokes(high,base+S*2);
 assert(normalBar.length===1&&normalBar[0].color===0x07E0,
   "Normal motion must retain its green radial bar");
-// Full-day absence paints 288 full-length red radial bars.
+// Full-day absence paints 288 full-length grey radial bars.
 const allOff=r.create({saved:{v:3,end:base/S+287,
   levels:"fe".repeat(288)},nowMs:base+S*288+1000});
 const allOffLines=restStrokes(allOff,base+S*288+1000);
 assert.strictEqual(allOffLines.length,288);
-assert(allOffLines.every(x=>x.color===0xF800));
+assert(allOffLines.every(x=>x.color===0x8410));
 for(const line of allOffLines){
   const [ax,ay,bx,by]=line.points;
   assert(Math.abs(Math.hypot(ax-85,ay-90)-70)<1.1,
@@ -462,10 +467,103 @@ for(const line of allOffLines){
   assert(Math.abs(Math.hypot(bx-85,by-90)-80)<1.1,
     "Full-day unworn bar must have rest stage-5 length");
 }
-// A legacy v2 code 00 is "missing", not a red non-wear interval.
+// A legacy v2 code 00 is "missing", not a non-wear interval.
 const legacyMissing=r.create({saved:{v:2,end:base/S,
   levels:"ff".repeat(287)+"00"},nowMs:base+S+1000});
 assert.deepStrictEqual(restStrokes(legacyMissing,base+S+1000),[]);
+// Charging uses special v3 codes 101..201 without altering 254/unworn.
+// Its red radial length represents remaining battery percentage, not
+// percentage of five-minute charging time. No XYZ coverage is required.
+function chargingTrial(pct){
+  const e=r.create({nowMs:base,wearEnabled:true});
+  e.sync(base);e.setCharging(true,pct);
+  e.sync(base+S);
+  return e;
+}
+assert.strictEqual(r.constants.chargeBase,101);
+assert.strictEqual(r.constants.chargeEnd,201);
+for(const pct of [0,10,25,50,75,100]){
+  const e=chargingTrial(pct),value=101+pct;
+  assert.strictEqual(e.snapshot().levels.slice(-2),value.toString(16).padStart(2,"0"));
+  assert.strictEqual(e.getDiagnostics().recent.at(-1).reason,"charging");
+  let readings=[];
+  e.visit(base+S+1000,()=>{},()=>{},()=>{},(bucket,battery)=>readings.push(battery));
+  assert.deepStrictEqual(readings,[pct]);
+  const strokes=restStrokes(e,base+S+1000);
+  assert.strictEqual(strokes.length,1);
+  assert.strictEqual(strokes[0].color,0xF800);
+  const [ax,ay,bx,by]=strokes[0].points;
+  const bar=Math.hypot(bx-85,by-90)-Math.hypot(ax-85,ay-90);
+  assert(Math.abs(bar-10*pct/100)<1.2,
+    "Charging bar must scale with battery: "+pct+"%, actual "+bar);
+  const restored=r.create({saved:e.snapshot(),nowMs:base+S+1000});
+  assert.deepStrictEqual(restStrokes(restored,base+S+1000),strokes,
+    "Charging percent survives flash snapshot");
+}
+const partCharge=r.create({nowMs:base,wearEnabled:false});
+partCharge.sample(quiet,base);
+partCharge.setCharging(true,42);
+partCharge.setCharging(false,42);
+partCharge.sync(base+S);
+assert.strictEqual(partCharge.snapshot().levels.slice(-2),"8f",
+  "Any charging during the five-minute interval takes priority over rest stage");
+const liveCharge=r.create({nowMs:base});
+liveCharge.sync(base);liveCharge.setCharging(true,60);
+assert.strictEqual(restStrokes(liveCharge,base+150000).length,1,
+  "Current charging interval must be displayed without waiting 5 minutes");
+assert.strictEqual(restStrokes(liveCharge,base+150000)[0].color,0xF800);
+
+// Boot recorder observes the hardware charger without starting HRM.
+const chargedWatch=environment(base,{restWearEnabled:true});
+chargedWatch.execute("boot.js");
+assert.strictEqual(chargedWatch.b.listenerCount("charging"),1);
+chargedWatch.setCharging(true,55);
+assert.strictEqual(chargedWatch.b.orbitRest.getEngine().getLive().charging,true);
+chargedWatch.setBattery(62);
+chargedWatch.feed(base+S);
+assert.strictEqual(chargedWatch.b.orbitRest.getEngine().snapshot().levels.slice(-2),
+  (101+62).toString(16),"Charging records the last sampled percentage");
+assert.strictEqual(chargedWatch.b.orbitRest.getDiagnostics().recent.at(-1).reason,
+  "charging");
+assert.strictEqual(chargedWatch.power.filter(x=>x[1]===1).length,0,
+  "Charging must never turn on optical HRM");
+chargedWatch.setCharging(false,62);
+chargedWatch.feed(base+2*S);
+const afterUnplug=chargedWatch.b.orbitRest.getEngine().snapshot().levels.slice(-2);
+assert(!(parseInt(afterUnplug,16)>=101&&parseInt(afterUnplug,16)<=201),
+  "Unplugging must restore normal 3D motion/HRM classification");
+// Initial charging state must be read even if the event occurred before boot.
+const chargingAtBoot=environment(base,{restWearEnabled:true});
+chargingAtBoot.setCharging(true,80);
+chargingAtBoot.execute("boot.js");
+assert.strictEqual(chargingAtBoot.b.orbitRest.getEngine().getLive().chargePercent,80);
+chargingAtBoot.advance(base+S);
+chargingAtBoot.b.emit("accel",quiet);
+assert.strictEqual(chargingAtBoot.b.orbitRest.getEngine().snapshot().levels.slice(-2),"b5");
+
+// Keep recording for hours while charging even with NO accelerometer events.
+const noAccelCharge=environment(base,{restWearEnabled:true});
+noAccelCharge.setCharging(true,34);
+noAccelCharge.execute("boot.js");
+noAccelCharge.setBattery(47);
+noAccelCharge.advance(base+S+1000); // Charger minute timer must roll the slot.
+assert.strictEqual(noAccelCharge.b.orbitRest.getEngine().snapshot().levels.slice(-2),
+  (101+47).toString(16),"Charging must record without accelerometer events");
+// A pending HRM probe must release its sensor power as soon as charging begins.
+const stopOnCharge=environment(base,{restWearEnabled:true});
+stopOnCharge.execute("boot.js");
+for(let t=0;t<270000;t+=1000){
+  stopOnCharge.advance(base+t);
+  stopOnCharge.b.emit("accel",quiet);
+}
+stopOnCharge.advance(base+270000);
+assert(stopOnCharge.b.orbitRest.isProbing());
+stopOnCharge.setCharging(true,35);
+assert.strictEqual(stopOnCharge.b.orbitRest.isProbing(),false);
+assert.deepStrictEqual(stopOnCharge.power.slice(-2),
+  [[base+270000,1,"orbitrest"],[base+270000,0,"orbitrest"]],
+  "Stop an active optical HRM measurement on charge");
+
 // 297 seconds are more than 270s coverage and are valid for non-wear.
 // Previous code incorrectly required a sample within 2.5s of the slot start.
 const lateStart=environment(base+3000,{restWearEnabled:true});

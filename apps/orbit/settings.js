@@ -2,7 +2,7 @@
 (function(back){
   var Storage=require("Storage");
   // Read-only version display: title is not a selectable button.
-  var VERSION="0.107";
+  var VERSION="0.108";
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
   var REST_ACTIVITY_DEFAULTS=[1,2,6,18];
   // Bangle.js 2 has a 3-bit colour screen (8 actual dial colours).
@@ -802,7 +802,8 @@
       nonwear_hrm_failed:"HRM failed",hrm_retry_wait:"Retry wait",
       nonwear_hrm_unknown:"HRM unknown",
       nonwear:"No pulse",nonwear_held:"Held unworn",
-      pulse_held_still:"Held worn",accel_uncertain:"Uncertain"
+      pulse_held_still:"Held worn",accel_uncertain:"Uncertain",
+      charging:"Charging"
     };
     // E.showAlert does not scroll on Bangle.js 2. Use read-only
     // menu rows for a scrollable diagnostic display instead.
@@ -811,7 +812,8 @@
     }
     var m={"":{title:"Last check"},"< Back":function(){restMenu(s);}};
     if(!last)m["Status"]=readOnly("No 5-min bin");
-    m["Result"]=readOnly(!last?"--":last.result===254?"Unworn":
+    m["Result"]=readOnly(!last?"--":last.result>=101&&last.result<=201?
+      "Charge "+(last.result-101)+"%":last.result===254?"Unworn":
       last.result===253?"HRM failed":
       last.result===255?"Unknown":"Rest "+(1+Math.min(4,Math.floor(Math.min(99,last.result)/20))));
     m["Reason"]=readOnly(last?(reasons[last.reason]||last.reason):"--");
@@ -820,6 +822,8 @@
       d&&d.holdState===2?"Unworn":
       d&&d.holdState===3?"HRM failed":"Unknown");
     m["Shared HRM"]=readOnly(d?d.sharedPulseCount||0:0);
+    m["Charging"]=readOnly(d&&d.charging?"Yes":"No");
+    if(d&&d.charging)m["Battery"]=readOnly(d.chargePercent+"%");
     m["Conf."]=readOnly(last&&last.confidence>=0?last.confidence+"%":"--");
     m["3D drift"]=readOnly(last&&isFinite(last.driftG)?last.driftG+" g":"--");
     m["Peak sum"]=readOnly(last&&typeof last.activity300==="number"&&isFinite(last.activity300)?
