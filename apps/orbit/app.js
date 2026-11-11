@@ -1,4 +1,4 @@
-/* tenkyu 0.106 (orbit storage) */
+/* tenkyu 0.107 (orbit storage) */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbit.json";
@@ -523,23 +523,25 @@
     widgetDrawWrapper=undefined;nativeDrawWidgets=undefined;
   }
 
-  function drawSun(){
-    var i;
-    /* Reference axis is intentionally behind both bodies. */
-    g.setColor(0x8410).drawLine(EARTHX,EARTHY,SUNX,SUNY);
+  function drawSun(recolorOnly){
+    var i,solarColor=eclipseActive?RED:YELLOW;
+    var detailColor=eclipseActive?RED:ORANGE;
+    // The reference axis belongs behind Earth; do not repaint it when
+    // recoloring the Sun after the progressive Earth layer was drawn.
+    if(!recolorOnly)g.setColor(0x8410).drawLine(EARTHX,EARTHY,SUNX,SUNY);
 
     /* Cached corona rays: no redraw-time trigonometry. */
-    g.setColor(ORANGE);
+    g.setColor(detailColor);
     for(i=0;i<SUN_RAYS.length;i+=4)
       g.drawLine(SUN_RAYS[i],SUN_RAYS[i+1],SUN_RAYS[i+2],SUN_RAYS[i+3]);
 
     /* Photosphere: yellow disk, orange limb/granulation, small dark sunspot. */
-    g.setColor(YELLOW).fillCircle(SUNX,SUNY,SUNR);
-    g.setColor(ORANGE).drawCircle(SUNX,SUNY,SUNR);
+    g.setColor(solarColor).fillCircle(SUNX,SUNY,SUNR);
+    g.setColor(detailColor).drawCircle(SUNX,SUNY,SUNR);
     for(i=0;i<SUN_TEX_ORANGE.length;i+=2)
       g.setPixel(SUNX+SUN_TEX_ORANGE[i],SUNY+SUN_TEX_ORANGE[i+1]);
 
-    /* Solar active region: visible red surround with a black spot core. */
+    /* Preserve the dark sunspot in either solar color mode. */
     var sx=SUNX+SUN_SPOT_X,sy=SUNY+SUN_SPOT_Y;
     g.setColor(RED).fillCircle(sx,sy,1);
     g.setColor(BLACK).setPixel(sx,sy);
@@ -882,7 +884,10 @@
       ECLIPSE_UPDATE_MS=renderer.UPDATE_MS;
     }
     var active=eclipseDisplay.update(new Date(virtualNowMs()));
-    nextEclipseCheck=Date.now()+(active?30000:300000);
+    // Keep 5-minute checks far from eclipse; tighten to 1 minute near
+    // the penumbral boundary, 30 seconds once the global eclipse starts.
+    nextEclipseCheck=Date.now()+(active?30000:
+      (eclipseDisplay.getState()?60000:300000));
     return active;
   }
   function drawEclipse(sol){
@@ -1008,7 +1013,12 @@
           eclipseActive=updateEclipse();
           // The first minute timer was armed before eclipse discovery.
           // Switch to 30-second updates when the initial shadow is active.
-          if(eclipseActive)armMinute();
+          if(eclipseActive){
+            // The fast opening frame was drawn before the eclipse check.
+            // Recolor the Sun without repainting the axis over the Earth.
+            drawSun(true);
+            armMinute();
+          }
           drawEclipse(sol);
           if(!moonCacheReady){buildMoonCache();moonCacheReady=true;}
           moon=timed(perf.staged,"moon",drawMoon);
