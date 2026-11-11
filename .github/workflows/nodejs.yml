@@ -41,6 +41,9 @@ jobs:
         with:
           node-version: 18.x
 
+      - name: Verify tenkyu nonwear and settings regressions
+        run: node apps/orbit/test-rest.js
+
       - name: Clone EspruinoWebIDE (pinned)
         run: |
           git clone --depth 1 https://github.com/espruino/EspruinoWebIDE ../EspruinoWebIDE
