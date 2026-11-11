@@ -2,23 +2,29 @@
 (function(back){
   var Storage=require("Storage");
   // Read-only version display: title is not a selectable button.
-  var VERSION="0.108";
+  var VERSION="0.109";
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
   var REST_ACTIVITY_DEFAULTS=[1,2,6,18];
   // Bangle.js 2 has a 3-bit colour screen (8 actual dial colours).
   var DIAL_COLOR_NAMES=["White","Red","Green","Blue","Yellow","Cyan","Magenta","Black"];
   var DIAL_COLOR_VALUES=[0xFFFF,0xF800,0x07E0,0x001F,0xFFE0,0x07FF,0xF81F,0];
   function restActivityCuts(s){
-    var a=[],prev=-1;
+    var a=[],prev=0;
     for(var i=0;i<4;i++){
       var n=+s["restActivityT"+(i+1)];
-      if(!isFinite(n))n=REST_ACTIVITY_DEFAULTS[i];
-      n=Math.round(n);
-      n=Math.max(prev+1,Math.min(996+i,n));
+      if(!isFinite(n)||n<=0)n=REST_ACTIVITY_DEFAULTS[i];
+      if(i===0){
+        // Only the L5/L4 boundary uses 0.1-resolution.
+        n=Math.max(0.1,Math.min(995.9,Math.round(n*10)/10));
+      }else{
+        n=Math.round(n);
+        n=Math.max(Math.floor(prev)+1,Math.min(996+i,n));
+      }
       a.push(n);prev=n;
     }
     return a;
   }
+  function activityCutLabel(n,k){return k===0?n.toFixed(1):String(n);}
   function thresholdIndex(v){
     if(!isFinite(v)||v<=0)return 3;
     var best=0;
@@ -802,6 +808,7 @@
       nonwear_hrm_failed:"HRM failed",hrm_retry_wait:"Retry wait",
       nonwear_hrm_unknown:"HRM unknown",
       nonwear:"No pulse",nonwear_held:"Held unworn",
+      pulse_pending_rest5:"Pulse pending",rest_1_to_4:"Rest 1-4",
       pulse_held_still:"Held worn",accel_uncertain:"Uncertain",
       charging:"Charging"
     };
@@ -880,16 +887,20 @@
   function activityDigitMenu(s,k){
     var cuts=restActivityCuts(s),key="restActivityT"+(k+1),n=cuts[k];
     var m={"":{title:"Boundary "+(k+1)},"< Back":function(){activityMenu(s);}};
-    [100,10,1].forEach(function(place){
-      var label=place===100?"Hundreds":place===10?"Tens":"Ones";
-      m[label]={value:Math.floor(n/place)%10,min:0,max:9,step:1,wrap:true,
+    (k===0?[100,10,1,0.1]:[100,10,1]).forEach(function(place){
+      var label=place===100?"Hundreds":place===10?"Tens":
+        place===1?"Ones":"Tenths";
+      var digit=place===0.1?Math.round(n*10)%10:Math.floor(n/place)%10;
+      m[label]={value:digit,min:0,max:9,step:1,wrap:true,
         format:function(v){return String(v);},
         onchange:function(v){
-          var old=restActivityCuts(s)[k];
-          var next=old-(Math.floor(old/place)%10)*place+v*place;
-          var low=k?restActivityCuts(s)[k-1]+1:0;
-          var high=k<3?restActivityCuts(s)[k+1]-1:999;
-          if(next<low||next>high){
+          var all=restActivityCuts(s),old=all[k];
+          var oldDigit=place===0.1?Math.round(old*10)%10:
+            Math.floor(old/place)%10;
+          var next=Math.round((old+(v-oldDigit)*place)*10)/10;
+          var low=k?Math.floor(all[k-1])+1:0.1;
+          var high=k<3?all[k+1]-(k===0?0.1:1):999;
+          if(next<low-0.000001||next>high+0.000001){
             E.showAlert("Allowed: "+low+" to "+high,"Boundary")
               .then(function(){activityDigitMenu(s,k);});
             return;
@@ -899,14 +910,15 @@
         }
       };
     });
-    m["Value"]={value:0,min:0,max:0,format:function(){return ("00"+restActivityCuts(s)[k]).slice(-3);}};
+    m["Value"]={value:0,min:0,max:0,
+      format:function(){return activityCutLabel(restActivityCuts(s)[k],k);}};
     E.showMenu(m);
   }
   function activityMenu(s){
     var cuts=restActivityCuts(s);
     var m={"":{title:"Rest levels"},"< Back":function(){restMenu(s);}};
     for(var i=0;i<4;i++)(function(k){
-      m["L"+(5-k)+"/"+(4-k)+"  "+("00"+cuts[k]).slice(-3)]=function(){
+      m["L"+(5-k)+"/"+(4-k)+"  "+activityCutLabel(cuts[k],k)]=function(){
         activityDigitMenu(s,k);
       };
     })(i);

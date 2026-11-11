@@ -140,21 +140,32 @@ function create(options){
     if(second!==vecSecond){flushVector();vecSecond=second;}
     vecSX+=a.x;vecSY+=a.y;vecSZ+=a.z;vecCount++;
   }
-  // Motion is enough evidence to plot the rest level; HRM is only needed
-  // to distinguish a motionless worn watch from one lying on a table.
+  // Only a stage-5 interval is eligible for non-wear. The one-second
+  // vector drift is accumulated cheaply throughout the slot because its
+  // five-minute history cannot be reconstructed after stage classification.
+  // At probe time this is provisional; the final stage is checked at closure.
+  function isStage5Candidate(bucket){
+    return wearEnabled&&!charging&&bucket===current&&
+      covered>=240000&&
+      activityLevel(activity300(activity,covered),cuts)===100&&
+      !vecWornMotion&&vecRefX!==undefined;
+  }
   function chooseLevel(ok,still,motion,hr,percent){
     if(!ok)return NO_DATA;
-    if(!wearEnabled||motion)return percent;
+    if(!wearEnabled||percent!==100||motion)return percent;
     if(still){
-      if(hr===HR_FOUND)return percent;
+      if(hr===HR_FOUND||hr===HR_PENDING&&holdPulse===HR_FOUND)return percent;
+      if(hr===HR_ABSENT||hr===HR_PENDING&&holdPulse===HR_ABSENT)return NOT_WORN;
       if(hr===HR_FAILED||hr===HR_PENDING&&holdPulse===HR_FAILED)return HRM_FAILED;
-      return NOT_WORN;
+      // No HRM measurement yet: do not equate missing evidence with non-wear.
+      return percent;
     }
-    return NO_DATA;
+    return percent;
   }
-  function makeReason(ok,still,motion,hr){
+  function makeReason(ok,still,motion,hr,percent){
     if(!ok)return "accel_missing";
     if(!wearEnabled)return "nonwear_disabled";
+    if(percent!==100)return "rest_1_to_4";
     if(motion)return "motion";
     if(still){
       if(hr===HR_FOUND)return "pulse_detected_still";
@@ -162,7 +173,7 @@ function create(options){
       if(hr===HR_PENDING&&holdPulse===HR_FOUND)return "pulse_held_still";
       if(hr===HR_PENDING&&holdPulse===HR_ABSENT)return "nonwear_held";
       if(hr===HR_PENDING&&holdPulse===HR_FAILED)return "hrm_retry_wait";
-      if(hr===HR_PENDING)return "nonwear_hrm_unknown";
+      if(hr===HR_PENDING)return "pulse_pending_rest5";
       return "nonwear";
     }
     return "accel_uncertain";
@@ -183,10 +194,10 @@ function create(options){
     for(var j=diag.length-1;j>=0;j--)if(diag[j].bucket===closedBucket){
       diag[j].pulse=closedPulse;diag[j].confidence=closedConfidence;diag[j].result=v;
       diag[j].reason=closedCharge>=0?"charging":
-        makeReason(closedVectorOK,closedStill,closedMotion,closedPulse);
+        makeReason(closedVectorOK,closedStill,closedMotion,closedPulse,closedPercent);
       break;
     }
-    if(closedCharge<0&&closedVectorOK&&closedStill&&closedPulse!==HR_PENDING)
+    if(closedCharge<0&&closedPercent===100&&closedVectorOK&&closedStill&&closedPulse!==HR_PENDING)
       establishHold(closedPulse);
     if(save)save();
   }
@@ -228,9 +239,10 @@ function create(options){
         peaks:peakCount,valid:closedVectorOK,pulse:closedPulse,confidence:closedConfidence,
         result:levels[i],
         reason:closedCharge>=0?"charging":
-          makeReason(closedVectorOK,closedStill,closedMotion,closedPulse)});
+          makeReason(closedVectorOK,closedStill,closedMotion,closedPulse,closedPercent)});
       if(diag.length>12)diag.shift();
-      if(closedCharge<0&&closedVectorOK&&closedStill&&closedPulse!==HR_PENDING)
+      if(closedPercent!==100)clearHold();
+      if(closedCharge<0&&closedPercent===100&&closedVectorOK&&closedStill&&closedPulse!==HR_PENDING)
         establishHold(closedPulse);
       changed=true;
     }else if(current>=0&&target<current){
@@ -261,6 +273,7 @@ function create(options){
     // Only accepted peaks compute sqrt; subthreshold peaks never do.
     if(qOld!==undefined&&qPrev>=threshold2&&qPrev>qOld&&qPrev>=q){
       activity+=Math.sqrt(qPrev)-threshold;peakCount++;
+      if(activity>=cuts[0]&&holdPulse!==HR_PENDING)clearHold();
     }
     qOld=qPrev;qPrev=q;
   }
@@ -340,6 +353,7 @@ function create(options){
     hasRecentAccel:function(ms){return lastValid&&lastMs!==undefined&&
       ms>=lastMs&&ms-lastMs<=MAX_GAP_MS;},
     getWearHold:function(){return holdPulse;},
+    isStage5Candidate:isStage5Candidate,
     getLive:function(){return {bucket:current,covered:covered,peaks:peakCount,
       activity:activity,level:activityLevel(activity,cuts),
        charging:charging,chargePercent:chargePercent};}};
@@ -418,7 +432,7 @@ function install(bangle,storage,events,clock){
     if(wasFailed&&engine.getWearHold()!==HR_FAILED){
       // Motion or a sensor-data gap invalidates the prior failure verdict.
       failedAttempts=0;stopProbe();scheduleProbe(Math.floor(now/SLOT_MS)+1);
-    }else if(probe&&engine.hasMotion(probe.bucket)){
+    }else if(probe&&!engine.isStage5Candidate(probe.bucket)){
       var bucket=probe.bucket;
       failedAttempts=0;stopProbe();scheduleProbe(bucket+1);
     }
@@ -435,7 +449,7 @@ function install(bangle,storage,events,clock){
     }
     if(h.bpm<=0||h.confidence<=wear.confidence)return;
     var now=clock(),bucket=Math.floor(now/SLOT_MS);
-    if(!engine.hasRecentAccel(now)||engine.hasMotion(bucket))return;
+    if(!engine.hasRecentAccel(now)||!engine.isStage5Candidate(bucket))return;
     if(engine.getWearHold()===HR_FOUND||engine.hasPulse(bucket))return;
     // Only live, sufficiently reliable readings count. Never reuse
     // the firmware's older heart-rate history for wear detection.
@@ -466,7 +480,7 @@ function install(bangle,storage,events,clock){
         failedAttempts=0;scheduleProbe();return;
       }
       var now=clock(),b=Math.floor(now/SLOT_MS);
-      if(!engine.hasRecentAccel(now)||engine.hasMotion(b)){
+      if(!engine.hasRecentAccel(now)||!engine.isStage5Candidate(b)){
         failedAttempts=0;scheduleProbe(b+1);return;
       }
       beginProbe(b,now+wear.seconds*1000);
@@ -475,7 +489,7 @@ function install(bangle,storage,events,clock){
   function beginProbe(bucket,end){
     if(charging)return;
     var begin=clock();
-    if(!engine.hasRecentAccel(begin)||engine.hasMotion(Math.floor(begin/SLOT_MS))){
+    if(!engine.hasRecentAccel(begin)||!engine.isStage5Candidate(Math.floor(begin/SLOT_MS))){
       failedAttempts=0;scheduleProbe(Math.floor(begin/SLOT_MS)+1);return;
     }
     probe={bucket:bucket,maxConfidence:-1,hasData:false,ownsPower:false};
@@ -518,7 +532,8 @@ function install(bangle,storage,events,clock){
       var begin=clock(),end=(bucket+1)*SLOT_MS;
       if(begin<start||begin>end-10000){failProbe(bucket);return;}
       if(engine.getWearHold()===HR_FOUND||engine.getWearHold()===HR_ABSENT||
-        engine.hasPulse(bucket)||engine.hasMotion(bucket)||!engine.hasRecentAccel(begin)){
+        engine.hasPulse(bucket)||!engine.isStage5Candidate(bucket)||
+        !engine.hasRecentAccel(begin)){
         scheduleProbe(bucket+1);return;
       }
       beginProbe(bucket,end);
