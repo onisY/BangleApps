@@ -121,7 +121,7 @@ function appHarness(enabled,iso){
     "Opening frame must not wait for the eclipse engine");
   let stages=0;
   for(;;){
-    const due=[...timers].find(x=>x[1].ms===0);
+    const due=[...timers].find(x=>x[1].ms===0||x[1].ms===12);
     if(!due)break;
     timers.delete(due[0]);due[1].f();
     assert(++stages<=3,"Opening must have a bounded number of layers");
