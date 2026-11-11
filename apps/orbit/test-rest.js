@@ -154,12 +154,11 @@ for(const [x,y,u,v] of lines){
   assert(Math.abs(Math.hypot(x-85,y-90)-70)<.71);
   assert(Math.abs(Math.hypot(u-85,v-90)-80)<.71);
 }
-const colors=[],times=[];
+const colors=[];
 r.draw({setColor:c=>colors.push(c),drawLine:()=>{}},
   {visit:(ms,fn)=>{fn(base/S-1,50);fn(base/S,100);}},
   {nowMs:base+S,radiusPx:70,maxHeightPx:10,cx:85,cy:90,
-    currentAngleRad:0,isDayAt:ms=>{times.push(ms);return ms>=base+S;}});
-assert.deepStrictEqual(times,[base,base+S]);
+    currentAngleRad:0,dayBuckets:{first:base/S,last:base/S+1,polar:0}});
 assert.deepStrictEqual(colors,[0xffe0,0x07e0]);
 function environment(start,config={},data,extraModules){
   let now=start,color=0,serial=0,writes=0;
