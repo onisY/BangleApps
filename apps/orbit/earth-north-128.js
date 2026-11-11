@@ -20,7 +20,7 @@ function colorImage(s){
   }
   if(p!==4096)throw new Error("north color size "+p);
   return {width:128,height:128,bpp:2,buffer:buf.buffer,
-    transparent:0,palette:new Uint16Array([0x001F,0x07E0,0x07FF,0xFFFF])};
+    transparent:0,palette:new Uint16Array([0x001F,0x05A0,0x07FF,0xFFFF])};
 }
 function coastImage(s){
   var src=atob(s),buf=new Uint8Array(2048),i=0,p=0,on=0,n,k,shift,j;
