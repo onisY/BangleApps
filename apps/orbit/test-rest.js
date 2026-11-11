@@ -238,7 +238,7 @@ assert(!app.log.some(e=>e.op==="fillPoly"),
   "Map and eclipse rendering should be deferred after first LCD flush");
 assert(app.log.some(e=>e.op==="flip"),
   "First layer must be made visible before expensive rendering");
-app.advance(base); // Drain the three zero-delay stages.
+app.advance(base+50); // Drain the three 12-ms progressive stages.
 assert(app.log.some(e=>e.op==="fillPoly"),
   "Earth and Moon must appear on subsequent frames");
 // Only the NIGHT polygon resolution changes. Leave the white coastline,
