@@ -380,6 +380,7 @@ function install(bangle,storage,events,clock){
     var now=clock();
     engine.sync(now);
     stopChargeTimer();
+    var wasCharging=charging;
     charging=!!state;nextBatteryAt=now+60000;
     if(charging){
       chargePercent=getBattery();
@@ -390,7 +391,7 @@ function install(bangle,storage,events,clock){
       engine.setCharging(false,chargePercent);
       failedAttempts=0;stopProbe();scheduleProbe();
     }
-    persist(); // Recover an unfinished charge interval after reboot.
+    if(charging||wasCharging)persist(); // No flash write on ordinary startup.
   }
   function onAccel(a){
     var now=clock();
