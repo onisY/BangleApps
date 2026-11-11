@@ -389,9 +389,14 @@ function install(bangle,storage,events,clock){
         engine.setCharging(true,chargePercent);
       }
     }
+    if(charging){
+      // The charging bucket is already classified as non-worn.
+      // No peak filtering or HRM checks are needed until unplugged.
+      engine.sync(now);
+      return;
+    }
     var wasFailed=engine.getWearHold()===HR_FAILED;
     engine.sample(a,now);
-    if(charging)return;
     if(wasFailed&&engine.getWearHold()!==HR_FAILED){
       // Motion or a sensor-data gap invalidates the prior failure verdict.
       failedAttempts=0;stopProbe();scheduleProbe(Math.floor(now/SLOT_MS)+1);
