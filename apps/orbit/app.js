@@ -523,11 +523,12 @@
     widgetDrawWrapper=undefined;nativeDrawWidgets=undefined;
   }
 
-  function drawSun(){
+  function drawSun(recolorOnly){
     var i,solarColor=eclipseActive?RED:YELLOW;
     var detailColor=eclipseActive?RED:ORANGE;
-    /* Reference axis is intentionally behind both bodies. */
-    g.setColor(0x8410).drawLine(EARTHX,EARTHY,SUNX,SUNY);
+    // The reference axis belongs behind Earth; do not repaint it when
+    // recoloring the Sun after the progressive Earth layer was drawn.
+    if(!recolorOnly)g.setColor(0x8410).drawLine(EARTHX,EARTHY,SUNX,SUNY);
 
     /* Cached corona rays: no redraw-time trigonometry. */
     g.setColor(detailColor);
@@ -1014,8 +1015,8 @@
           // Switch to 30-second updates when the initial shadow is active.
           if(eclipseActive){
             // The fast opening frame was drawn before the eclipse check.
-            // Recolor only the Sun after the existing ephemeris becomes ready.
-            drawSun();
+            // Recolor the Sun without repainting the axis over the Earth.
+            drawSun(true);
             armMinute();
           }
           drawEclipse(sol);
