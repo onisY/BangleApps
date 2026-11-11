@@ -541,6 +541,29 @@ chargingAtBoot.advance(base+S);
 chargingAtBoot.b.emit("accel",quiet);
 assert.strictEqual(chargingAtBoot.b.orbitRest.getEngine().snapshot().levels.slice(-2),"b5");
 
+// Keep recording for hours while charging even with NO accelerometer events.
+const noAccelCharge=environment(base,{restWearEnabled:true});
+noAccelCharge.setCharging(true,34);
+noAccelCharge.execute("boot.js");
+noAccelCharge.setBattery(47);
+noAccelCharge.advance(base+S+1000); // Charger minute timer must roll the slot.
+assert.strictEqual(noAccelCharge.b.orbitRest.getEngine().snapshot().levels.slice(-2),
+  (101+47).toString(16),"Charging must record without accelerometer events");
+// A pending HRM probe must release its sensor power as soon as charging begins.
+const stopOnCharge=environment(base,{restWearEnabled:true});
+stopOnCharge.execute("boot.js");
+for(let t=0;t<270000;t+=1000){
+  stopOnCharge.advance(base+t);
+  stopOnCharge.b.emit("accel",quiet);
+}
+stopOnCharge.advance(base+270000);
+assert(stopOnCharge.b.orbitRest.isProbing());
+stopOnCharge.setCharging(true,35);
+assert.strictEqual(stopOnCharge.b.orbitRest.isProbing(),false);
+assert.deepStrictEqual(stopOnCharge.power.slice(-2),
+  [[base+270000,1,"orbitrest"],[base+270000,0,"orbitrest"]],
+  "Stop an active optical HRM measurement on charge");
+
 // 297 seconds are more than 270s coverage and are valid for non-wear.
 // Previous code incorrectly required a sample within 2.5s of the slot start.
 const lateStart=environment(base+3000,{restWearEnabled:true});
