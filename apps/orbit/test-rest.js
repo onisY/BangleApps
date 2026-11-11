@@ -706,6 +706,35 @@ assert(navButton.log.some(x=>x.op==="drawString"&&x.args[0]==="Launcher..."));
 assert(!navButton.log.some(x=>x.op==="showLauncher"));
 navButton.advance(base+1);
 assert(navButton.log.some(x=>x.op==="showLauncher"));
+// Clock h:m must never add a leading zero to either hour or minute.
+const timeAtNineFive=new Date(2026,9,19,9,5).getTime();
+const shortTime=environment(timeAtNineFive,{restEnabled:false,timePos:1,datePos:2});
+shortTime.execute("app.js");shortTime.advance(timeAtNineFive+100);
+assert(shortTime.log.some(x=>x.op==="drawString"&&x.args[0]==="9:5"),
+  "Clock time must be h:m without zero padding");
+
+// The immutable 128px North-polar bitmap contains Earth-relative water cuts.
+// These texture cells rotate with the globe: no screen-fixed strait strokes.
+const northMap=require("./earth-north-128.js").get();
+assert.strictEqual(northMap[0].width,128);
+assert.strictEqual(northMap[0].height,128);
+assert.strictEqual(northMap[0].buffer.byteLength,4096);
+assert.strictEqual(northMap[1].buffer.byteLength,2048);
+assert.strictEqual(northMap[0].palette[1],0x05A0,"Land uses the muted green palette");
+const packedNorth=new Uint8Array(northMap[0].buffer);
+function northPixel(x,y){
+  const q=y*128+x;
+  return (packedNorth[q>>2]>>(6-2*(q&3)))&3;
+}
+const straitCells=[[60,104],[61,104],[62,104],[63,104],[64,104],[65,104],
+  [58,115],[59,115],[60,115],[61,115],[63,115],[62,114],[63,114]];
+for(const [x,y] of straitCells)
+  assert.strictEqual(northPixel(x,y),0,
+    "Corrected water channel must be ocean at "+x+","+y);
+for(const [x,y] of [[61,101],[70,104],[57,114],[60,116]])
+  assert.strictEqual(northPixel(x,y),1,
+    "Nearby land must be retained at "+x+","+y);
+
 // Repeated 12.5 Hz accelerometer events should not allocate growing sample arrays.
 const perf=r.create({thresholdG:.027});
 const benchStart=Date.now(),benchSamples=15000;
