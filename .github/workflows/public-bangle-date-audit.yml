@@ -14,7 +14,7 @@ jobs:
         run: |
           python3 - <<'PY'
           import urllib.request, csv, io, json, collections, datetime, sys, re
-          today=datetime.datetime(2026,11,12,tzinfo=datetime.timezone(datetime.timedelta(hours=9)))
+          today=datetime.datetime(2026,11,12,21,21,tzinfo=datetime.timezone(datetime.timedelta(hours=9)))
           urls=[
             "https://banglejs.com/apps/appdates.csv",
             "https://banglejs.com/apps/apps.json",
@@ -43,8 +43,8 @@ jobs:
             try:
               c=datetime.datetime.strptime(created.strip(),'%Y-%m-%d %H:%M:%S %z')
               m=datetime.datetime.strptime(modified.strip(),'%Y-%m-%d %H:%M:%S %z')
-              cd=max(0,int((today-c).total_seconds()//86400))
-              md=max(0,int((today-m).total_seconds()//86400))
+              cd=max(0,(today.date()-c.astimezone(today.tzinfo).date()).days)
+              md=max(0,(today.date()-m.astimezone(today.tzinfo).date()).days)
               parsed.append({'id':appid.strip(),'created':c.isoformat(),'modified':m.isoformat(),'created_days':cd,'modified_days':md})
             except Exception as e:
               invalid.append(row[:3])
@@ -67,6 +67,8 @@ jobs:
           else:
             present=parsed
             absent=[]
+          print('AUDIT_EXCLUDED '+json.dumps([x['id'] for x in absent]))
+          parsed=present
           newest=sorted(parsed,key=lambda x:x['modified_days'])[:12]
           created_newest=sorted(parsed,key=lambda x:x['created_days'])[:12]
           obj={'status':'ok','today':today.isoformat(),'date_rows':len(parsed),'invalid_rows':len(invalid),'app_count':len(official_ids) if official_ids is not None else None,'matches_catalog':len(present),'dates_missing_catalog':len(official_ids-set(r['id'] for r in parsed)) if official_ids is not None else None,'rows_not_in_catalog':len(absent),'hist_created':hist('created_days'),'hist_modified':hist('modified_days'),'last_modified_min_days':min((r['modified_days'] for r in parsed),default=None),'newest_modified':newest,'newest_created':created_newest,'updated_within_30d':sum(r['modified_days']<30 for r in parsed),'updated_within_90d':sum(r['modified_days']<90 for r in parsed),'updated_within_180d':sum(r['modified_days']<180 for r in parsed)}
