@@ -288,7 +288,17 @@ const stage4Label=Object.keys(wearMenus.at(-1)).find(n=>n.startsWith("L4/3  "));
 wearMenus.at(-1)[stage4Label]();
 assert(!wearMenus.at(-1)["Tenths"]);
 
-console.log("PASS: lunar example, NASA centers, partial/annular/night/full-Moon, red Sun and return, shading/cache/layers/timer/off/LCD.");
+// The observer's independent day/night line must precede rest bars in both redraw paths.
+const clockSource=fs.readFileSync(path.join(__dirname,"app.js"),"utf8");
+const foregroundParts=[
+  clockSource.slice(clockSource.indexOf("function drawProgressively()"),clockSource.indexOf("function drawBase()")),
+  clockSource.slice(clockSource.indexOf("function drawBase()"),clockSource.indexOf("function clearTaps()"))
+];
+for(const src of foregroundParts){
+  const obs=src.indexOf("drawObserver(sol);"),rest=src.indexOf("drawRest(sol);");
+  assert(obs>=0&&rest>obs,"Grey/rest bars must be drawn after green/yellow observer line");
+}
+console.log("PASS: lunar example, NASA centers, partial/annular/night/full-Moon, rest foreground, eclipse, charging, HRM.");
 if(process.argv[2]==="--preview"){
   fs.writeFileSync(process.argv[3],JSON.stringify([
     {title:"Total 2024",log:appHarness(true,refs[1].date).log},

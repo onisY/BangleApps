@@ -2,7 +2,7 @@
 
 # tenkyu
 
-**tenkyu 0.109**
+**tenkyu 0.110**
 
 A clock app for Bangle.js 2 that lets you read the time, the phases of the Moon and related information from the relative positions of the Sun, Earth and Moon.
 
@@ -124,7 +124,7 @@ The approximate solar-position formulae are based on NOAA's **General Solar Posi
 
 ### 24-hour rest graph
 
-Every five minutes, a **five-stage rest bar** extends **outward from the lunar orbit**. There are 288 positions per 24 hours. Bars are **green by day and yellow by night**. The rest bars intentionally overwrite the Moon (foreground); the red observer point stays above them.
+Every five minutes, a **five-stage rest bar** extends **outward from the lunar orbit**. There are 288 positions per 24 hours. Bars are **green by day and yellow by night**. The rest bars intentionally overwrite the Moon (foreground); the colored observer zenith line is drawn behind the rest bars, so grey non-wear and red charging bars remain visible. The red observer point stays visible inside the lunar orbit.
 
 The rest graph in **v0.068** uses all three accelerometer axes X/Y/Z, each with a first-order high-pass filter (time constant 1.6s, approximately 0.1Hz). Every sensor sample calculates the squared combined magnitude `q=X'²+Y'²+Z'²` and **first compares q with the squared Peak gate**. Only local peaks above the gate are accepted; for accepted peaks, the code computes `sqrt(q_peak) - gate` and sums these excess amplitudes for the entire five-minute interval. Subthreshold peaks are never accumulated and no per-sample square root is needed.
 
@@ -245,7 +245,7 @@ onisY
 
 # tenkyu
 
-**tenkyu 0.109**
+**tenkyu 0.110**
 
 Bangle.js 2 用の、太陽・地球・月の位置関係から時刻、月の満ち欠け等を読み取る時計アプリです。
 

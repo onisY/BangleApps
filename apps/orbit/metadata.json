@@ -2,7 +2,7 @@
   "id": "orbit",
   "name": "tenkyu",
   "shortName": "tenkyu",
-  "version": "0.109",
+  "version": "0.110",
   "author": "onisY",
   "description": "Sun-Earth-Moon clock with eclipse alerts, rest-5-gated non-wear detection, grey non-wear / red battery-level charging bars and low-power HRM.",
   "icon": "app.png",
