@@ -768,7 +768,10 @@
     }
 
     /* Extend the zenith line into the lunar-orbit region. */
-    var zenEndR=MOONORBIT+MOONR/2;
+    // A 5px-wide colored observer ray would leave a yellow/green halo
+    // around the 1px grey non-wear bar even if the bar were drawn later.
+    // End it before the lunar orbit whenever the rest graph is enabled.
+    var zenEndR=REST_ENABLED?MOONORBIT-3:MOONORBIT+MOONR/2;
     var zen=Math.max(0,Math.round(zenEndR-rr));
     var zx=Math.round(px+ux*zen),zy=Math.round(py+uy*zen);
 
