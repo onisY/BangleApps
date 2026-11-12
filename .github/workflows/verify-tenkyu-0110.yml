@@ -1,0 +1,15 @@
+name: Verify tenkyu v0.110 grey rest graph
+on:
+  push:
+    branches:
+      - fix/tenkyu-v0110-rest-foreground
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - name: Check eclipse, charging, nonwear and foreground regression
+        run: node apps/orbit/test.js
