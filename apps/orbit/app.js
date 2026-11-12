@@ -1,4 +1,4 @@
-/* tenkyu 0.109 (orbit storage) */
+/* tenkyu 0.110 (orbit storage) */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbit.json";
@@ -768,7 +768,10 @@
     }
 
     /* Extend the zenith line into the lunar-orbit region. */
-    var zenEndR=MOONORBIT+MOONR/2;
+    // A 5px-wide colored observer ray would leave a yellow/green halo
+    // around the 1px grey non-wear bar even if the bar were drawn later.
+    // End it before the lunar orbit whenever the rest graph is enabled.
+    var zenEndR=REST_ENABLED?MOONORBIT-3:MOONORBIT+MOONR/2;
     var zen=Math.max(0,Math.round(zenEndR-rr));
     var zx=Math.round(px+ux*zen),zy=Math.round(py+uy*zen);
 
@@ -1026,8 +1029,9 @@
         }else{
           // Final pass restores the widget/header area below.
           if(!restReady){initRest();restReady=true;}
-          timed(perf.staged,"rest",function(){drawRest(sol);});
+          // The yellow/green observer zenith line stays beneath rest history.
           drawObserver(sol);
+          timed(perf.staged,"rest",function(){drawRest(sol);});
           drawLocationStatus(moon);drawDateTime(moon);
           g.setColor(BLACK).fillRect(0,0,W-1,23);
           try{Bangle.drawWidgets();}catch(e){}
@@ -1070,8 +1074,9 @@
     drawEclipse(sol); // Earth's shadow first.
     var moon=timed(perf.full,"moon",drawMoon);
     timed(perf.full,"dial",function(){drawOrbitHours(sol);});
+    // Observer zenith line is behind the grey non-wear / red charging bars.
+    drawObserver(sol);
     timed(perf.full,"rest",function(){drawRest(sol);});
-    drawObserver(sol); // Red observer marker stays above the rest graph.
     drawLocationStatus(moon);
     drawDateTime(moon);
     try{Bangle.drawWidgets();}catch(e){}
