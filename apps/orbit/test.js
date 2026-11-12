@@ -298,6 +298,27 @@ for(const src of foregroundParts){
   const obs=src.indexOf("drawObserver(sol);"),rest=src.indexOf("drawRest(sol);");
   assert(obs>=0&&rest>obs,"Grey/rest bars must be drawn after green/yellow observer line");
 }
+assert(clockSource.includes("var zenEndR=REST_ENABLED?MOONORBIT-3:MOONORBIT+MOONR/2;"),
+  "The wide observer ray must end before the radial rest graph begins");
+const greyDraw=wearR.create({nowMs:wearBase,wearEnabled:true,
+  activityThresholds:[.1,2,6,18]});
+for(let t=0;t<=wearS;t+=1000)
+  greyDraw.sample({x:0,y:0,z:1},wearBase+t);
+greyDraw.sync(wearBase+wearS);
+greyDraw.absentPulse(wearBase/wearS,10);
+const brush=[];
+let ink=0;
+wearR.draw({
+  setColor:c=>{ink=c;},
+  drawLine:(...points)=>{brush.push({color:ink,points});}
+},greyDraw,{
+  nowMs:wearBase+wearS+1000,
+  radiusPx:62,maxHeightPx:10,cx:80,cy:80,currentAngleRad:0,
+  dayBuckets:{first:wearBase/wearS-100,last:wearBase/wearS+100,polar:0}
+});
+assert.strictEqual(brush.length,1,"Exactly one line for an unworn five-minute bucket");
+assert.strictEqual(brush[0].color,0x8410,
+  "Non-wear must draw grey, not even daylight green or nighttime yellow");
 console.log("PASS: lunar example, NASA centers, partial/annular/night/full-Moon, rest foreground, eclipse, charging, HRM.");
 if(process.argv[2]==="--preview"){
   fs.writeFileSync(process.argv[3],JSON.stringify([
