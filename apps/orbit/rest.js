@@ -49,7 +49,7 @@ function wearConfig(s){return {enabled:s.restWearEnabled!==false,
 /* Rest history retains 0..100 presentation codes for v2/v3 compatibility.
  * New results are quantized into 0,20,40,60,100 (stages 1..5).
  * 101..201=charging (red 0..100% radial bar).
- * 253=HRM failed (white); 254=unworn (grey); 255=missing XYZ (blank).
+ * 253=HRM failed (white arc); 254=unworn (white marker); 255=missing XYZ (blank).
  * Old percentages keep their displayed stages.
  */
 function create(options){
@@ -657,14 +657,22 @@ function draw(graphics,engine,map){
     var x2=Math.round(map.cx+r*ca),y2=Math.round(map.cy+r*sa);
     if(mode>=4){graphics.setColor(color);graphics.drawLine(x1,y1,x2,y2);}
   }
-  function drawRadial(bucket,color,pct){
-    bars++;
-    if(mode===1)return;
-    pointAt(bucket);
+  function drawWearMarker(cc,ss){
+    var outer=r+height;
+    var x=Math.round(map.cx+outer*cc),y=Math.round(map.cy+outer*ss);
+    if(mode<4)return;
+    graphics.setColor(0xFFFF);
+    graphics.setPixel(x,y);
+    // Place the adjacent pixel along the orbit, keeping the marker at the tip.
+    if(Math.abs(cc)>=Math.abs(ss))graphics.setPixel(x,y+(cc>=0?1:-1));
+    else graphics.setPixel(x+(ss>=0?-1:1),y);
+  }
+  function drawCharging(cc,ss,pct){
     var outer=r+height*pct/100;
-    var x1=Math.round(map.cx+r*ca),y1=Math.round(map.cy+r*sa);
-    var x2=Math.round(map.cx+outer*ca),y2=Math.round(map.cy+outer*sa);
-    if(mode>=4){graphics.setColor(color);graphics.drawLine(x1,y1,x2,y2);}
+    var x1=Math.round(map.cx+r*cc),y1=Math.round(map.cy+r*ss);
+    var x2=Math.round(map.cx+outer*cc),y2=Math.round(map.cy+outer*ss);
+    if(mode>=4){graphics.setColor(0xF800);graphics.drawLine(x1,y1,x2,y2);}
+    drawWearMarker(cc,ss);
   }
   engine.visit(now,function(bucket,value){
     bars++;
@@ -685,19 +693,24 @@ function draw(graphics,engine,map){
     if(mode>=4){graphics.setColor(day?0x07E0:0xFFE0);
       graphics.drawLine(x1,y1,x2,y2);}
   },function(bucket){
-    drawRadial(bucket,0x8410,100); // Nonwear grey, same length as stage 5.
+    bars++;
+    if(mode===1)return;
+    pointAt(bucket);
+    drawWearMarker(ca,sa);
   },function(bucket){drawArc(bucket,0xFFFF);},
-    function(bucket,pct){drawRadial(bucket,0xF800,pct);});
+    function(bucket,pct){
+      bars++;
+      if(mode===1)return;
+      pointAt(bucket);
+      drawCharging(ca,sa,pct);
+    });
   // Show the active charging window immediately, without waiting five minutes.
   var live=engine.getLive&&engine.getLive();
   if(live&&live.charging&&live.bucket===Math.floor(now/SLOT_MS)){
     bars++;
     if(mode>=2){
-      var a=map.currentAngleRad,cc=Math.cos(a),ss=Math.sin(a);
-      var x1=Math.round(map.cx+r*cc),y1=Math.round(map.cy+r*ss);
-      var outer=r+height*live.chargePercent/100;
-      var x2=Math.round(map.cx+outer*cc),y2=Math.round(map.cy+outer*ss);
-      if(mode>=4){graphics.setColor(0xF800);graphics.drawLine(x1,y1,x2,y2);}
+      var a=map.currentAngleRad;
+      drawCharging(Math.cos(a),Math.sin(a),live.chargePercent);
     }
   }
   if(perf)perf.bars=bars;

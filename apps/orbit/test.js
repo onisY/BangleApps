@@ -93,21 +93,24 @@ const before=pixels.length;display.draw({setColor:()=>{},setPixel:()=>pixels.pus
 assert.strictEqual(before,pixels.length);
 // Full app in a fake Espruino environment: installed modules, one scheduler,
 // shadow beneath observer, off mode avoids module loads, LCD-off cancels.
-function appHarness(enabled,iso){
+function appHarness(enabled,iso,options={}){
   let now=Date.parse(iso),nextId=0,color=0;
-  const timers=new Map(),events={},log=[],reads=[];
+  const timers=new Map(),events={},log=[],reads=[],captures=options.captures||{};
   const sources={"orbit.eclipse":"eclipse.js","orbit.ecldraw":"eclipse-render.js","orbit.ecldata":"eclipse-terms.js","orbit.eclsun":"eclipse-sun-terms.js"};
   const storage={readJSON:name=>name==="orbit.json"?{eclipseEnabled:enabled,locationSource:"manual",coordVersion:2,
-    manualLat:25.3,manualLon:-104.1}:name==="setting.json"?{timeout:0}:undefined,
-    writeJSON:()=>{},read:name=>{reads.push(name);return sources[name]?fs.readFileSync(path.join(__dirname,sources[name]),"utf8"):undefined;}};
-  const g=new Proxy({getWidth:()=>176,getHeight:()=>176,stringWidth:s=>s.length*10}, {
+    manualLat:options.lat??25.3,manualLon:options.lon??-104.1}:name==="setting.json"?{timeout:0}:undefined,
+    writeJSON:()=>{},getFree:()=>options.free??1000000,
+    write:(name,data)=>{captures[name]=data;log.push({op:"write",name});},
+    read:name=>{reads.push(name);return sources[name]?fs.readFileSync(path.join(__dirname,sources[name]),"utf8"):captures[name];}};
+  const g=new Proxy({getWidth:()=>176,getHeight:()=>176,stringWidth:s=>s.length*10,
+    asBMP:()=>{log.push({op:"asBMP"});return "BM-test";}}, {
     get:(o,k)=>k in o?o[k]:k==="transformVertices"?undefined:(...a)=>{
       if(k==="setColor")color=a[0];
       log.push({op:k,args:a,color});return g;
     }});
   class Clock extends Date{constructor(...a){super(...(a.length?a:[now]));}static now(){return now;}}
   const bangle={setGPSPower:()=>{},setUI:()=>{},loadWidgets:()=>{},drawWidgets:()=>{},
-    setLocked:()=>{},setBacklight:()=>{},isLCDOn:()=>true,on:(n,f)=>events[n]=f,removeListener:()=>{},showLauncher:()=>{}};
+    setLocked:()=>{},setBacklight:()=>{},isLCDOn:()=>options.lcdOn!==false,on:(n,f)=>events[n]=f,removeListener:()=>{},showLauncher:()=>{}};
   const context={g,Bangle:bangle,Date:Clock,require:n=>{assert(n==="Storage");return storage;},
     E:{on:(n,f)=>events[n]=f,removeListener:()=>{}},setTimeout:(f,ms)=>{timers.set(++nextId,{f,ms});return nextId;},
     clearTimeout:id=>timers.delete(id),load:()=>{}};
@@ -129,8 +132,33 @@ function appHarness(enabled,iso){
   assert.strictEqual(stages,3);
   assert(log.filter(x=>x.op==="flip").length>=4,
     "Clock layers must visibly appear before rendering completes");
-  return {timers,events,log,reads,advance:ms=>now+=ms};
+  return {timers,events,log,reads,captures,advance:ms=>now+=ms};
 }
+// Tokyo geometric events on March 20, with the test watch running in UTC.
+const tokyo={lat:35.69,lon:139.75};
+const morning="2026-03-19T20:53:00Z",evening="2026-03-20T08:50:00Z";
+const rise=appHarness(false,morning,tokyo);
+assert.deepStrictEqual(Object.keys(rise.captures),["orbit-2026-03-20-rise.bmp"]);
+assert.strictEqual(rise.log.filter(e=>e.op==="asBMP").length,1);
+const bitmapAt=rise.log.findIndex(e=>e.op==="asBMP");
+assert.strictEqual(rise.log[bitmapAt-1].op,"flip");
+assert.strictEqual(rise.log.slice(0,bitmapAt).filter(e=>e.op==="flip").length,4);
+const reopened=appHarness(false,morning,{...tokyo,captures:rise.captures});
+assert(!reopened.log.some(e=>e.op==="asBMP"),"A reload must not overwrite a capture");
+const sunset=appHarness(false,evening,{...tokyo,captures:rise.captures});
+assert.deepStrictEqual(Object.keys(sunset.captures),["orbit-2026-03-20-rise.bmp","orbit-2026-03-20-set.bmp"]);
+const running=appHarness(false,"2026-03-19T20:50:00Z",tokyo);
+assert.deepStrictEqual(running.captures,{});
+const scheduled=[...running.timers].find(([,timer])=>timer.ms>59000);
+assert(scheduled);
+running.timers.delete(scheduled[0]);
+running.advance(5*60000);
+scheduled[1].f();
+assert.deepStrictEqual(Object.keys(running.captures),["orbit-2026-03-20-rise.bmp"]);
+assert.deepStrictEqual(appHarness(false,morning,{...tokyo,free:65000}).captures,{});
+assert.deepStrictEqual(appHarness(false,morning,{...tokyo,lcdOn:false}).captures,{});
+assert.deepStrictEqual(appHarness(false,"2026-03-20T03:00:00Z",tokyo).captures,{});
+assert.deepStrictEqual(appHarness(false,"2026-06-21T12:00:00Z",{lat:90,lon:0}).captures,{});
 const app=appHarness(true,refs[1].date);
 assert(app.timers.size>=2); // Clock timer plus finite idle/backlight timer.
 // Red outer Moon rim must appear while an eclipse is active anywhere on Earth.
@@ -323,25 +351,39 @@ for(const src of foregroundParts){
 }
 assert(clockSource.includes("var zenEndR=REST_ENABLED?MOONORBIT-3:MOONORBIT+MOONR/2;"),
   "The wide observer ray must end before the radial rest graph begins");
-const greyDraw=wearR.create({nowMs:wearBase,wearEnabled:true,
+const unwornDraw=wearR.create({nowMs:wearBase,wearEnabled:true,
   activityThresholds:[.1,2,6,18]});
 for(let t=0;t<=wearS;t+=1000)
-  greyDraw.sample({x:0,y:0,z:1},wearBase+t);
-greyDraw.sync(wearBase+wearS);
-greyDraw.absentPulse(wearBase/wearS,10);
+  unwornDraw.sample({x:0,y:0,z:1},wearBase+t);
+unwornDraw.sync(wearBase+wearS);
+unwornDraw.absentPulse(wearBase/wearS,10);
 const brush=[];
 let ink=0;
 wearR.draw({
   setColor:c=>{ink=c;},
-  drawLine:(...points)=>{brush.push({color:ink,points});}
-},greyDraw,{
+  drawLine:()=>assert.fail("Non-wear must not draw a bar"),
+  setPixel:(...points)=>{brush.push({color:ink,points});}
+},unwornDraw,{
   nowMs:wearBase+wearS+1000,
   radiusPx:62,maxHeightPx:10,cx:80,cy:80,currentAngleRad:0,
   dayBuckets:{first:wearBase/wearS-100,last:wearBase/wearS+100,polar:0}
 });
-assert.strictEqual(brush.length,1,"Exactly one line for an unworn five-minute bucket");
-assert.strictEqual(brush[0].color,0x8410,
-  "Non-wear must draw grey, not even daylight green or nighttime yellow");
+assert.strictEqual(brush.length,2,"Exactly two pixels for an unworn five-minute bucket");
+assert(brush.every(p=>p.color===0xFFFF));
+assert(Math.abs(Math.hypot(brush[0].points[0]-80,brush[0].points[1]-80)-72)<0.71);
+assert.strictEqual(Math.hypot(brush[0].points[0]-brush[1].points[0],brush[0].points[1]-brush[1].points[1]),1);
+const chargeBucket=wearBase/wearS;
+const chargeMap={nowMs:wearBase+wearS,radiusPx:62,maxHeightPx:10,cx:80,cy:80,currentAngleRad:0};
+const chargeBrush={setColor:c=>{ink=c;},
+  drawLine:(...points)=>brush.push({color:ink,points}),setPixel:(...points)=>brush.push({color:ink,points})};
+const expectedCharge=[{color:0xF800,points:[142,80,147,80]},
+  {color:0xFFFF,points:[152,80]},{color:0xFFFF,points:[152,81]}];
+brush.length=0;
+wearR.draw(chargeBrush,{visit:(now,worn,unworn,failed,charging)=>charging(chargeBucket,50)},chargeMap);
+assert.deepStrictEqual(brush,expectedCharge);
+brush.length=0;
+wearR.draw(chargeBrush,{visit:()=>{},getLive:()=>({charging:true,bucket:chargeBucket+1,chargePercent:50})},chargeMap);
+assert.deepStrictEqual(brush,expectedCharge);
 console.log("PASS: lunar example, NASA centers, partial/annular/night/full-Moon, rest foreground, eclipse, charging, HRM.");
 if(process.argv[2]==="--preview"){
   fs.writeFileSync(process.argv[3],JSON.stringify([

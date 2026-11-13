@@ -1,4 +1,4 @@
-/* tenkyu 0.111 (orbit storage) */
+/* tenkyu 0.112 (orbit storage) */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbit.json";
@@ -88,7 +88,8 @@
   var nextEclipseCheck=0;
   // Once per 5-minute slot, cache day/night for the 288 recorded bars.
   // One local-day sunrise/sunset estimate; reused for all 288 rest bins.
-  var restSunDay=-1,restSunRise=0,restSunSet=0,restSunPolar=0;
+  var restSunDay=-1,restSunPolar=0;
+  var captureDay,captureSun,captureAttempt=0;
   var REST_ENABLED=cfg.restEnabled!==false;
   var REST_MAX_HEIGHT=Math.max(1,Math.min(14,isFinite(cfg.restBarHeight)?cfg.restBarHeight|0:10));
   var restService;
@@ -768,9 +769,7 @@
     }
 
     /* Extend the zenith line into the lunar-orbit region. */
-    // A 5px-wide colored observer ray would leave a yellow/green halo
-    // around the 1px grey non-wear bar even if the bar were drawn later.
-    // End it before the lunar orbit whenever the rest graph is enabled.
+    // End the wide colored observer ray before the rest graph.
     var zenEndR=REST_ENABLED?MOONORBIT-3:MOONORBIT+MOONR/2;
     var zen=Math.max(0,Math.round(zenEndR-rr));
     var zx=Math.round(px+ux*zen),zy=Math.round(py+uy*zen);
@@ -911,6 +910,43 @@
     }
     restService.configure(Storage.readJSON(CFGFILE,1)||{});
   }
+  function sunEvents(noon){
+    var sol=solarPosition(noon,TESTLAT,TESTLON);
+    var rs=riseSetHourAngle(TESTLAT,sol.dec);
+    if(rs.polar)return {polar:rs.day?1:-1};
+    var halfDay=rs.h0*43200000/Math.PI;
+    var solarNoon=noon-sol.ha*43200000/Math.PI;
+    return {polar:0,rise:solarNoon-halfDay,set:solarNoon+halfDay};
+  }
+
+  // Run only after a complete frame has been flushed. Ordinary full
+  // redraws come every five minutes, so use a five-minute capture window.
+  function captureSolarFrame(){
+    if(selectedDayOffset!==0||typeof g.asBMP!=="function"||!Bangle.isLCDOn())return;
+    var now=Date.now(),dayMs=86400000;
+    // Anchor the cache to the chosen longitude, even when the watch is
+    // set to a time zone far from that location. Use the previous five
+    // minutes to also cover an event just before mean solar midnight.
+    var longitudeOffset=TESTLON*240000;
+    var day=Math.floor((now+longitudeOffset-300000)/dayMs);
+    if(day!==captureDay){
+      captureDay=day;
+      captureSun=sunEvents(day*dayMs+43200000-longitudeOffset);
+      captureAttempt=0;
+    }
+    if(captureSun.polar)return;
+    var event=now>=captureSun.set&&now-captureSun.set<=300000?2:
+      now>=captureSun.rise&&now-captureSun.rise<=300000?1:0;
+    if(!event||(captureAttempt&event))return;
+    captureAttempt|=event;
+    var name="orbit-"+new Date(day*dayMs).toISOString().substr(0,10)+
+      (event===1?"-rise.bmp":"-set.bmp");
+    // Keep earlier captures and leave room for settings and rest history.
+    if(Storage.read(name)!==undefined)return;
+    var bmp=g.asBMP();
+    if(bmp&&Storage.getFree()>=bmp.length+65536)Storage.write(name,bmp);
+  }
+
   // Convert the day's sunrise and sunset to absolute five-minute
   // bucket boundaries once; yesterday uses the same clock times.
   var restSunFirst=0,restSunLast=0;
@@ -919,18 +955,13 @@
     var dayStart=new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime();
     if(restSunDay!==dayStart){
       restSunDay=dayStart;
-      var noon=dayStart+12*3600000,sol=solarPosition(noon,TESTLAT,TESTLON);
-      var rs=riseSetHourAngle(TESTLAT,sol.dec);
-      restSunPolar=rs.polar?(rs.day?1:-1):0;
-      if(!rs.polar){
-        var h=rs.h0*180/Math.PI/15;
-        var solarNoon=noon-sol.ha*12*3600000/Math.PI;
-        restSunRise=solarNoon-h*3600000;
-        restSunSet=solarNoon+h*3600000;
+      var sun=sunEvents(dayStart+43200000);
+      restSunPolar=sun.polar;
+      if(!sun.polar){
         // A bar is labeled by its END instant: bucket b ends at
         // (b+1)*300000. Preserve the old sunrise-inclusive rule.
-        restSunFirst=Math.ceil(restSunRise/300000)-1;
-        restSunLast=Math.ceil(restSunSet/300000)-1;
+        restSunFirst=Math.ceil(sun.rise/300000)-1;
+        restSunLast=Math.ceil(sun.set/300000)-1;
       }
     }
     return {first:restSunFirst,last:restSunLast,polar:restSunPolar};
@@ -950,7 +981,7 @@
     }
     Storage.erase("orbit.perfrequest");
     // Staged diagnostic; only the last pass writes pixels.
-    var blank={setColor:function(){},drawLine:function(){}};
+    var blank={setColor:function(){},drawLine:function(){},setPixel:function(){}};
     var times=[],i,t;
     for(i=0;i<=5;i++){
       args.diagnosticStage=i;
@@ -1037,7 +1068,7 @@
           try{Bangle.drawWidgets();}catch(e){}
           drawHeaderClock();
         }
-        try{g.flip();}catch(e){}
+        try{g.flip();if(step===2)captureSolarFrame();}catch(e){}
         perf.staged["stage"+step]=Date.now()-stageStart;
         step++;
         if(step<3)renderTimer=setTimeout(nextLayer,12);
@@ -1074,14 +1105,14 @@
     drawEclipse(sol); // Earth's shadow first.
     var moon=timed(perf.full,"moon",drawMoon);
     timed(perf.full,"dial",function(){drawOrbitHours(sol);});
-    // Observer zenith line is behind the grey non-wear / red charging bars.
+    // Observer zenith line is behind the rest graph.
     drawObserver(sol);
     timed(perf.full,"rest",function(){drawRest(sol);});
     drawLocationStatus(moon);
     drawDateTime(moon);
     try{Bangle.drawWidgets();}catch(e){}
     drawHeaderClock();
-    try{g.flip();}catch(err){}
+    try{g.flip();captureSolarFrame();}catch(err){}
     endPerf(perf.full,perfStart);
     perf.count++;
     busy=false;
