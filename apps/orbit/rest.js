@@ -401,6 +401,7 @@ function install(bangle,storage,events,clock){
     if(charging){
       chargePercent=getBattery();
       engine.setCharging(true,chargePercent);
+      if(probe){lastProbeStatus="Charging";lastProbeAt=now;}
       stopProbe();
       chargeTimer=setTimeout(chargeTick,60000);
     }else{
@@ -436,6 +437,7 @@ function install(bangle,storage,events,clock){
       failedAttempts=0;stopProbe();scheduleProbe(Math.floor(now/SLOT_MS)+1);
     }else if(probe&&!engine.isStage5Candidate(probe.bucket)){
       var bucket=probe.bucket;
+      lastProbeStatus="Interrupted";lastProbeAt=now;
       failedAttempts=0;stopProbe();scheduleProbe(bucket+1);
     }
     // An isolated accelerometer gap at the exact scheduled start must not
