@@ -2,7 +2,7 @@
 (function(back){
   var Storage=require("Storage");
   // Read-only version display: title is not a selectable button.
-  var VERSION="0.110";
+  var VERSION="0.111";
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
   var REST_ACTIVITY_DEFAULTS=[1,2,6,18];
   // Bangle.js 2 has a 3-bit colour screen (8 actual dial colours).
@@ -829,6 +829,10 @@
       d&&d.holdState===2?"Unworn":
       d&&d.holdState===3?"HRM failed":"Unknown");
     m["Shared HRM"]=readOnly(d?d.sharedPulseCount||0:0);
+    // Distinguish an HRM check that never started from a measurement with
+    // low confidence or with no sensor events.
+    m["Probe"]=readOnly(d&&d.lastProbeStatus?d.lastProbeStatus:"--");
+    m["Probe tries"]=readOnly(d?d.probeCount||0:0);
     m["Charging"]=readOnly(d&&d.charging?"Yes":"No");
     if(d&&d.charging)m["Battery"]=readOnly(d.chargePercent+"%");
     m["Conf."]=readOnly(last&&last.confidence>=0?last.confidence+"%":"--");
