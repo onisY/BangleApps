@@ -364,6 +364,8 @@ function install(bangle,storage,events,clock){
   var engine,enabled=false,configKey,api,wear,probe,timer,failedAttempts=0;
   var sampleMs=0,nextSampleAt=0,sharedPulseCount=0;
   var charging=false,chargePercent=0,nextBatteryAt=0,chargeTimer;
+  var lastProbeStartBucket=-1,nextRescueAt=0,probeStartCount=0;
+  var lastProbeStatus="Not started",lastProbeAt=-1;
   var HR_ID="orbitrest";
   function persist(){if(engine)try{storage.writeJSON("orbit.rest.json",engine.snapshot());}catch(e){}}
   function isCharging(){
@@ -399,6 +401,7 @@ function install(bangle,storage,events,clock){
     if(charging){
       chargePercent=getBattery();
       engine.setCharging(true,chargePercent);
+      if(probe){lastProbeStatus="Charging";lastProbeAt=now;}
       stopProbe();
       chargeTimer=setTimeout(chargeTick,60000);
     }else{
@@ -434,7 +437,23 @@ function install(bangle,storage,events,clock){
       failedAttempts=0;stopProbe();scheduleProbe(Math.floor(now/SLOT_MS)+1);
     }else if(probe&&!engine.isStage5Candidate(probe.bucket)){
       var bucket=probe.bucket;
+      lastProbeStatus="Interrupted";lastProbeAt=now;
       failedAttempts=0;stopProbe();scheduleProbe(bucket+1);
+    }
+    // An isolated accelerometer gap at the exact scheduled start must not
+    // suppress the only HRM check in the entire five-minute interval.
+    // Retry at most once per second and at most once per slot.
+    if(wear.enabled&&now>=nextRescueAt){
+      var b=Math.floor(now/SLOT_MS),end=(b+1)*SLOT_MS;
+      var start=end-wear.seconds*1000;
+      nextRescueAt=now<start?start:now+1000;
+      if(now>=start&&now<end-10000&&lastProbeStartBucket!==b&&
+         !probe&&engine.getWearHold()!==HR_FOUND&&
+         engine.getWearHold()!==HR_ABSENT&&!engine.hasPulse(b)&&
+         engine.hasRecentAccel(now)&&engine.isStage5Candidate(b)){
+        stopProbe(); // Cancel a timer that skipped ahead to the next slot.
+        beginProbe(b,end);
+      }
     }
   }
   function onHRM(h){
@@ -455,6 +474,7 @@ function install(bangle,storage,events,clock){
     // the firmware's older heart-rate history for wear detection.
     if(!probe||!probe.ownsPower)sharedPulseCount++;
     failedAttempts=0;
+    lastProbeStatus="Pulse OK";lastProbeAt=now;
     engine.detectedPulse(bucket,h.confidence);
     stopProbe();scheduleProbe(bucket+1);
   }
@@ -470,6 +490,9 @@ function install(bangle,storage,events,clock){
   // First real HRM failure: retry in 60 seconds. Further failures:
   // retry every 900 seconds. Timing starts at failure, not bin boundary.
   function failProbe(bucket){
+    if(lastProbeStatus==="Measuring"){
+      lastProbeStatus="No HRM data";lastProbeAt=clock();
+    }
     engine.failedProbe(bucket);
     failedAttempts++;
     if(!enabled||charging||!wear.enabled)return;
@@ -492,6 +515,8 @@ function install(bangle,storage,events,clock){
     if(!engine.hasRecentAccel(begin)||!engine.isStage5Candidate(Math.floor(begin/SLOT_MS))){
       failedAttempts=0;scheduleProbe(Math.floor(begin/SLOT_MS)+1);return;
     }
+    lastProbeStartBucket=bucket;
+    lastProbeAt=begin;lastProbeStatus="Measuring";probeStartCount++;
     probe={bucket:bucket,maxConfidence:-1,hasData:false,ownsPower:false};
     // If another app/widget already powers HRM, observe its event
     // stream for this window without requesting additional sensor power.
@@ -503,6 +528,7 @@ function install(bangle,storage,events,clock){
       try{
         if(bangle.setHRMPower(1,HR_ID)===false)throw new Error("HRM unavailable");
       }catch(e){
+        lastProbeStatus="Power error";
         stopProbe();failProbe(bucket);return;
       }
     }
@@ -511,6 +537,7 @@ function install(bangle,storage,events,clock){
       var p=probe,done=clock();stopProbe();
       if(p){
         if(p.hasData){
+          lastProbeStatus="Low confidence";lastProbeAt=done;
           failedAttempts=0;engine.absentPulse(p.bucket,p.maxConfidence);
           engine.sync(done);scheduleProbe(p.bucket+3);
         }else{
@@ -555,6 +582,8 @@ function install(bangle,storage,events,clock){
     }
     enabled=on;configKey=key;wear=w;failedAttempts=0;sharedPulseCount=0;
     sampleMs=eco?200:0;nextSampleAt=0;nextBatteryAt=0;charging=false;
+    lastProbeStartBucket=-1;nextRescueAt=0;
+    probeStartCount=0;lastProbeStatus="Not started";lastProbeAt=-1;
     if(on){
       engine=create({thresholdG:t,activityThresholds:stages,
         wearThresholdG:w.z,wearEnabled:w.enabled,holdEnabled:w.hold,
@@ -570,7 +599,11 @@ function install(bangle,storage,events,clock){
     getDiagnostics:function(){
       var d=engine?engine.getDiagnostics():{disabled:true};
       d.sharedPulseCount=sharedPulseCount;d.charging=charging;
-      d.chargePercent=chargePercent;return d;
+      d.chargePercent=chargePercent;
+      d.probeCount=probeStartCount;
+      d.lastProbeStatus=probe? "Measuring":lastProbeStatus;
+      d.lastProbeAt=lastProbeAt;
+      return d;
     },
     getEngine:function(){return engine;},
     isProbing:function(){return !!probe;},

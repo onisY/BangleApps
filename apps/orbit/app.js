@@ -1,4 +1,4 @@
-/* tenkyu 0.110 (orbit storage) */
+/* tenkyu 0.111 (orbit storage) */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbit.json";
