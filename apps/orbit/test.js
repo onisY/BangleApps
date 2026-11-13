@@ -254,9 +254,9 @@ assert.deepStrictEqual(chargeDuringRest.power,[],
 // A brief accelerometer gap exactly at the scheduled HRM start used to
 // abandon the entire rest-5 slot, producing the photographed "Pulse pending"
 // despite ~294 seconds of valid data. Recover in the SAME five-minute slot.
-const rescuedRest5=wearHarness(0,"low",[268000,272000]);
+const rescuedRest5=wearHarness(0,"low",[266000,272000]);
 assert.strictEqual(rescuedRest5.level,"fe",
-  "A 4-second gap at the HRM start must not leave unworn rest-5 pending");
+  "A 6-second gap at the HRM start must not leave unworn rest-5 pending");
 assert.strictEqual(rescuedRest5.diag.reason,"nonwear");
 const rescuedDiag=rescuedRest5.service.getDiagnostics();
 assert.strictEqual(rescuedDiag.probeCount,1,
@@ -266,11 +266,11 @@ assert(rescuedRest5.power.some(v=>v[1]===1&&v[0]>=272000&&v[0]<280000));
 assert(rescuedRest5.power.some(v=>v[1]===0),"Owned HRM power must be released");
 // If firmware supplies no HRM events at all, keep the separate white
 // measurement-failure state, not an invented low confidence or a pending 5.
-const noDataProbe=wearHarness(0,"none",[268000,272000]);
+const noDataProbe=wearHarness(0,"none",[266000,272000]);
 assert.strictEqual(noDataProbe.level,"fd");
 assert.strictEqual(noDataProbe.service.getDiagnostics().lastProbeStatus,"No HRM data");
 // Stage 4 must still have zero non-wear HRM probes even if the start is delayed.
-const stage4Gap=wearHarness(.045,"low",[268000,272000]);
+const stage4Gap=wearHarness(.045,"low",[266000,272000]);
 assert.strictEqual(stage4Gap.level,"3c");
 assert.deepStrictEqual(stage4Gap.power,[]);
 const pendingRest5=wearR.create({nowMs:wearBase,wearEnabled:true,
