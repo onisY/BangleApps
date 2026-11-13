@@ -185,7 +185,7 @@ assert([...off.timers.values()][0].ms>30000);
 // Stage-5-gated non-wear regression. Source tests are never installed on Bangle.
 const wearR=require("./rest.js"),wearS=wearR.constants.slotMs;
 const wearBase=Math.floor(Date.parse("2026-11-11T12:00:00Z")/wearS)*wearS;
-function wearHarness(spike,kind) {
+function wearHarness(spike,kind,accelGap) {
   let now=wearBase,charging=false,battery=68,next=0;
   const tasks=new Map(),listeners={},power=[];
   const setT=(fn,ms)=>{const id=++next;tasks.set(id,{fn,at:now+ms});return id;};
@@ -224,7 +224,8 @@ function wearHarness(spike,kind) {
     advance(wearBase+t);
     if(t===200000&&kind==="charge"){charging=true;send("charging",true);}
     const x=spike&&Math.floor(t/80)%100===0?spike:0;
-    send("accel",{x,y:0,z:1});
+    if(!accelGap||t<accelGap[0]||t>=accelGap[1])
+      send("accel",{x,y:0,z:1});
     if(t===280000&&kind==="good")send("HRM",{bpm:72,confidence:95});
     if(t===280000&&kind==="low"&&power.some(v=>v[1]===1))
       send("HRM",{bpm:0,confidence:0});
@@ -250,6 +251,28 @@ const chargeDuringRest=wearHarness(0,"charge");
 assert.strictEqual(chargeDuringRest.level,(101+68).toString(16));
 assert.deepStrictEqual(chargeDuringRest.power,[],
   "Charging must override rest and stop optical HRM");
+// A brief accelerometer gap exactly at the scheduled HRM start used to
+// abandon the entire rest-5 slot, producing the photographed "Pulse pending"
+// despite ~294 seconds of valid data. Recover in the SAME five-minute slot.
+const rescuedRest5=wearHarness(0,"low",[268000,272000]);
+assert.strictEqual(rescuedRest5.level,"fe",
+  "A 4-second gap at the HRM start must not leave unworn rest-5 pending");
+assert.strictEqual(rescuedRest5.diag.reason,"nonwear");
+const rescuedDiag=rescuedRest5.service.getDiagnostics();
+assert.strictEqual(rescuedDiag.probeCount,1,
+  "HRM should start exactly once in this slot after readings resume");
+assert.strictEqual(rescuedDiag.lastProbeStatus,"Low confidence");
+assert(rescuedRest5.power.some(v=>v[1]===1&&v[0]>=272000&&v[0]<280000));
+assert(rescuedRest5.power.some(v=>v[1]===0),"Owned HRM power must be released");
+// If firmware supplies no HRM events at all, keep the separate white
+// measurement-failure state, not an invented low confidence or a pending 5.
+const noDataProbe=wearHarness(0,"none",[268000,272000]);
+assert.strictEqual(noDataProbe.level,"fd");
+assert.strictEqual(noDataProbe.service.getDiagnostics().lastProbeStatus,"No HRM data");
+// Stage 4 must still have zero non-wear HRM probes even if the start is delayed.
+const stage4Gap=wearHarness(.045,"low",[268000,272000]);
+assert.strictEqual(stage4Gap.level,"3c");
+assert.deepStrictEqual(stage4Gap.power,[]);
 const pendingRest5=wearR.create({nowMs:wearBase,wearEnabled:true,
   activityThresholds:[.1,2,6,18]});
 for(let t=0;t<=wearS;t+=1000)
