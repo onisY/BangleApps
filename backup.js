@@ -1,6 +1,7 @@
 /* Code to handle Backup/Restore functionality */
 
 const BACKUP_STORAGEFILE_DIR = "storage-files";
+const TENKYU_CAPTURE = /^orbit-\d{4}-\d{2}-\d{2}-(rise|set)\.bmp$/;
 
 function bangleDownload() {
   var zip = new JSZip();
@@ -30,7 +31,8 @@ function bangleDownload() {
         Progress.hide({sticky: true});
         var percent = n/fileCount;
         Progress.show({title:`Download ${filename}`,sticky:true,min:percent,max:percent+(1/fileCount),percent:0});
-        return Comms.readFile(filename).then(data => zip.file(filename,data));
+        return Comms.readFile(filename).then(data =>
+          zip.file(filename, data, {binary: TENKYU_CAPTURE.test(filename)}));
       });
     });
     // Storage files
@@ -85,7 +87,16 @@ function bangleUpload() {
         zip.forEach(function (path, file){
           console.log("path");
           promise = promise
-          .then(() => file.async("string"))
+          .then(async () => {
+            if (TENKYU_CAPTURE.test(path)) {
+              const raw = await file.async("binarystring");
+              const size = raw.charCodeAt(2) + raw.charCodeAt(3)*256 +
+                raw.charCodeAt(4)*65536 + raw.charCodeAt(5)*16777216;
+              if (raw.startsWith("BM") && raw.length === size) return raw;
+              // Older backups wrapped the binary string in UTF-8.
+            }
+            return file.async("string");
+          })
           .then(data => {
             console.log("decoded", path);
             if (data.length==0) { // https://github.com/espruino/BangleApps/issues/1593

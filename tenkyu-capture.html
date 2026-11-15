@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tenkyu 保存画像のPNG変換</title>
+<style>
+  body { font: 1rem/1.6 system-ui, sans-serif; max-width: 36rem; margin: 2rem auto; padding: 0 1rem; }
+  canvas { display: block; width: min(100%, 264px); margin: 1rem 0; image-rendering: pixelated; }
+  a[download] { display: inline-block; padding: .6rem .9rem; background: #3828ac; color: white; border-radius: .4rem; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>tenkyu 保存画像のPNG変換</h1>
+  <p>App LoaderのBackupで取得したZIPを展開し、日の出・日の入りのBMPを選んでください。以前のバックアップにも対応します。変換は端末内で行います。</p>
+  <label for="capture">保存画像（BMP）</label>
+  <input id="capture" type="file" accept=".bmp">
+  <p id="status" role="status"></p>
+  <canvas id="preview" hidden aria-label="時計画面のプレビュー"></canvas>
+  <a id="download" hidden>PNGをダウンロード</a>
+</main>
+<script>
+  function hasBitmapSize(bytes) {
+    return bytes.length >= 26 && bytes[0] === 66 && bytes[1] === 77 &&
+      new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(2, true) === bytes.length;
+  }
+
+  function decodeCapture(bytes) {
+    if (!hasBitmapSize(bytes)) {
+      // Existing Backup ZIPs encoded the watch's binary string as UTF-8.
+      const decoded = new TextDecoder("utf-8", {fatal: true}).decode(bytes);
+      if (/[^\u0000-\u00ff]/.test(decoded)) throw new Error("Invalid byte");
+      bytes = Uint8Array.from(decoded, char => char.charCodeAt(0));
+      if (!hasBitmapSize(bytes)) throw new Error("Invalid BMP size");
+    }
+
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const offset = view.getUint32(10, true);
+    const headerSize = view.getUint32(14, true);
+    // Espruino's Bangle.js 2 screen capture uses a 4-bit BITMAPCOREHEADER.
+    const width = view.getUint16(18, true);
+    const height = view.getUint16(20, true);
+    if (headerSize !== 12 || width !== 176 || height !== 176 ||
+        view.getUint16(22, true) !== 1 || view.getUint16(24, true) !== 4 ||
+        offset < 26 + 16 * 3 || offset + 88 * height !== bytes.length) {
+      throw new Error("Unsupported tenkyu BMP");
+    }
+    const pixels = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < height; y++) {
+      const row = offset + (height - 1 - y) * 88;
+      for (let x = 0; x < width; x++) {
+        const pair = bytes[row + (x >> 1)];
+        const color = 26 + 3 * ((x & 1) ? pair & 15 : pair >> 4);
+        const pixel = (y * width + x) * 4;
+        pixels[pixel] = bytes[color + 2];
+        pixels[pixel + 1] = bytes[color + 1];
+        pixels[pixel + 2] = bytes[color];
+        pixels[pixel + 3] = 255;
+      }
+    }
+    return {width, height, pixels};
+  }
+
+  const picker = document.getElementById("capture");
+  const preview = document.getElementById("preview");
+  const download = document.getElementById("download");
+  const status = document.getElementById("status");
+  picker.addEventListener("change", async () => {
+    const file = picker.files[0];
+    preview.hidden = download.hidden = true;
+    status.textContent = "";
+    if (!file) return;
+    try {
+      if (file.size > 65536) throw new Error("Unexpected file size");
+      const capture = decodeCapture(new Uint8Array(await file.arrayBuffer()));
+      if (picker.files[0] !== file) return;
+      preview.width = capture.width;
+      preview.height = capture.height;
+      preview.getContext("2d").putImageData(new ImageData(capture.pixels, capture.width, capture.height), 0, 0);
+      download.href = preview.toDataURL("image/png");
+      download.download = file.name.replace(/\.bmp$/i, "") + ".png";
+      preview.hidden = download.hidden = false;
+    } catch (error) {
+      if (picker.files[0] === file)
+        status.textContent = "変換できませんでした。Backupから取り出した元のBMPを選んでください。";
+    }
+  });
+</script>
+</body>
+</html>
