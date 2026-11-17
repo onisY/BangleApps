@@ -12,9 +12,13 @@ table{border-collapse:collapse;font-size:.85rem} th,td{border-bottom:1px solid #
 <h1>tenkyu Rest Lab グラフ</h1>
 <label>センサー CSV（-raw.csv） <input id="raw" type="file" accept=".csv"></label>
 <label>判定 CSV（-out.csv） <input id="out" type="file" accept=".csv"></label>
+<p>候補方式は60秒窓を10秒おきに再計算します。閾値は今回の記録に基づく試験値です。非装着候補は安静装着との検証が必要です。</p>
+<label>候補：揺れ上限 [g] <input id="noise" type="number" value="0.04" min="0.001" max="1" step="0.001"></label>
+<label>候補：姿勢変動RMS上限 [g] <input id="drift" type="number" value="0.05" min="0.001" max="1" step="0.001"></label>
 <p id="status" role="status">同じ計測回のCSVを選択してください。ファイルは端末内で読み込みます。</p>
-<canvas id="plot" width="1000" height="560" hidden aria-label="加速度、心拍信頼度、安静度・非装着の時系列"></canvas>
+<canvas id="plot" width="1000" height="780" hidden aria-label="加速度、心拍信頼度、安静度・非装着の時系列"></canvas>
 <div class="panel"><table id="details"></table></div>
+<script src="candidate.js"></script>
 <script>
 "use strict";
 const raw = document.getElementById("raw"), out = document.getElementById("out");
@@ -28,6 +32,7 @@ function rows(text, header) {
   if (!lines[0] || !lines[0].startsWith(header)) throw Error("CSVの種類を確認してください。");
   return lines.slice(1).filter(Boolean).map(line => line.split(","));
 }
+let loadedFile;
 async function redraw() {
   const a=raw.files[0], b=out.files[0];
   canvas.hidden=true;table.replaceChildren();
@@ -37,6 +42,25 @@ async function redraw() {
       throw Error("同じ計測回のCSVを選択してください。");
     const samples=rows(await a.text(),"time_ms,type,");
     const results=rows(await b.text(),"start_ms,end_ms,");
+    const profileRow=samples.find(r=>r[1]==="profile");
+    const profile=profileRow?JSON.parse(decodeURIComponent(profileRow[2])):{};
+    if(loadedFile!==a){
+      document.getElementById("noise").value=profile.labNoiseG||0.04;
+      document.getElementById("drift").value=profile.labDriftG||0.05;loadedFile=a;
+    }
+    profile.labNoiseG=+document.getElementById("noise").value;
+    profile.labDriftG=+document.getElementById("drift").value;
+    const trial=RestLabCandidate.create(profile), comparison=[];
+    const ordered=samples.filter(r=>["accel","hrm","charging"].includes(r[1])).sort((a,b)=>+a[0]-b[0]);
+    let next=ordered.length?Math.ceil(+ordered[0][0]/10000)*10000:0;
+    ordered.forEach(r=>{
+      const ms=+r[0];
+      while(next<=ms){comparison.push(trial.result(next));next+=10000;}
+      if(r[1]==="accel")trial.sample({x:+r[2],y:+r[3],z:+r[4]},ms);
+      if(r[1]==="hrm")trial.hrm({bpm:+r[5],confidence:+r[6]},ms);
+      if(r[1]==="charging")trial.setCharging(+r[2]);
+    });
+    if(ordered.length)comparison.push(trial.result(+ordered.at(-1)[0]));
     if (raw.files[0]!==a || out.files[0]!==b) return;
     const bins=new Map();
     results.forEach(r=>bins.set(+r[0],r)); // Use the newest revision for each interval.
@@ -45,11 +69,11 @@ async function redraw() {
     if (!signals.length) throw Error("センサーデータがありません。");
     const first=Math.min(+signals[0][0],decisions.length?+decisions[0][0]:Infinity);
     const end=Math.max(+signals[signals.length-1][0],decisions.length?+decisions.at(-1)[1]:0,first+1);
-    const left=72,right=978,w=right-left;
+    const left=120,right=978,w=right-left;
     const x=t=>left+(t-first)*w/(end-first);
     const accel=signals.filter(r=>r[1]==="accel");
     const hrm=signals.filter(r=>r[1]==="hrm");
-    ctx.fillStyle="white";ctx.fillRect(0,0,1000,560);
+    ctx.fillStyle="white";ctx.fillRect(0,0,1000,780);
     ctx.font="16px system-ui";
     function axis(top,title,ticks,y) {
       ctx.fillStyle="#182230";ctx.fillText(title,left,top-10);
@@ -81,6 +105,16 @@ async function redraw() {
     });
     ctx.fillStyle="#182230";ctx.font="14px system-ui";
     for(let i=0;i<=4;i++)ctx.fillText(date(first+(end-first)*i/4),left+w*i/4-23,539);
+    const states=["motion","still_pulse","off_candidate","hr_uncertain","hr_missing","insufficient","charging"];
+    const names=["動きあり","静止・脈あり","非装着候補","HR判定保留","HR不足","加速度不足","充電"];
+    const colors=["#c77720","#148153","#2a57b6","#7640a9","#b32e2e","#888888","#cc3388"];
+    ctx.font="15px system-ui";ctx.fillText("候補方式（試験中）：60秒窓 / 10秒更新",left,574);
+    names.forEach((name,i)=>{ctx.fillStyle=colors[i];ctx.fillText(name,4,600+i*21);});
+    comparison.forEach((r,i)=>{
+      const j=states.indexOf(r.state);ctx.fillStyle=colors[j];
+      ctx.fillRect(x(r.time),590+j*21,Math.max(2,x(i+1<comparison.length?comparison[i+1].time:r.time)-x(r.time)),5);
+    });
+    ctx.fillStyle="#182230";ctx.fillText("上段＝現行5分判定、下段＝記録から再計算した候補判定。最終未完了枠は未確定。",left,765);
     const head=table.createTHead().insertRow();
     ["開始","判定","理由","観測秒","3D drift [g]","Peak sum [g]","ピーク数","信頼度 [%]"].forEach(t=>{
       const cell=document.createElement("th");cell.textContent=t;head.append(cell);
@@ -92,9 +126,11 @@ async function redraw() {
         .forEach(v=>tr.insertCell().textContent=v);
     });
     canvas.hidden=false;
-    status.textContent=accel.length+" 加速度点 / "+hrm.length+" 心拍点 / "+decisions.length+" 判定枠";
+    status.textContent="候補閾値：揺れ "+trial.config.noiseG+"g / 姿勢変動 "+trial.config.driftG+"g\n"+accel.length+" 加速度点 / "+hrm.length+" 心拍点 / "+decisions.length+" 判定枠";
   } catch(e) { status.textContent=e.message; }
 }
 raw.addEventListener("change",redraw);out.addEventListener("change",redraw);
+document.getElementById("noise").addEventListener("change",redraw);
+document.getElementById("drift").addEventListener("change",redraw);
 </script>
 </html>

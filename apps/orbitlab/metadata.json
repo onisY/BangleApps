@@ -2,17 +2,38 @@
   "id": "orbitlab",
   "name": "tenkyu Rest Lab",
   "shortName": "Rest Lab",
-  "version": "0.01",
+  "version": "0.02",
   "author": "onisY",
   "description": "Record accelerometer, HRM confidence and tenkyu rest decisions for local graphing.",
   "icon": "app.png",
   "tags": "tools",
-  "supports": ["BANGLEJS2"],
+  "supports": [
+    "BANGLEJS2"
+  ],
   "readme": "README.md",
   "storage": [
-    {"name": "orbitlab.app.js", "url": "app.js"},
-    {"name": "orbitlab.rest", "url": "rest.js"},
-    {"name": "orbitlab.img", "url": "app-icon.js", "evaluate": true}
+    {
+      "name": "orbitlab.app.js",
+      "url": "app.js"
+    },
+    {
+      "name": "orbitlab.rest",
+      "url": "rest.js"
+    },
+    {
+      "name": "orbitlab.cand",
+      "url": "candidate.js"
+    },
+    {
+      "name": "orbitlab.img",
+      "url": "app-icon.js",
+      "evaluate": true
+    }
   ],
-  "data": [{"wildcard": "orbitlab-*.csv", "storageFile": true}]
+  "data": [
+    {
+      "wildcard": "orbitlab-*.csv",
+      "storageFile": true
+    }
+  ]
 }

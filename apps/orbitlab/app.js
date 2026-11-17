@@ -4,6 +4,8 @@
   var LAB_ID = "orbitlab";
   var engine = {};
   (new Function("exports", Storage.read("orbitlab.rest")))(engine);
+  var candidateEngine = {};
+  (new Function("exports", Storage.read("orbitlab.cand")))(candidateEngine);
   var continuous = true, minutes = 30, session;
   var config = Storage.readJSON("orbit.json",1) || {};
 
@@ -18,7 +20,9 @@
           E.showAlert("Profile already exists", "Rest Lab").then(menu);
           return;
         }
-        Storage.writeJSON(PROFILE,engine.restProfile(config));
+        var p=engine.restProfile(config);
+        p.labNoiseG=0.04;p.labDriftG=0.05;p.labAbsentRatio=0.2;p.labPresentRatio=0.6;
+        Storage.writeJSON(PROFILE,p);
         E.showAlert(PROFILE,"Profile saved").then(menu);
       },
       "Start recording": start
@@ -30,8 +34,11 @@
     var t=Date.now(), prefix="orbitlab-"+t.toString(36);
     var raw=Storage.open(prefix+"-raw.csv","w");
     var decisions=Storage.open(prefix+"-out.csv","w");
+    var comparison=Storage.open(prefix+"-cmp.csv","w");
+    var compareBuffer="", lastCompare=-1;
     var buffered="", out="", lastBucket=-1, lastRow="", failed=false;
     var settings=engine.restProfile(config,Storage.readJSON(PROFILE,1));
+    var candidate=candidateEngine.create(Object.assign({},settings,Storage.readJSON(PROFILE,1)||{}));
     session={end:t+minutes*60000};
     var active=session, listeners={}, service;
     function guardWrite(file,data) {
@@ -43,9 +50,10 @@
     function flush() {
       guardWrite(raw,buffered); buffered="";
       guardWrite(decisions,out); out="";
+      guardWrite(comparison,compareBuffer); compareBuffer="";
     }
-    function sample(kind,a,b,c,d,e) {
-      buffered+=[Date.now(),kind,a,b,c,d,e].join(",")+"\n";
+    function sample(kind,a,b,c,d,e,ms) {
+      buffered+=[ms===undefined?Date.now():ms,kind,a,b,c,d,e].join(",")+"\n";
       if (buffered.length>=900) flush();
     }
     function receive(name,data) {
@@ -53,16 +61,20 @@
       if (handle) handle(data);
     }
     function onAccel(a) {
+      var ms=Date.now();
+      candidate.sample(a,ms);
       if (a && isFinite(a.x)&&isFinite(a.y)&&isFinite(a.z))
-        sample("accel",a.x,a.y,a.z);
+        sample("accel",a.x,a.y,a.z,"","",ms);
       receive("accel",a);
     }
     function onHRM(h) {
+      var ms=Date.now();
+      candidate.hrm(h,ms);
       if (h && isFinite(h.bpm)&&isFinite(h.confidence))
-        sample("hrm","","","",h.bpm,h.confidence);
+        sample("hrm","","","",h.bpm,h.confidence,ms);
       receive("HRM",h);
     }
-    function onCharge(v) { sample("charging",v?1:0); receive("charging",v); }
+    function onCharge(v) { candidate.setCharging(v); sample("charging",v?1:0); receive("charging",v); }
     function writeResult(snapshot) {
       var list=snapshot.diag;
       var d=list[list.length-1];
@@ -84,6 +96,12 @@
       readJSON:function (name) { if(name==="orbit.json")return settings; },
       writeJSON:function (name,snapshot) { if(name==="orbit.rest.json")writeResult(snapshot); }
     };
+    function writeComparison(ms,partial) {
+      if (!partial && Math.floor(ms/10000)===lastCompare) return;
+      lastCompare=Math.floor(ms/10000);
+      var r=candidate.result(ms);
+      compareBuffer+=[r.start,r.time,r.state,r.seconds,r.noiseG,r.driftG,r.hrSeconds,r.goodSeconds,r.ratio,partial?1:0].join(",")+"\n";
+    }
     function stop(message, showMenu) {
       if (session!==active) return;
       session=undefined;
@@ -94,23 +112,28 @@
       E.removeListener("kill",onKill);
       if (service) {
         service.sync(Date.now());
+        var current=service.getEngine(), live=current.getLive(), diag=current.getDiagnostics();
+        out+=[live.bucket*300000,Date.now(),255,"partial_unconfirmed",diag.coverageSec,diag.driftG,live.activity,"",live.peaks,diag.pulse,diag.confidence,1,live.level].join(",")+"\n";
         service.configure({restEnabled:false});
       }
       if (continuous) {
         try { Bangle.setHRMPower(0,LAB_ID); } catch(e) {}
       }
+      writeComparison(Date.now(),true);
       flush();
       if (showMenu) E.showAlert(failed?"Write failed":message,"Rest Lab").then(menu);
     }
     function onKill() { stop("",false); }
     function tick() {
       service.sync(Date.now());
+      writeComparison(Date.now(),false);
       flush();
       if (failed || Storage.getFree()<131072 || Date.now()>=active.end)
         stop(Date.now()>=active.end?"Recording saved":"Low storage",true);
     }
     guardWrite(raw,"time_ms,type,x_g,y_g,z_g,bpm,confidence\n");
-    guardWrite(decisions,"start_ms,end_ms,result,reason,coverage_s,drift_g,raw_sum_g,peak_sum_g,peaks,pulse,confidence\n");
+    guardWrite(decisions,"start_ms,end_ms,result,reason,coverage_s,drift_g,raw_sum_g,peak_sum_g,peaks,pulse,confidence,partial,provisional_result\n");
+    guardWrite(comparison,"start_ms,end_ms,state,accel_seconds,noise_g,drift_rms_g,hr_seconds,good_seconds,good_ratio,partial\n");
     if (failed || Storage.getFree()<131072) { stop("Low storage",true); return; }
     // The engine uses the same reducer and probe scheduler as tenkyu.
     // Keep its history and sensor power request separate from tenkyu's.
@@ -124,9 +147,10 @@
         if (!Bangle.setHRMPower(1,LAB_ID)) throw new Error("HRM unavailable");
       } catch(e) { stop("HRM unavailable",true); return; }
     }
+    candidate.setCharging(Bangle.isCharging());
     sample("charging",Bangle.isCharging()?1:0);
     // Include the frozen settings and HRM mode in the raw capture.
-    buffered+=t+",profile,"+encodeURIComponent(JSON.stringify(settings))+","+(continuous?"continuous":"tenkyu")+"\n";
+    buffered+=t+",profile,"+encodeURIComponent(JSON.stringify(Object.assign({},settings,{labNoiseG:candidate.config.noiseG,labDriftG:candidate.config.driftG,labAbsentRatio:candidate.config.absentRatio,labPresentRatio:candidate.config.presentRatio})))+","+(continuous?"continuous":"tenkyu")+"\n";
     active.timer=setInterval(tick,4000);
     E.showMenu({"":{title:"Recording"},"< Stop":function () { stop("Recording saved",true); }});
   }

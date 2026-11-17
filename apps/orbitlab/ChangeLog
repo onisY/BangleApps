@@ -1,1 +1,2 @@
 0.01: Record acceleration, heart-rate confidence and the tenkyu classifier output.
+0.02: Compare experimental 60-second motion/HR evidence with existing decisions; save partial final intervals.
