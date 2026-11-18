@@ -1,2 +1,3 @@
 0.01: Record acceleration, heart-rate confidence and the tenkyu classifier output.
 0.02: Compare experimental 60-second motion/HR evidence with existing decisions; save partial final intervals.
+0.03: Use independent 60-second wear windows, quiet no-HR fallback and sustained pulse ratios; calibrate rest defaults.

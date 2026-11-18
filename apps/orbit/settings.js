@@ -2,9 +2,9 @@
 (function(back){
   var Storage=require("Storage");
   // Read-only version display: title is not a selectable button.
-  var VERSION="0.112";
+  var VERSION="0.114";
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
-  var REST_ACTIVITY_DEFAULTS=[1,2,6,18];
+  var REST_ACTIVITY_DEFAULTS=[0.1,3,60,200];
   // Bangle.js 2 has a 3-bit colour screen (8 actual dial colours).
   var DIAL_COLOR_NAMES=["White","Red","Green","Blue","Yellow","Cyan","Magenta","Black"];
   var DIAL_COLOR_VALUES=[0xFFFF,0xF800,0x07E0,0x001F,0xFFE0,0x07FF,0xF81F,0];
@@ -114,6 +114,8 @@
 
   function appCfg(){
     var s=readJSON(CFG,{}),changed=false;
+    var restSource=Storage.read("orbit.rest");
+    if(restSource){var re={};(new Function("exports",restSource))(re);if(re.migrateSettings)s=re.migrateSettings(s);}
     function set(k,v){if(s[k]!==v){s[k]=v;changed=true;}}
 
     /* Default to the Chiyoda ward office without loading place tables.
@@ -139,13 +141,15 @@
     set("eclipseEnabled",s.eclipseEnabled===undefined?true:s.eclipseEnabled!==false);
     set("restEnabled",s.restEnabled!==false);
     set("restBarHeight",Math.max(1,Math.min(14,isFinite(s.restBarHeight)?s.restBarHeight|0:10)));
-    set("restThreshold",REST_THRESHOLDS[thresholdIndex(s.restThreshold)]);
+    set("restThreshold",REST_THRESHOLDS[thresholdIndex(s.restThreshold===undefined?0.003:s.restThreshold)]);
     var activityCuts=restActivityCuts(s);
     for(var ai=0;ai<4;ai++)set("restActivityT"+(ai+1),activityCuts[ai]);
     set("restWearEnabled",s.restWearEnabled!==false);
     set("restWearHold",s.restWearHold!==false);
     set("restWearThreshold",REST_THRESHOLDS[thresholdIndex(s.restWearThreshold===undefined?0.009:s.restWearThreshold)]);
-    [["restProbeSeconds",10,60,30],
+    [["restWearNoiseG",0.001,1,0.030],["restWearDriftG",0.001,1,0.025],
+      ["restQuietNoiseG",0.001,1,0.012],["restQuietDriftG",0.001,1,0.012],
+      ["restAbsentRatio",0,0.5,0.1],["restProbeSeconds",30,60,30],
       ["restPulseConfidence",1,100,90]].forEach(function(q){
       set(q[0],Math.max(q[1],Math.min(q[2],isFinite(s[q[0]])?+s[q[0]]:q[3])));
     });
@@ -785,13 +789,20 @@
   function thresholdMenu(s,key){return {value:thresholdIndex(s[key]),min:0,max:6,step:1,
     format:function(v){return REST_THRESHOLDS[v].toFixed(3)+" g";},
     onchange:function(v){s[key]=REST_THRESHOLDS[v];applyRest(s);}};}
+  function rmsMenu(s,key){return {value:s[key],min:0.001,max:1,step:0.001,
+    format:function(v){return v.toFixed(3)+" g";},onchange:function(v){s[key]=v;applyRest(s);}};}
   function wearMenu(s){
     E.showMenu({"":{title:"Non-wear"},"< Back":function(){restMenu(s);},
       "Enabled":{value:s.restWearEnabled,onchange:function(v){s.restWearEnabled=!!v;applyRest(s);}},
       "Keep until move":{value:s.restWearHold,format:function(v){return v?"On":"Off";},
         onchange:function(v){s.restWearHold=!!v;applyRest(s);}},
-      "3D drift":thresholdMenu(s,"restWearThreshold"),
-      "Probe seconds":{value:s.restProbeSeconds,min:10,max:60,step:5,
+      "Noise RMS":rmsMenu(s,"restWearNoiseG"),
+      "Pose RMS":rmsMenu(s,"restWearDriftG"),
+      "Quiet noise":rmsMenu(s,"restQuietNoiseG"),
+      "Quiet pose":rmsMenu(s,"restQuietDriftG"),
+      "Low pulse ratio":{value:s.restAbsentRatio,min:0,max:0.5,step:0.01,
+        format:function(v){return Math.round(v*100)+" %";},onchange:function(v){s.restAbsentRatio=v;applyRest(s);}},
+      "Probe seconds":{value:s.restProbeSeconds,min:30,max:60,step:5,
         onchange:function(v){s.restProbeSeconds=v;applyRest(s);}},
       "Pulse confidence":{value:s.restPulseConfidence,min:1,max:100,step:1,
         format:function(v){return "> "+v+" %";},
@@ -810,7 +821,8 @@
       nonwear:"No pulse",nonwear_held:"Held unworn",
       pulse_pending_rest5:"Pulse pending",rest_1_to_4:"Rest 1-4",
       pulse_held_still:"Held worn",accel_uncertain:"Uncertain",
-      charging:"Charging"
+      rest_activity:"Rest peaks",nonwear_quiet:"Quiet unworn",nonwear_quiet_no_hr:"Quiet, no HR events",
+      nonwear_low_pulse_ratio:"Low pulse ratio",nonwear_held_window:"Held unworn",hrm_power_error:"HRM power error",charging:"Charging"
     };
     // E.showAlert does not scroll on Bangle.js 2. Use read-only
     // menu rows for a scrollable diagnostic display instead.
@@ -825,6 +837,12 @@
       last.result===255?"Unknown":"Rest "+(1+Math.min(4,Math.floor(Math.min(99,last.result)/20))));
     m["Reason"]=readOnly(last?(reasons[last.reason]||last.reason):"--");
     m["Pulse"]=readOnly(last?(hr[last.pulse]||"?"):"--");
+    var win=d&&d.window;
+    m["Window"]=readOnly(win?win.state:"--");
+    m["Noise RMS"]=readOnly(win?win.noiseG.toFixed(4)+" g":"--");
+    m["Pose RMS"]=readOnly(win?win.driftG.toFixed(4)+" g":"--");
+    m["HR seconds"]=readOnly(win?win.hrSeconds:"--");
+    m["Good ratio"]=readOnly(win&&win.ratio>=0?Math.round(win.ratio*100)+"%":"--");
     m["Hold"]=readOnly(d&&d.holdState===1?"Worn":
       d&&d.holdState===2?"Unworn":
       d&&d.holdState===3?"HRM failed":"Unknown");
@@ -938,6 +956,13 @@
       "Peak gate":thresholdMenu(s,"restThreshold"),
       "Stage boundaries":function(){activityMenu(s);},
       "Non-wear":function(){wearMenu(s);},
+      "Import test profile":function(){
+        var p=Storage.readJSON("orbit.restcfg.json",1);
+        if(!p){E.showAlert("No test profile","tenkyu").then(function(){restMenu(s);});return;}
+        var re={};(new Function("exports",Storage.read("orbit.rest")))(re);
+        var cfg=re.restProfile(s,p);Object.keys(cfg).forEach(function(k){s[k]=cfg[k];});
+        applyRest(s);E.showAlert("Profile imported","tenkyu").then(function(){restMenu(s);});
+      },
       "Last check":function(){showRestDiagnostics(s);},
       "Draw timing":function(){showRenderDiagnostics(s);}
     });

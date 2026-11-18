@@ -262,54 +262,16 @@ function wearHarness(spike,kind,accelGap) {
   return {level:service.getEngine().snapshot().levels.slice(-2),
     diag:service.getDiagnostics().recent.at(-1),power,service};
 }
-const wornRest4=wearHarness(.045,"low");
-assert.strictEqual(wornRest4.level,"3c","Activity level 4 survives low HRM confidence");
-assert.strictEqual(wornRest4.diag.reason,"rest_1_to_4");
-assert.strictEqual(wornRest4.diag.motion,false,
-  "Activity 4 can have little vector drift");
-assert.deepStrictEqual(wornRest4.power,[],
-  "Optical HRM may run only after activity 5 and static XYZ gate");
-const nonWornRest5=wearHarness(0,"low");
+// Independent v4 wear logic is verified with sparse HR, real captures and power ownership.
+require("../../bin/test-tenkyu-wear.js");
+const quietSpikes=wearHarness(.045,"low");
+assert.strictEqual(quietSpikes.level,"fe","Sparse small spikes do not defeat quiet-table detection");
+assert.deepStrictEqual(quietSpikes.power,[]);
+const nonWornRest5=wearHarness(0,"none");
 assert.strictEqual(nonWornRest5.level,"fe");
-assert(nonWornRest5.power.some(v=>v[1]===1));
-const wornRest5=wearHarness(0,"good");
-assert.strictEqual(wornRest5.level,"64");
-assert(wornRest5.power.some(v=>v[1]===1));
-const chargeDuringRest=wearHarness(0,"charge");
-assert.strictEqual(chargeDuringRest.level,(101+68).toString(16));
-assert.deepStrictEqual(chargeDuringRest.power,[],
-  "Charging must override rest and stop optical HRM");
-// A brief accelerometer gap exactly at the scheduled HRM start used to
-// abandon the entire rest-5 slot, producing the photographed "Pulse pending"
-// despite ~294 seconds of valid data. Recover in the SAME five-minute slot.
-const rescuedRest5=wearHarness(0,"low",[266000,272000]);
-assert.strictEqual(rescuedRest5.level,"fe",
-  "A 6-second gap at the HRM start must not leave unworn rest-5 pending");
-assert.strictEqual(rescuedRest5.diag.reason,"nonwear");
-const rescuedDiag=rescuedRest5.service.getDiagnostics();
-assert.strictEqual(rescuedDiag.probeCount,1,
-  "HRM should start exactly once in this slot after readings resume");
-assert.strictEqual(rescuedDiag.lastProbeStatus,"Low confidence");
-assert(rescuedRest5.power.some(v=>v[1]===1&&v[0]>=272000&&v[0]<280000));
-assert(rescuedRest5.power.some(v=>v[1]===0),"Owned HRM power must be released");
-// If firmware supplies no HRM events at all, keep the separate white
-// measurement-failure state, not an invented low confidence or a pending 5.
-const noDataProbe=wearHarness(0,"none",[266000,272000]);
-assert.strictEqual(noDataProbe.level,"fd");
-assert.strictEqual(noDataProbe.service.getDiagnostics().lastProbeStatus,"No HRM data");
-// Stage 4 must still have zero non-wear HRM probes even if the start is delayed.
-const stage4Gap=wearHarness(.045,"low",[266000,272000]);
-assert.strictEqual(stage4Gap.level,"3c");
-assert.deepStrictEqual(stage4Gap.power,[]);
-const pendingRest5=wearR.create({nowMs:wearBase,wearEnabled:true,
-  activityThresholds:[.1,2,6,18]});
-for(let t=0;t<=wearS;t+=1000)
-  pendingRest5.sample({x:0,y:0,z:1},wearBase+t);
-pendingRest5.sync(wearBase+wearS);
-assert.strictEqual(pendingRest5.snapshot().levels.slice(-2),"64",
-  "Without a confidence measurement, rest 5 is not automatically nonwear");
-pendingRest5.absentPulse(wearBase/wearS,12);
-assert.strictEqual(pendingRest5.snapshot().levels.slice(-2),"fe");
+assert.strictEqual(wearHarness(0,"good").level,"fe","A single good HR event is insufficient");
+assert.strictEqual(wearHarness(0,"charge").level,(101+68).toString(16));
+assert.strictEqual(wearHarness(0,"none",[266000,272000]).level,"fe");
 
 // Only the L5/L4 activity boundary is configurable to one decimal place.
 const wearConfig={restEnabled:false,coordVersion:2,locationSource:"manual",
@@ -353,7 +315,7 @@ assert(clockSource.includes("var zenEndR=REST_ENABLED?MOONORBIT-3:MOONORBIT+MOON
   "The wide observer ray must end before the radial rest graph begins");
 const unwornDraw=wearR.create({nowMs:wearBase,wearEnabled:true,
   activityThresholds:[.1,2,6,18]});
-for(let t=0;t<=wearS;t+=1000)
+for(let t=0;t<=wearS;t+=80)
   unwornDraw.sample({x:0,y:0,z:1},wearBase+t);
 unwornDraw.sync(wearBase+wearS);
 unwornDraw.absentPulse(wearBase/wearS,10);
@@ -368,7 +330,7 @@ wearR.draw({
   radiusPx:62,maxHeightPx:10,cx:80,cy:80,currentAngleRad:0,
   dayBuckets:{first:wearBase/wearS-100,last:wearBase/wearS+100,polar:0}
 });
-assert.strictEqual(brush.length,2,"Exactly two pixels for an unworn five-minute bucket");
+assert.strictEqual(brush.length,4,"Two pixels each for the completed and current unworn positions");
 assert(brush.every(p=>p.color===0xFFFF));
 assert(Math.abs(Math.hypot(brush[0].points[0]-80,brush[0].points[1]-80)-72)<0.71);
 assert.strictEqual(Math.hypot(brush[0].points[0]-brush[1].points[0],brush[0].points[1]-brush[1].points[1]),1);

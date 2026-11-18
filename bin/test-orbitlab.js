@@ -14,7 +14,7 @@ function synthetic(mode) {
   }
   return e;
 }
-assert.equal(synthetic('nohr').result(65000).state, 'hr_missing');
+assert.equal(synthetic('nohr').result(65000).state, 'off_candidate');
 assert.equal(synthetic('pulse').result(65000).state, 'still_pulse');
 assert.equal(synthetic('off').result(65000).state, 'off_candidate');
 assert.equal(synthetic('motion').result(65000).state, 'motion');

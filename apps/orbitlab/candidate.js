@@ -1,63 +1,84 @@
-/* Experimental, causal 60-second classifier shared by watch and CSV replay. */
-(function (api) {
-  function defaults(p) {
-    p=p||{};
-    function number(k,d,lo,hi) { var v=p[k]; return typeof v==="number"&&isFinite(v)&&v>=lo&&v<=hi?v:d; }
-    return {windowSeconds:60,minSeconds:54,minSamples:5,
-      noiseG:number("labNoiseG",0.04,0.001,1),driftG:number("labDriftG",0.05,0.001,1),
-      confidence:number("restPulseConfidence",90,0,100),
-      hrMinSeconds:30,absentRatio:number("labAbsentRatio",0.2,0,1),
-      presentRatio:number("labPresentRatio",0.6,0,1)};
+// Fixed-size 60-second sensor window: under 2 KiB of typed-array storage.
+// Acceleration-only non-wear is a heuristic for exceptionally quiet placement.
+function wearTracker(profile) {
+  profile=profile||{};
+  function option(k,d,lo,hi) { var v=profile[k];return typeof v==="number"&&isFinite(v)?Math.max(lo,Math.min(hi,v)):d; }
+  var cfg={noiseG:option("restWearNoiseG",0.030,0.001,1),
+    driftG:option("restWearDriftG",0.025,0.001,1),
+    quietNoiseG:option("restQuietNoiseG",0.012,0.001,1),
+    quietDriftG:option("restQuietDriftG",0.012,0.001,1),
+    confidence:option("restPulseConfidence",90,1,100),
+    absentRatio:option("restAbsentRatio",0.10,0,0.5),
+    minHRSeconds:20,minSeconds:54,windowSeconds:60,
+    hold:profile.restWearHold!==false};
+  var stamps=new Uint32Array(60),data=new Float32Array(240),hrStamps=new Uint32Array(60),
+    hrGood=new Uint8Array(60),sec=-1,n=0,sx=0,sy=0,sz=0,sq=0,first=0,last=0,
+    charging=false,powerError=false,held="",cached,at=-1;
+  function reset() {
+    stamps.fill(0);hrStamps.fill(0);sec=-1;n=0;held="";cached=undefined;at=-1;
   }
-  function create(profile) {
-    var cfg=defaults(profile),history=[],current,charge=false;
-    if(cfg.presentRatio<cfg.absentRatio)cfg.presentRatio=cfg.absentRatio;
-    function fresh(sec) { return {sec:sec,n:0,x:0,y:0,z:0,q:0,first:0,last:0,hr:false,good:false}; }
-    function advance(ms) {
-      var sec=Math.floor(ms/1000);
-      if (!current) current=fresh(sec);
-      if (sec<current.sec) return false;
-      if (sec!==current.sec) { history.push(current);current=fresh(sec); }
-      while (history.length && history[0].sec<sec-cfg.windowSeconds) history.shift();
-      return true;
-    }
-    function sample(a,ms) {
-      if (!a||!isFinite(a.x)||!isFinite(a.y)||!isFinite(a.z)||!advance(ms)) return;
-      if (!current.n) current.first=ms;
-      current.last=ms;current.n++;current.x+=a.x;current.y+=a.y;current.z+=a.z;
-      current.q+=a.x*a.x+a.y*a.y+a.z*a.z;
-    }
-    function hrm(h,ms) {
-      if (!h||!isFinite(h.bpm)||!isFinite(h.confidence)||!advance(ms)) return;
-      current.hr=true;
-      // One vote per observed second, never carry an old BPM through missing data.
-      current.good=h.bpm>0&&h.confidence>cfg.confidence;
-    }
-    function result(ms) {
-      advance(ms);
-      var valid=history.filter(function (s) { return s.n>=cfg.minSamples&&s.last-s.first>=500; });
-      var noise=[],x=0,y=0,z=0,q=0,hr=0,good=0;
-      history.forEach(function (s) { if(s.hr){hr++;if(s.good)good++;} });
-      valid.forEach(function (s) {
-        var a=s.x/s.n,b=s.y/s.n,c=s.z/s.n;
-        x+=a;y+=b;z+=c;q+=a*a+b*b+c*c;
-        noise.push(Math.sqrt(Math.max(0,s.q/s.n-a*a-b*b-c*c)));
-      });
-      var n=valid.length,drift=n?Math.sqrt(Math.max(0,q/n-(x*x+y*y+z*z)/(n*n))):0;
-      noise.sort(function(a,b){return a-b;});
-      var rms=n?noise[Math.floor(n/2)]:0,ratio=hr?good/hr:-1,state="insufficient";
-      if(charge)state="charging";
-      else if(n>=cfg.minSeconds) {
-        if(rms>cfg.noiseG||drift>cfg.driftG)state="motion";
-        else if(hr<cfg.hrMinSeconds)state="hr_missing";
-        else if(ratio<=cfg.absentRatio)state="off_candidate";
-        else if(ratio>=cfg.presentRatio)state="still_pulse";
-        else state="hr_uncertain";
+  function advance(ms) {
+    var next=Math.floor(ms/1000);
+    if(next<sec)reset();
+    if(next!==sec) {
+      if(sec>=0&&n>=3&&last-first>=500) {
+        var i=sec%60,k=i*4,x=sx/n,y=sy/n,z=sz/n;
+        stamps[i]=sec+1;data[k]=x;data[k+1]=y;data[k+2]=z;
+        data[k+3]=Math.sqrt(Math.max(0,sq/n-x*x-y*y-z*z));
       }
-      return {time:ms,start:(Math.floor(ms/1000)-cfg.windowSeconds)*1000,state:state,
-        seconds:n,noiseG:rms,driftG:drift,hrSeconds:hr,goodSeconds:good,ratio:ratio};
+      sec=next;n=0;sx=0;sy=0;sz=0;sq=0;
     }
-    return {sample:sample,hrm:hrm,result:result,setCharging:function(v){if(charge!==!!v){history=[];current=undefined;}charge=!!v;},config:cfg};
   }
-  api.defaults=defaults;api.create=create;
-}(typeof exports!=="undefined"?exports:(globalThis.RestLabCandidate={})));
+  function sample(a,ms) {
+    if(!a||!isFinite(a.x)||!isFinite(a.y)||!isFinite(a.z)||!isFinite(ms))return;
+    advance(ms);
+    if(!n)first=ms;
+    last=ms;n++;sx+=a.x;sy+=a.y;sz+=a.z;sq+=a.x*a.x+a.y*a.y+a.z*a.z;
+  }
+  function hrm(h,ms) {
+    if(!h||!isFinite(h.bpm)||!isFinite(h.confidence)||!isFinite(ms))return;
+    advance(ms);
+    var i=sec%60;hrStamps[i]=sec+1;
+    hrGood[i]=h.bpm>0&&h.confidence>cfg.confidence?1:0;
+  }
+  function result(ms) {
+    advance(ms);
+    var now=Math.floor(ms/10000);
+    if(cached&&now===at)return cached;
+    at=now;
+    var noise=[],x=0,y=0,z=0,q=0,hr=0,good=0;
+    for(var i=0;i<60;i++) {
+      if(stamps[i]>sec-60&&stamps[i]<=sec&&stamps[i]) {
+        var k=i*4,a=data[k],b=data[k+1],c=data[k+2];
+        x+=a;y+=b;z+=c;q+=a*a+b*b+c*c;noise.push(data[k+3]);
+      }
+      if(hrStamps[i]>sec-60&&hrStamps[i]<=sec&&hrStamps[i]) {hr++;good+=hrGood[i];}
+    }
+    var count=noise.length;
+    noise.sort(function(a,b){return a-b;});
+    var rms=count?noise[Math.floor(count/2)]:0;
+    var drift=count?Math.sqrt(Math.max(0,q/count-(x*x+y*y+z*z)/(count*count))):0;
+    var ratio=hr?good/hr:-1,state="insufficient",reason="accel_missing";
+    var still=count>=cfg.minSeconds&&rms<=cfg.noiseG&&drift<=cfg.driftG;
+    var quiet=still&&rms<=cfg.quietNoiseG&&drift<=cfg.quietDriftG;
+    if(charging){state="charging";reason="charging";held="";}
+    else if(count<cfg.minSeconds){held="";}
+    else if(!still){state="motion";reason="window_motion";held="";}
+    else if(powerError){state="hr_error";reason="hrm_power_error";held="";}
+    else if(good>=10&&ratio>=0.6){state="still_pulse";reason="sustained_pulse";held="worn";}
+    else if(cfg.hold&&held==="worn"){state="still_pulse";reason="pulse_held_still";}
+    else if(quiet&&good<=2){state="off_candidate";reason=hr?"nonwear_quiet":"nonwear_quiet_no_hr";held="off";}
+    else if(hr>=cfg.minHRSeconds&&ratio<=cfg.absentRatio){state="off_candidate";reason="nonwear_low_pulse_ratio";held="off";}
+    else if(cfg.hold&&held==="off"){state="off_candidate";reason="nonwear_held_window";}
+    else {state=hr<cfg.minHRSeconds?"hr_missing":"hr_uncertain";reason=state;}
+    cached={time:ms,start:(sec-60)*1000,state:state,reason:reason,seconds:count,
+      noiseG:rms,driftG:drift,hrSeconds:hr,goodSeconds:good,ratio:ratio,
+      stationary:still,quiet:quiet};
+    return cached;
+  }
+  return {sample:sample,hrm:hrm,result:result,config:cfg,
+    setCharging:function(v){if(charging!==!!v)reset();charging=!!v;},
+    setError:function(v){powerError=!!v;cached=undefined;}};
+}
+
+(function(api){api.create=wearTracker;api.defaults=function(p){return wearTracker(p).config;};}(typeof exports!=="undefined"?exports:(globalThis.RestLabCandidate={})));

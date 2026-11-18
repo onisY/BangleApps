@@ -1,60 +1,36 @@
-# tenkyu Rest Lab
+# tenkyu Rest Lab v0.03
 
-Bangle.js 2の独立した診断アプリです。[自用App Loader](https://onisy.github.io/BangleApps/?id=orbitlab&dev_id=BANGLEJS2)で時計に接続し、**tenkyu Rest Lab** をインストールします。tenkyu本体の更新は不要です。
+Bangle.js 2の独立診断アプリです。[自用App Loader](https://onisy.github.io/BangleApps/?id=orbitlab&dev_id=BANGLEJS2)からインストールできます。tenkyu v0.114と同じ安静・非装着判定を使います。
 
-1. 時計で **Rest Lab** を開き、必要なら **Save test profile** で閾値ファイルを作成します。
-2. **HRM continuous** と **Minutes** を選び、**Start recording** を押します。
-3. **Stop** で停止するか、指定時間で自動停止します。**App Loader → More… → Utilities → Backup** のZIPを開き、`storage-files` 内の同じ計測回の `orbitlab-…-raw.csv` と `orbitlab-…-out.csv` を、[グラフページ](https://onisy.github.io/BangleApps/apps/orbitlab/graph.html)をブラウザで開き、選択します。グラフページはファイル内容を端末内で処理します。
+1. Rest Labを開き、HRM continuous、Minutesを選び、Start recordingで開始します。
+2. Stop、時間満了、アプリ終了、空き容量128 KiB未満で停止します。
+3. App LoaderのBackup ZIPから同じ計測回のraw/out CSVを取り出し、[グラフページ](https://onisy.github.io/BangleApps/apps/orbitlab/graph.html)で選択します。ファイルはブラウザ内で処理します。
 
-## 記録
+- raw CSV：各加速度イベント、心拍イベント、充電状態、開始時の正規化済み設定。
+- out CSV：新しい判定器の5分結果と診断値。最後の未完了枠は `partial_unconfirmed` で保存します。
+- cmp CSV：約10秒ごとの60秒窓状態。既存CSVは保持し、自動削除しません。
 
-- **raw CSV** は時刻、3軸加速度[g]、BPM、心拍信頼度[%]、充電状態と開始時の設定を保持します。加速度は時計から届いた各イベントを保存します。心拍イベントが出ない間は空白です。
-- **out CSV** はtenkyuと同じ判定処理を通した5分枠ごとの結果です。安静度、非装着、測定失敗、データ不足、充電を記録します。3D drift、補正前後の積算、ピーク数、観測時間、心拍の結果と判定理由も含みます。後から同じ枠の判定が更新された場合は末尾に追記し、グラフでは最新の行を使用します。v0.02では終了時の未完了枠も `partial=1`、`reason=partial_unconfirmed` として保存します。これは確定判定ではなく、途中の安静度は `provisional_result` に保存します。
-- **HRM continuous** はテスト中に光学心拍センサーを連続で動かします。連続測定で得た心拍イベントを判定器にも渡します。オフではtenkyuと同じ間欠測定を行い、他アプリが動かしている心拍センサーのイベントも記録します。連続測定は電力消費が増えるため、まず短時間で試せます。
-- 開始後は時計の記録画面を開いたままにします。別アプリへの切り替え、時間満了、空き容量が128 KiBを下回った場合に停止します。過去の計測回のCSVは自動で消去しません。
+グラフの上段はCSVに記録済みの5分判定、下段は新しい60秒方式による再計算です。旧版CSVの上段は当時の判定のままです。60秒方式は10秒ごとの更新で、時計の4秒タイマーによるcmp記録時刻とは数秒異なる場合があります。
 
-## 設定の共用
+心拍連続測定はテスト用で消費電力が増えます。オフならtenkyuと同じ間欠プローブを実行し、他アプリの心拍イベントも利用します。どちらでも非常に静かな加速度条件を満たせば、心拍イベントがない場合も非装着を推定します。心拍電源エラーは別に扱います。
 
-`orbit.restcfg.json` は時計のストレージ上の別ファイルです。Rest Labは開始時に読み込み、キーがなければ既存のtenkyu設定を使います。tenkyu v0.113の **Settings → Rest graph → Import test profile** で、同じJSONを手動で取り込みます。取り込み後は現在のtenkyu設定として保存されます。既存ログは書き換えません。
-
-公開中のv0.112でこのメニューを試すには、別途、下記の手動更新が必要です。診断アプリの導入だけなら不要です。
-
-1. App Loaderで時計をバックアップします。
-2. MacのChromeまたはEdgeで[Espruino Web IDE](https://www.espruino.com/ide/)を開き、Bangleを接続します。Storageファイルのアップロード機能で、手動更新パッケージ内の `tenkyu-update/orbit.rest` と `tenkyu-update/orbit.settings.js` を、それぞれ同じファイル名でアップロードします。時計の再起動後にtenkyu設定の **Rest graph → Import test profile** から取り込みます。
-3. JSONを編集した場合も同じ方法で `orbit.restcfg.json` として書き込めます。
-
-変更したいキーだけ指定できます。例の `restWearThreshold` は、画面の **Non-wear → 3D drift** に対応します。
+設定は `orbit.restcfg.json` に置けます。Save test profileは既存ファイルを上書きしません。tenkyu v0.114のRest graph → Import test profileで同じ設定を取り込めます。
 
 ```json
 {
-  "restWearThreshold": 0.081,
-  "restProbeSeconds": 30,
-  "restPulseConfidence": 90
+  "restThreshold": 0.003,
+  "restActivityT1": 0.1,
+  "restActivityT2": 3,
+  "restActivityT3": 60,
+  "restActivityT4": 200,
+  "restWearNoiseG": 0.030,
+  "restWearDriftG": 0.025,
+  "restQuietNoiseG": 0.012,
+  "restQuietDriftG": 0.012,
+  "restAbsentRatio": 0.10,
+  "restPulseConfidence": 90,
+  "restProbeSeconds": 30
 }
 ```
 
-判定はtenkyuの現行条件を再現します。安静3などでは、連続モードで心拍を記録していても非装着の判定に進まないことがあります。
-
-
-## v0.02 候補方式の比較
-
-現行判定は維持し、別の候補方式を並行実行します。`-cmp.csv` に約10秒間隔（4秒タイマーのため8〜12秒）で直近60秒窓の結果を記録し、停止時も追記します。グラフページは従来のraw/out CSVからも候補方式を再計算できます。下段は10秒ごとの再計算結果で、cmp記録時刻とは異なる場合があります。
-
-- 加速度を1秒ずつ集計し、各秒の3軸平均から窓内の姿勢変動RMS、各秒の平均からの揺れRMSの中央値を求めます。1秒に5点以上、時間幅0.5秒以上の秒を有効とし、60秒中54秒以上必要です。
-- 揺れRMS中央値が0.04g以下かつ姿勢変動RMSが0.05g以下なら静止候補です。5分枠の安静度を入口条件に使いません。これらは試験値で、既存の3D drift最大値と同じ指標ではありません。
-- 心拍イベントが届いた秒を数え、各秒の最後のイベントがBPM>0かつ信頼度>設定閾値なら「脈あり秒」です。60秒窓で30秒以上の観測があり、脈あり秒の割合が20%以下なら **非装着候補**、60%以上なら **静止・脈あり**、中間は **HR判定保留** です。心拍観測が足りなければ **HR不足** です。充電状態の切り替わりでは窓をリセットします。
-- 候補方式は既存センサーイベントを利用し、追加の心拍電源要求や加速度周期変更は行いません。集計のCPU処理と比較CSVの書き込みは増えます。消費電力の実測は未実施です。
-- `HRM continuous` オフで心拍観測秒が不足すると候補判定を保留します。本版は連続記録による検証用で、候補方式から心拍測定を開始する機能はありません。
-
-候補設定も `orbit.restcfg.json` に追加できます。現行tenkyuは `lab` で始まるキーを使用しません。安静度の5段階の再定義やtenkyu本体への採用は、この比較結果と装着静止データの検証後に行います。
-
-```json
-{
-  "labNoiseG": 0.04,
-  "labDriftG": 0.05,
-  "labAbsentRatio": 0.2,
-  "labPresentRatio": 0.6
-}
-```
-
-2026-11-18の記録の再計算では、00:22〜01:01に非装着候補は出ず、01:02:30に初めて出ました。01:02以降の10秒ごとの40判定中35が非装着候補、2が動きあり、2がHR不足、1が保留でした。取り外し時刻は未記録で、装着静止との識別精度は未検証です。この1記録による閾値の過適合に注意し、装着したまま静止・外して上向き・外して下向きの追加記録で確認します。
+[判定条件の詳細](../orbit/REST.md)。本版の閾値は3回の記録に基づくもので、装着したまま完全静止する場合などの未知条件で誤判定する可能性が残ります。

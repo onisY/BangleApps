@@ -21,7 +21,7 @@
           return;
         }
         var p=engine.restProfile(config);
-        p.labNoiseG=0.04;p.labDriftG=0.05;p.labAbsentRatio=0.2;p.labPresentRatio=0.6;
+        p.restWearNoiseG=0.03;p.restWearDriftG=0.025;p.restQuietNoiseG=0.012;p.restQuietDriftG=0.012;p.restAbsentRatio=0.1;
         Storage.writeJSON(PROFILE,p);
         E.showAlert(PROFILE,"Profile saved").then(menu);
       },
@@ -38,7 +38,7 @@
     var compareBuffer="", lastCompare=-1;
     var buffered="", out="", lastBucket=-1, lastRow="", failed=false;
     var settings=engine.restProfile(config,Storage.readJSON(PROFILE,1));
-    var candidate=candidateEngine.create(Object.assign({},settings,Storage.readJSON(PROFILE,1)||{}));
+    var candidate=candidateEngine.create(settings);
     session={end:t+minutes*60000};
     var active=session, listeners={}, service;
     function guardWrite(file,data) {
@@ -80,7 +80,7 @@
       var d=list[list.length-1];
       if (!d || d.bucket<lastBucket) return;
       var row=[d.bucket*300000,(d.bucket+1)*300000,d.result,d.reason,d.coverageSec,
-        d.driftG,d.activity,d.activity300,d.peaks,d.pulse,d.confidence].join(",")+"\n";
+        d.driftG,d.activity,d.activity300,d.peaks,d.pulse,d.confidence,0,""].join(",")+"\n";
       if (row!==lastRow) {
         out+=row; lastRow=row; lastBucket=d.bucket;
       }
@@ -150,7 +150,7 @@
     candidate.setCharging(Bangle.isCharging());
     sample("charging",Bangle.isCharging()?1:0);
     // Include the frozen settings and HRM mode in the raw capture.
-    buffered+=t+",profile,"+encodeURIComponent(JSON.stringify(Object.assign({},settings,{labNoiseG:candidate.config.noiseG,labDriftG:candidate.config.driftG,labAbsentRatio:candidate.config.absentRatio,labPresentRatio:candidate.config.presentRatio})))+","+(continuous?"continuous":"tenkyu")+"\n";
+    buffered+=t+",profile,"+encodeURIComponent(JSON.stringify(Object.assign({},settings,{restWearNoiseG:candidate.config.noiseG,restWearDriftG:candidate.config.driftG,restAbsentRatio:candidate.config.absentRatio})))+","+(continuous?"continuous":"tenkyu")+"\n";
     active.timer=setInterval(tick,4000);
     E.showMenu({"":{title:"Recording"},"< Stop":function () { stop("Recording saved",true); }});
   }
