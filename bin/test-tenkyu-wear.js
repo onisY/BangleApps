@@ -65,6 +65,10 @@ assert.notEqual(env.service.getEngine().snapshot().levels.slice(-2),'fe','no HR 
 assert(env.power.filter(x=>x[1]===1).length<=2,'retry uses backoff');
 env.service.configure({restEnabled:false});
 
+const stale=r.create({wearEnabled:true,nowMs:base});
+for(let ms=base;ms<base+70000;ms+=80)stale.sample({x:0,y:0,z:1},ms);
+assert.equal(stale.getLive(base+180000).wear.state,"insufficient","live markers expire when accel stops");
+
 // Preserve old history codes and the charging/non-wear marker rendering.
 let e=r.create({wearEnabled:true,nowMs:base});
 e.setCharging(true,50);for(let ms=base;ms<=base+300000;ms+=80)e.sample({x:0,y:0,z:1},ms);

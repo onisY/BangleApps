@@ -415,7 +415,7 @@ function create(options){
       ms>=lastMs&&ms-lastMs<=MAX_GAP_MS;},
     getWearHold:function(){return holdPulse;},
     isStage5Candidate:isStage5Candidate,
-    getLive:function(){return {wear:wearEnabled?tracker.result(lastMs||0):undefined,bucket:current,covered:covered,peaks:peakCount,
+    getLive:function(ms){return {wear:wearEnabled?tracker.result(ms===undefined?lastMs||0:ms):undefined,bucket:current,covered:covered,peaks:peakCount,
       activity:activity,level:activityLevel(activity,cuts),
        charging:charging,chargePercent:chargePercent};}};
 }
@@ -545,6 +545,7 @@ function install(bangle,storage,events,clock) {
     isProbing:function(){return !!probe;},sync:function(ms){if(engine)engine.sync(ms);},
     getDiagnostics:function(){
       var d=engine?engine.getDiagnostics():{disabled:true};
+      if(engine)d.window=engine.getWear(clock());
       d.charging=charging;d.chargePercent=chargePercent;d.probeCount=probeCount;
       d.lastProbeStatus=lastStatus;d.lastProbeAt=lastAt;d.sharedPulseCount=0;return d;
     }};
@@ -647,7 +648,7 @@ function draw(graphics,engine,map){
       drawCharging(ca,sa,pct);
     });
   // Show the active charging window immediately, without waiting five minutes.
-  var live=engine.getLive&&engine.getLive();
+  var live=engine.getLive&&engine.getLive(now);
   if(live&&live.charging&&live.bucket===Math.floor(now/SLOT_MS)){
     bars++;
     if(mode>=2){
