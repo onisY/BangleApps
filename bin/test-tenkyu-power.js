@@ -46,3 +46,12 @@ assert.deepEqual(original.clip(),[0,0,W-1,H-1]);
 const legacy=raster();legacy.asImage=()=>({width:40,height:40,buffer:new Uint16Array(1600)});
 assert.equal(p.capture(legacy,args,'2v26'),undefined,'reject unsupported whole-screen returns');
 console.log('Power: defaults, pause, first-motion wake, partial coverage, pixel-identical cropped updates and firmware fallback passed.');
+
+// Optional drawing-module failures must leave full rendering available.
+const fs=require('fs'),vm=require('vm'),path=require('path');
+const src=fs.readFileSync(path.join(__dirname,'../apps/orbit/app.js'),'utf8');
+const fn=src.slice(src.indexOf('  function rememberChargeBackground('),src.indexOf('  function drawChargeOnly('));
+const sandbox={REST_ENABLED:true,selectedDayOffset:0,Bangle:{isCharging:()=>true},Storage:{read:()=>'{ bad syntax'},powerDraw:undefined,chargePatch:undefined};
+vm.createContext(sandbox);vm.runInContext(fn,sandbox);
+assert.doesNotThrow(()=>sandbox.rememberChargeBackground({},{}));
+assert.equal(sandbox.powerDraw,undefined);

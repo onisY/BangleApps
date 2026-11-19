@@ -1091,8 +1091,10 @@
     chargePatch=undefined;
     if(!REST_ENABLED||selectedDayOffset!==0||!Bangle.isCharging||!Bangle.isCharging())return;
     if(!powerDraw){
-      var source=Storage.read("orbit.power");
-      if(source){powerDraw={};(new Function("exports",source))(powerDraw);}
+      try{
+        var source=Storage.read("orbit.power");
+        if(source){powerDraw={};(new Function("exports",source))(powerDraw);}
+      }catch(e){powerDraw=undefined;return;}
     }
     if(!powerDraw||!powerDraw.capture)return;
     chargePatch=powerDraw.capture(g,{cx:EARTHX,cy:EARTHY,radius:MOONORBIT,height:REST_MAX_HEIGHT,
