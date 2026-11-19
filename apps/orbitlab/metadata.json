@@ -2,7 +2,7 @@
   "id": "orbitlab",
   "name": "tenkyu Rest Lab",
   "shortName": "Rest Lab",
-  "version": "0.05",
+  "version": "0.06",
   "author": "onisY",
   "description": "Record accelerometer, HRM confidence and tenkyu rest decisions for local graphing.",
   "icon": "app.png",

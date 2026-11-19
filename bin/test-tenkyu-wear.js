@@ -17,18 +17,18 @@ function feed(tracker,mode,step=80) {
   }
   return tracker.result(base+70000);
 }
-for(const step of [80,200])assert.equal(feed(r.wearTracker(),'quiet',step).state,'off_candidate');
-assert.equal(feed(r.wearTracker(),'moving').state,'motion');
-assert.equal(feed(r.wearTracker(),'noisy').state,'hr_missing');
-let t=r.wearTracker();assert.equal(feed(t,'pulse').state,'still_pulse');
+for(const step of [80,200])assert.equal(feed(r.wearTracker({restSleepGuard:false}),'quiet',step).state,'off_candidate');
+assert.equal(feed(r.wearTracker({restSleepGuard:false}),'moving').state,'motion');
+assert.equal(feed(r.wearTracker({restSleepGuard:false}),'noisy').state,'hr_missing');
+let t=r.wearTracker({restSleepGuard:false});assert.equal(feed(t,'pulse').state,'still_pulse');
 for(let dt=70000;dt<150000;dt+=80)t.sample({x:0,y:0,z:1},base+dt);
 assert.equal(t.result(base+150000).state,'still_pulse','confirmed worn state survives HRM sleep');
 assert.equal(t.result(base+300000).state,'insufficient','stale accel cannot hold a verdict');
-t=r.wearTracker();feed(t,'quiet');t.setError(true);assert.equal(t.result(base+70000).state,'hr_error');
+t=r.wearTracker({restSleepGuard:false});feed(t,'quiet');t.setError(true);assert.equal(t.result(base+70000).state,'hr_error');
 t.setCharging(true);assert.equal(t.result(base+70000).state,'charging');t.setCharging(false);assert.equal(t.result(base+70000).state,'insufficient');
 
 function environment({error=false,shared=false}={}) {
- let now=base,id=0;const timers=new Map(),files={'orbit.json':{}},power=[];
+ let now=base,id=0;const timers=new Map(),files={'orbit.json':{tzBase:540}},power=[];
  const b=new EventEmitter(),events=new EventEmitter();
  b.isCharging=()=>false;b.isHRMOn=()=>shared;
  b.setHRMPower=(v,owner)=>{power.push([now,v,owner]);return error?false:true;};
@@ -83,7 +83,7 @@ if(process.argv[2]){
  for(const [id,expected] of Object.entries(expectations)){
   const file=path.join(process.argv[2],'orbitlab-'+id+'-raw.csv');
   const rows=fs.readFileSync(file,'utf8').trim().split('\n').slice(1).map(x=>x.split(','));
-  const p=r.restProfile(JSON.parse(decodeURIComponent(rows.find(x=>x[1]==='profile')[2])));
+  const p=r.restProfile(Object.assign({tzBase:540,restSleepGuard:false},JSON.parse(decodeURIComponent(rows.find(x=>x[1]==='profile')[2]))));
   const data=rows.filter(x=>['accel','hrm'].includes(x[1])).sort((a,b)=>+a[0]-b[0]);
   const e=r.create({nowMs:+data[0][0],wearEnabled:true,holdEnabled:true,wearProfile:p,thresholdG:p.restThreshold,
     activityThresholds:[p.restActivityT1,p.restActivityT2,p.restActivityT3,p.restActivityT4,p.restActivityT5]});

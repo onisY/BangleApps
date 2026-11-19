@@ -1,6 +1,6 @@
 // Fixed-size 60-second sensor window: under 2 KiB of typed-array storage.
 // Acceleration-only non-wear is a heuristic for exceptionally quiet placement.
-function wearTracker(profile) {
+function wearTracker(profile,memory) {
   profile=profile||{};
   function option(k,d,lo,hi) { var v=profile[k];return typeof v==="number"&&isFinite(v)?Math.max(lo,Math.min(hi,v)):d; }
   var cfg={noiseG:option("restWearNoiseG",0.030,0.001,1),
@@ -10,16 +10,24 @@ function wearTracker(profile) {
     confidence:option("restPulseConfidence",90,1,100),
     absentRatio:option("restAbsentRatio",0.10,0,0.5),
     minHRSeconds:20,minSeconds:54,windowSeconds:60,
-    hold:profile.restWearHold!==false};
+    hold:profile.restWearHold!==false,sleepGuard:profile.restSleepGuard!==false,
+    sleepStart:option("restSleepStart",22,0,23),sleepEnd:option("restSleepEnd",8,0,23)};
   var stamps=new Uint32Array(60),data=new Float32Array(240),hrStamps=new Uint32Array(60),
     hrGood=new Uint8Array(60),sec=-1,n=0,sx=0,sy=0,sz=0,sq=0,first=0,last=0,
     charging=false,powerError=false,held="",cached,at=-1;
+  var lastConfirmed=memory&&isFinite(memory.lastConfirmed)?Math.max(0,memory.lastConfirmed):0;
+  function sleepTime(ms){
+    var offset=isFinite(profile.restSleepUtcOffset)?profile.restSleepUtcOffset:profile.tzBase;
+    var hour=isFinite(offset)?new Date(ms+offset*60000).getUTCHours():new Date(ms).getHours();
+    return cfg.sleepGuard&&(cfg.sleepStart===cfg.sleepEnd||
+      (cfg.sleepStart<cfg.sleepEnd?hour>=cfg.sleepStart&&hour<cfg.sleepEnd:hour>=cfg.sleepStart||hour<cfg.sleepEnd));
+  }
   function reset() {
     stamps.fill(0);hrStamps.fill(0);sec=-1;n=0;held="";cached=undefined;at=-1;
   }
   function advance(ms) {
     var next=Math.floor(ms/1000);
-    if(next<sec)reset();
+    if(next<sec){reset();lastConfirmed=0;}
     if(next!==sec) {
       if(sec>=0&&n>=3&&last-first>=500) {
         var i=sec%60,k=i*4,x=sx/n,y=sy/n,z=sz/n;
@@ -61,23 +69,29 @@ function wearTracker(profile) {
     var ratio=hr?good/hr:-1,state="insufficient",reason="accel_missing";
     var still=count>=cfg.minSeconds&&rms<=cfg.noiseG&&drift<=cfg.driftG;
     var quiet=still&&rms<=cfg.quietNoiseG&&drift<=cfg.quietDriftG;
+    var pulseConfirmed=good>=10&&ratio>=0.6;
+    if(pulseConfirmed&&!charging)lastConfirmed=ms;
+    var recentWear=lastConfirmed>0&&ms>=lastConfirmed&&ms-lastConfirmed<=86400000;
+    var protect=sleepTime(ms)&&(held!=="off"||recentWear);
     if(charging){state="charging";reason="charging";held="";}
     else if(count<cfg.minSeconds){held="";}
     else if(!still){state="motion";reason="window_motion";held="";}
     else if(powerError){state="hr_error";reason="hrm_power_error";held="";}
-    else if(good>=10&&ratio>=0.6){state="still_pulse";reason="sustained_pulse";held="worn";}
+    else if(pulseConfirmed){state="still_pulse";reason="sustained_pulse";held="worn";}
     else if(cfg.hold&&held==="worn"){state="still_pulse";reason="pulse_held_still";}
+    else if(protect){state=recentWear?"wear_held":"wear_uncertain";reason=recentWear?"sleep_wear_history":"sleep_nonwear_deferred";}
     else if(quiet&&good<=2){state="off_candidate";reason=hr?"nonwear_quiet":"nonwear_quiet_no_hr";held="off";}
     else if(hr>=cfg.minHRSeconds&&ratio<=cfg.absentRatio){state="off_candidate";reason="nonwear_low_pulse_ratio";held="off";}
     else if(cfg.hold&&held==="off"){state="off_candidate";reason="nonwear_held_window";}
     else {state=hr<cfg.minHRSeconds?"hr_missing":"hr_uncertain";reason=state;}
     cached={time:ms,start:(sec-60)*1000,state:state,reason:reason,seconds:count,
       noiseG:rms,driftG:drift,hrSeconds:hr,goodSeconds:good,ratio:ratio,
-      stationary:still,quiet:quiet};
+      stationary:still,quiet:quiet,sleepProtected:protect,confirmedWear:recentWear};
     return cached;
   }
   return {sample:sample,hrm:hrm,result:result,config:cfg,
-    setCharging:function(v){if(charging!==!!v)reset();charging=!!v;},
+    memory:function(){return {lastConfirmed:lastConfirmed};},
+    setCharging:function(v){if(charging!==!!v)reset();charging=!!v;if(charging)lastConfirmed=0;},
     setError:function(v){powerError=!!v;cached=undefined;}};
 }
 

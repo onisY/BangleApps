@@ -3,3 +3,4 @@
 0.03: Use independent 60-second wear windows, quiet no-HR fallback and sustained pulse ratios; calibrate rest defaults.
 0.04: Use six rest levels 0-5, add a walking/running boundary and preserve old displayed history.
 0.05: Reduce duplicate work, pause peaks while unworn, calibrate default 5 Hz processing and crop charging redraws.
+0.06: Protect nighttime wear against loose-strap HR dropout and retain confirmed-wear history.

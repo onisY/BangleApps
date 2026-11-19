@@ -4,7 +4,7 @@ const base=Date.parse('2026-11-17T23:15:00Z');
 assert.equal(r.restProfile({}).restEco,true);
 assert.equal(r.migrateSettings({restEco:false}).restEco,true);
 assert.equal(r.migrateSettings({restEco:false,restPowerVersion:1}).restEco,false);
-const e=r.create({wearEnabled:true,wearProfile:{restEco:true},nowMs:base});
+const e=r.create({wearEnabled:true,wearProfile:{restEco:true,restSleepGuard:false},nowMs:base});
 for(let t=base;t<base+120000;t+=200)e.sample({x:0,y:0,z:1},t);
 let d=e.getDiagnostics();assert(d.paused);const oldOps=d.peakOps;
 for(let t=base+120000;t<base+180000;t+=200)e.sample({x:0,y:0,z:1},t);

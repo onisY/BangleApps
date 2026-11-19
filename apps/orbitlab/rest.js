@@ -1,6 +1,6 @@
 // Fixed-size 60-second sensor window: under 2 KiB of typed-array storage.
 // Acceleration-only non-wear is a heuristic for exceptionally quiet placement.
-function wearTracker(profile) {
+function wearTracker(profile,memory) {
   profile=profile||{};
   function option(k,d,lo,hi) { var v=profile[k];return typeof v==="number"&&isFinite(v)?Math.max(lo,Math.min(hi,v)):d; }
   var cfg={noiseG:option("restWearNoiseG",0.030,0.001,1),
@@ -10,16 +10,24 @@ function wearTracker(profile) {
     confidence:option("restPulseConfidence",90,1,100),
     absentRatio:option("restAbsentRatio",0.10,0,0.5),
     minHRSeconds:20,minSeconds:54,windowSeconds:60,
-    hold:profile.restWearHold!==false};
+    hold:profile.restWearHold!==false,sleepGuard:profile.restSleepGuard!==false,
+    sleepStart:option("restSleepStart",22,0,23),sleepEnd:option("restSleepEnd",8,0,23)};
   var stamps=new Uint32Array(60),data=new Float32Array(240),hrStamps=new Uint32Array(60),
     hrGood=new Uint8Array(60),sec=-1,n=0,sx=0,sy=0,sz=0,sq=0,first=0,last=0,
     charging=false,powerError=false,held="",cached,at=-1;
+  var lastConfirmed=memory&&isFinite(memory.lastConfirmed)?Math.max(0,memory.lastConfirmed):0;
+  function sleepTime(ms){
+    var offset=isFinite(profile.restSleepUtcOffset)?profile.restSleepUtcOffset:profile.tzBase;
+    var hour=isFinite(offset)?new Date(ms+offset*60000).getUTCHours():new Date(ms).getHours();
+    return cfg.sleepGuard&&(cfg.sleepStart===cfg.sleepEnd||
+      (cfg.sleepStart<cfg.sleepEnd?hour>=cfg.sleepStart&&hour<cfg.sleepEnd:hour>=cfg.sleepStart||hour<cfg.sleepEnd));
+  }
   function reset() {
     stamps.fill(0);hrStamps.fill(0);sec=-1;n=0;held="";cached=undefined;at=-1;
   }
   function advance(ms) {
     var next=Math.floor(ms/1000);
-    if(next<sec)reset();
+    if(next<sec){reset();lastConfirmed=0;}
     if(next!==sec) {
       if(sec>=0&&n>=3&&last-first>=500) {
         var i=sec%60,k=i*4,x=sx/n,y=sy/n,z=sz/n;
@@ -61,23 +69,29 @@ function wearTracker(profile) {
     var ratio=hr?good/hr:-1,state="insufficient",reason="accel_missing";
     var still=count>=cfg.minSeconds&&rms<=cfg.noiseG&&drift<=cfg.driftG;
     var quiet=still&&rms<=cfg.quietNoiseG&&drift<=cfg.quietDriftG;
+    var pulseConfirmed=good>=10&&ratio>=0.6;
+    if(pulseConfirmed&&!charging)lastConfirmed=ms;
+    var recentWear=lastConfirmed>0&&ms>=lastConfirmed&&ms-lastConfirmed<=86400000;
+    var protect=sleepTime(ms)&&(held!=="off"||recentWear);
     if(charging){state="charging";reason="charging";held="";}
     else if(count<cfg.minSeconds){held="";}
     else if(!still){state="motion";reason="window_motion";held="";}
     else if(powerError){state="hr_error";reason="hrm_power_error";held="";}
-    else if(good>=10&&ratio>=0.6){state="still_pulse";reason="sustained_pulse";held="worn";}
+    else if(pulseConfirmed){state="still_pulse";reason="sustained_pulse";held="worn";}
     else if(cfg.hold&&held==="worn"){state="still_pulse";reason="pulse_held_still";}
+    else if(protect){state=recentWear?"wear_held":"wear_uncertain";reason=recentWear?"sleep_wear_history":"sleep_nonwear_deferred";}
     else if(quiet&&good<=2){state="off_candidate";reason=hr?"nonwear_quiet":"nonwear_quiet_no_hr";held="off";}
     else if(hr>=cfg.minHRSeconds&&ratio<=cfg.absentRatio){state="off_candidate";reason="nonwear_low_pulse_ratio";held="off";}
     else if(cfg.hold&&held==="off"){state="off_candidate";reason="nonwear_held_window";}
     else {state=hr<cfg.minHRSeconds?"hr_missing":"hr_uncertain";reason=state;}
     cached={time:ms,start:(sec-60)*1000,state:state,reason:reason,seconds:count,
       noiseG:rms,driftG:drift,hrSeconds:hr,goodSeconds:good,ratio:ratio,
-      stationary:still,quiet:quiet};
+      stationary:still,quiet:quiet,sleepProtected:protect,confirmedWear:recentWear};
     return cached;
   }
   return {sample:sample,hrm:hrm,result:result,config:cfg,
-    setCharging:function(v){if(charging!==!!v)reset();charging=!!v;},
+    memory:function(){return {lastConfirmed:lastConfirmed};},
+    setCharging:function(v){if(charging!==!!v)reset();charging=!!v;if(charging)lastConfirmed=0;},
     setError:function(v){powerError=!!v;cached=undefined;}};
 }
 
@@ -149,7 +163,7 @@ function create(options){
   var diag=options.saved&&options.saved.diag instanceof Array?
     options.saved.diag.slice(-12):[];
   var lpX,lpY,lpZ,qOld,qPrev;
-  var tracker=wearTracker(Object.assign({},options.wearProfile||{},{restWearHold:options.holdEnabled!==false})),wearOff=0,wearSeen=0,wearError=0,wearAt=-1,wearReason="";
+  var tracker=wearTracker(Object.assign({},options.wearProfile||{},{restWearHold:options.holdEnabled!==false}),options.saved&&options.saved.wearMemory),wearOff=0,wearSeen=0,wearError=0,wearAt=-1,wearReason="";
   var wakeG2=Math.pow(Math.max(0.15,5*tracker.config.noiseG),2);
   function updateWear(ms) {
     var tick=Math.floor(ms/10000);
@@ -243,7 +257,8 @@ function create(options){
         wearSeconds:Math.round(wearOff/1000),window:closedWear,
         activityCoverageSec:Math.round(activityCovered/1000),pausedSec:Math.round(pausedMs/1000),peakOps:peakOps,
         reason:chargedThisBucket>=0?"charging":!closedVectorOK?"accel_missing":
-          levels[i]===NOT_WORN?wearReason:levels[i]===HRM_FAILED?"hrm_power_error":levels[i]===NO_DATA?"activity_partial":"rest_activity"});
+          levels[i]===NOT_WORN?wearReason:levels[i]===HRM_FAILED?"hrm_power_error":levels[i]===NO_DATA?"activity_partial":closedWear.sleepProtected&&
+          (closedWear.state==="wear_held"||closedWear.state==="wear_uncertain")?closedWear.reason:"rest_activity"});
       if(diag.length>12)diag.shift();
       changed=true;
     }else if(current>=0&&target<current){
@@ -344,7 +359,7 @@ function create(options){
       else v=levels[b%COUNT];
       out+=("0"+v.toString(16)).slice(-2);
     }
-    return {v:5,end:end,levels:out,diag:diag,
+    return {v:5,end:end,levels:out,diag:diag,wearMemory:tracker.memory(),
       active:{metric:4,scale:activityScale,activityCovered:activityCovered,pausedMs:pausedMs,wearConfig:JSON.stringify(tracker.config),wearOff:wearOff,wearSeen:wearSeen,wearError:wearError,bucket:current,gate:threshold,cuts:cuts,
         covered:covered,activity:activity,peakCount:peakCount,
         charge:chargedThisBucket}};
@@ -412,7 +427,7 @@ function install(bangle,storage,events,clock) {
     if(!p||!enabled)return;
     var d=verdict(now);
     lastAt=now;
-    if(d.state==="off_candidate"||d.state==="still_pulse") {
+    if(d.state==="off_candidate"||d.state==="still_pulse"||d.state==="wear_held") {
       failures=0;lastStatus=d.reason;nextProbeAt=now+900000;
     }else {
       failures++;lastStatus=p.events?"HR inconclusive":"No HRM events";
@@ -452,7 +467,7 @@ function install(bangle,storage,events,clock) {
       failures=0;nextProbeAt=Math.min(nextProbeAt,now+10000);return;
     }
     // Reuse a resolved still-window verdict until genuine window motion.
-    if(d.state==="off_candidate"||d.state==="still_pulse"){if(probe)finishProbe();return;}
+    if(d.state==="off_candidate"||d.state==="still_pulse"||d.state==="wear_held"){if(probe)finishProbe();return;}
     if(!probe&&now>=nextProbeAt)beginProbe(now);
   }
   function onHRM(h) {
@@ -644,10 +659,10 @@ function restProfile(base,override){
   if(originalOverride&&originalOverride.restActivityT5===undefined&&originalOverride.restActivityT4===undefined)delete override.restActivityT5;
   var s={},keys=["restThreshold","restActivityT1","restActivityT2","restActivityT3",
     "restActivityT4","restActivityT5","restWearEnabled","restWearHold","restWearThreshold",
-    "restProbeSeconds","restPulseConfidence","restEco","restWearNoiseG","restWearDriftG","restQuietNoiseG","restQuietDriftG","restAbsentRatio"];
+    "restProbeSeconds","restPulseConfidence","restEco","restSleepGuard","restSleepStart","restSleepEnd","restSleepUtcOffset","restWearNoiseG","restWearDriftG","restQuietNoiseG","restQuietDriftG","restAbsentRatio"];
   keys.forEach(function(k){
     var x=override&&override[k];
-    s[k]=typeof x==="boolean"&&/Enabled|Hold|Eco/.test(k)||typeof x==="number"&&isFinite(x)?x:base[k];
+    s[k]=typeof x==="boolean"&&/Enabled|Hold|Eco|Guard/.test(k)||typeof x==="number"&&isFinite(x)?x:base[k];
   });
   var wear=wearConfig(s);
   var cuts=activityThresholds([s.restActivityT1,s.restActivityT2,s.restActivityT3,s.restActivityT4,s.restActivityT5]);
@@ -655,6 +670,10 @@ function restProfile(base,override){
     restActivityT2:cuts[1],restActivityT3:cuts[2],restActivityT4:cuts[3],restActivityT5:cuts[4],
     restWearEnabled:wear.enabled,restWearHold:wear.hold,restWearThreshold:wear.z,
     restProbeSeconds:wear.seconds,restPulseConfidence:wear.confidence,restEco:s.restEco!==false,restPowerVersion:1,restAlgorithmVersion:4,restScaleVersion:6};
+  result.restSleepGuard=s.restSleepGuard!==false;
+  result.restSleepStart=limit(s.restSleepStart,0,23,22);result.restSleepEnd=limit(s.restSleepEnd,0,23,8);
+  if(isFinite(s.restSleepUtcOffset))result.restSleepUtcOffset=s.restSleepUtcOffset;
+  else if(isFinite(base.tzBase))result.restSleepUtcOffset=base.tzBase;
   var wc=wearTracker(s).config;
   result.restWearNoiseG=wc.noiseG;result.restWearDriftG=wc.driftG;result.restQuietNoiseG=wc.quietNoiseG;result.restQuietDriftG=wc.quietDriftG;result.restAbsentRatio=wc.absentRatio;
   return result;

@@ -6,7 +6,7 @@ const path = require('path');
 const dir = path.join(__dirname, '../apps/orbitlab');
 const candidate = require(path.join(dir, 'candidate.js'));
 function synthetic(mode) {
-  const e = candidate.create();
+  const e = candidate.create({restSleepGuard:false});
   for (let ms = 0; ms < 65000; ms += 80) {
     e.sample({x: mode === 'motion' ? Math.sin(ms / 1000) : 0, y: 0, z: 1}, ms);
     if (mode !== 'nohr' && ms % 1040 === 0)
@@ -31,7 +31,7 @@ const files = {}, listeners = {}, requests = {}, timers = new Map();
 let now = 1794931500000, menu, timerId = 0;
 const storage = {
   read: name => fs.readFileSync(path.join(dir, name === 'orbitlab.rest' ? 'rest.js' : 'candidate.js'), 'utf8'),
-  readJSON: () => undefined,
+  readJSON: name => name==='orbit.json'?{tzBase:540}:undefined,
   writeJSON: () => {},
   getFree: () => 1000000,
   open: name => ({write: text => { files[name] = (files[name] || '') + text; return true; }})
@@ -64,7 +64,7 @@ const out = saved('-out.csv').trim().split('\n').at(-1).split(',');
 assert.equal(out[3], 'partial_unconfirmed');
 assert.equal(+out[1], now);
 assert.equal(+out[11], 1);
-assert.equal(saved('-cmp.csv').trim().split('\n').at(-1).split(',')[2], 'off_candidate');
+assert.equal(saved('-cmp.csv').trim().split('\n').at(-1).split(',')[2], 'wear_uncertain');
 assert.equal(saved('-cmp.csv').trim().split('\n').at(-1).split(',').at(-1), '1');
 assert(!Object.values(requests).some(Boolean), 'all lab HRM requests released');
 assert.equal(Object.keys(listeners).length, 0);
@@ -87,7 +87,7 @@ function replay(text) {
   }
   return {results, final: e.result(+ordered.at(-1)[0])};
 }
-assert.equal(replay(saved('-raw.csv')).final.state, 'off_candidate');
+assert.equal(replay(saved('-raw.csv')).final.state, 'wear_uncertain');
 if (process.argv[2]) {
   const {results} = replay(fs.readFileSync(process.argv[2], 'utf8'));
   const count = rows => rows.reduce((o,r) => { o[r.state] = (o[r.state] || 0) + 1; return o; }, {});
