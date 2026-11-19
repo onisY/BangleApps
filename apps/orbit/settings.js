@@ -2,7 +2,7 @@
 (function(back){
   var Storage=require("Storage");
   // Read-only version display: title is not a selectable button.
-  var VERSION="0.115";
+  var VERSION="0.116";
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
   var REST_ACTIVITY_DEFAULTS=[0.1,3,60,200,500];
   // Bangle.js 2 has a 3-bit colour screen (8 actual dial colours).
@@ -158,7 +158,7 @@
     set("orbitHourStep",[1,2,3,6].indexOf(s.orbitHourStep)>=0?s.orbitHourStep:1);
     set("orbitHourEnabled",s.orbitHourEnabled===undefined?false:s.orbitHourEnabled!==false);
     if(DIAL_COLOR_VALUES.indexOf(s.orbitHourColor)<0)set("orbitHourColor",0xFFFF);
-    set("restEco",s.restEco===true);
+    set("restEco",s.restEco!==false);
     set("earthTexture",Math.max(0,Math.min(2,s.earthTexture|0)));
     s.sunSize=Math.max(6,Math.min(15,s.sunSize|0));
     s.earthSize=Math.max(25,Math.min(50,s.earthSize|0));
@@ -854,7 +854,7 @@
     m["Charging"]=readOnly(d&&d.charging?"Yes":"No");
     if(d&&d.charging)m["Battery"]=readOnly(d.chargePercent+"%");
     m["Conf."]=readOnly(last&&last.confidence>=0?last.confidence+"%":"--");
-    m["3D drift"]=readOnly(last&&isFinite(last.driftG)?last.driftG+" g":"--");
+    m["Last pose RMS"]=readOnly(last&&isFinite(last.driftG)?last.driftG+" g":"--");
     m["Peak sum"]=readOnly(last&&typeof last.activity300==="number"&&isFinite(last.activity300)?
       last.activity300.toFixed(3)+" g":
       last&&isFinite(last.activity)?last.activity.toFixed(3)+" g":"--");

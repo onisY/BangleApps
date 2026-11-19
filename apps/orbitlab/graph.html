@@ -56,11 +56,15 @@ async function redraw() {
     sixScale=profile.restScaleVersion>=6;
     const trial=RestLabCandidate.create(profile), comparison=[];
     const ordered=samples.filter(r=>["accel","hrm","charging"].includes(r[1])).sort((a,b)=>+a[0]-b[0]);
+    let nextAccel=0;
     let next=ordered.length?Math.ceil(+ordered[0][0]/10000)*10000:0;
     ordered.forEach(r=>{
       const ms=+r[0];
       while(next<=ms){comparison.push(trial.result(next));next+=10000;}
-      if(r[1]==="accel")trial.sample({x:+r[2],y:+r[3],z:+r[4]},ms);
+      if(r[1]==="accel"&&(!profile.restEco||ms>=nextAccel)){
+        nextAccel=nextAccel&&ms-nextAccel<=200?nextAccel+200:ms+200;
+        trial.sample({x:+r[2],y:+r[3],z:+r[4]},ms);
+      }
       if(r[1]==="hrm")trial.hrm({bpm:+r[5],confidence:+r[6]},ms);
       if(r[1]==="charging")trial.setCharging(+r[2]);
     });
@@ -120,7 +124,7 @@ async function redraw() {
     });
     ctx.fillStyle="#182230";ctx.fillText("上段＝現行5分判定、下段＝記録から再計算した候補判定。最終未完了枠は未確定。",left,795);
     const head=table.createTHead().insertRow();
-    ["開始","判定","理由","観測秒","3D drift [g]","Peak sum [g]","ピーク数","信頼度 [%]"].forEach(t=>{
+    ["開始","判定","理由","観測秒",profile.restPowerVersion?"Pose RMS [g]":"3D drift [g]","Peak sum [g]","ピーク数","信頼度 [%]"].forEach(t=>{
       const cell=document.createElement("th");cell.textContent=t;head.append(cell);
     });
     const body=table.createTBody();

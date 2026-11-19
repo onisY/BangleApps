@@ -87,14 +87,15 @@ if(process.argv[2]){
   const data=rows.filter(x=>['accel','hrm'].includes(x[1])).sort((a,b)=>+a[0]-b[0]);
   const e=r.create({nowMs:+data[0][0],wearEnabled:true,holdEnabled:true,wearProfile:p,thresholdG:p.restThreshold,
     activityThresholds:[p.restActivityT1,p.restActivityT2,p.restActivityT3,p.restActivityT4,p.restActivityT5]});
+  let nextAccel=0;
   let offWindows=0,workOff=0,next=Math.ceil(+data[0][0]/10000)*10000;
   for(const x of data){
    while(next<=+x[0]){const d=e.getWear(next);if(d.state==='off_candidate'){offWindows++;if(next<Date.parse('2026-11-17T16:01:00Z'))workOff++;}next+=10000;}
-   if(x[1]==='accel')e.sample({x:+x[2],y:+x[3],z:+x[4]},+x[0]);else e.hrm({bpm:+x[5],confidence:+x[6]},+x[0]);
+   if(x[1]==='accel'){if(!p.restEco||+x[0]>=nextAccel){nextAccel=nextAccel&&+x[0]-nextAccel<=200?nextAccel+200:+x[0]+200;e.sample({x:+x[2],y:+x[3],z:+x[4]},+x[0]);}}else e.hrm({bpm:+x[5],confidence:+x[6]},+x[0]);
   }
   const d=e.getDiagnostics().recent;
   if(expected.off){assert(d.filter(x=>x.valid).every(x=>x.result===254));assert.equal(e.getLive().wear.state,'off_candidate');}
-  if(expected.worn){assert.equal(offWindows,0);assert(d.filter(x=>x.valid).every(x=>x.result<=60));}
+  if(expected.worn){assert.equal(offWindows,0);assert(d.filter(x=>x.valid).every(x=>x.result<=60));assert.deepEqual([20,40,60].map(v=>d.filter(x=>x.valid&&x.result===v).length),[1,3,7]);}
   if(expected.mixed){assert.equal(workOff,0);assert.equal(e.getLive().wear.state,'off_candidate');}
   console.log(id,JSON.stringify({windowsOff:offWindows,bins:d.map(x=>[x.result,x.wearSeconds]),final:e.getLive().wear.state}));
  }

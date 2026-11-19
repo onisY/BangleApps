@@ -2,7 +2,7 @@
   "id": "orbit",
   "name": "tenkyu",
   "shortName": "tenkyu",
-  "version": "0.115",
+  "version": "0.116",
   "author": "onisY",
   "description": "Sun-Earth-Moon clock with solar eclipses, 3-axis rest/non-wear graph, battery-level charging bars and HRM probe-retry diagnostics.",
   "icon": "app.png",
@@ -78,6 +78,10 @@
     {
       "name": "orbit.boot.js",
       "url": "boot.js"
+    },
+    {
+      "name": "orbit.power",
+      "url": "powerdraw.js"
     }
   ],
   "data": [

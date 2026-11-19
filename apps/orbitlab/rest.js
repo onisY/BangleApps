@@ -140,23 +140,21 @@ function create(options){
   var levels=new Uint8Array(COUNT),stamps=new Uint32Array(COUNT);
   var threshold=thresholdG(options.thresholdG),threshold2=threshold*threshold;
   var cuts=activityThresholds(options.activityThresholds),save=options.onCommit;
-  var wearG=thresholdG(options.wearThresholdG===undefined?0.009:options.wearThresholdG);
-  var vecMotionRun=0,vecWornMotion=false;
-  var vecSX=0,vecSY=0,vecSZ=0,vecCount=0,vecSecond=-1;
-  var vecRefX,vecRefY,vecRefZ,vecMaxD2=0;
-  var closedBucket=-1,closedStill=false,closedVectorOK=false,
-    closedPercent=0,closedPulse=HR_PENDING,closedMotion=false,closedCharge=-1;
+  var activityScale=options.activityScale||(options.wearProfile&&options.wearProfile.restEco?1.65:1);
   var charging=false,chargePercent=0,chargedThisBucket=-1;
   var current=-1,covered=0,activity=0,peakCount=0,lastMs,lastValid=false;
-  var wearEnabled=!!options.wearEnabled,holdEnabled=!!options.holdEnabled,pulseState=HR_PENDING;
-  var holdPulse=HR_PENDING,holdX,holdY,holdZ,lastX,lastY,lastZ,holdRun=0;
-  var pulseConfidence=-1,closedConfidence=-1;
+  var wearEnabled=!!options.wearEnabled,pulseState=HR_PENDING,pulseConfidence=-1;
+  var activityCovered=0,pausedMs=0,paused=false,resumeUntil=0,px,py,pz,peakOps=0,wakes=0,anchorX,anchorY,anchorZ;
+  var lastWindow;
   var diag=options.saved&&options.saved.diag instanceof Array?
     options.saved.diag.slice(-12):[];
   var lpX,lpY,lpZ,qOld,qPrev;
-  var tracker=wearTracker(Object.assign({},options.wearProfile||{},{restWearHold:options.holdEnabled!==false})),wearOff=0,wearSeen=0,wearError=0,wearAt=-1,wearReason="",closedWear;
+  var tracker=wearTracker(Object.assign({},options.wearProfile||{},{restWearHold:options.holdEnabled!==false})),wearOff=0,wearSeen=0,wearError=0,wearAt=-1,wearReason="";
+  var wakeG2=Math.pow(Math.max(0.15,5*tracker.config.noiseG),2);
   function updateWear(ms) {
-    var d=tracker.result(ms),tick=Math.floor(ms/10000);
+    var tick=Math.floor(ms/10000);
+    if(lastWindow&&tick===wearAt)return lastWindow;
+    var d=tracker.result(ms);lastWindow=d;
     if(tick!==wearAt) {
       var dt=wearAt>=0?Math.max(0,Math.min(10000,(tick-wearAt)*10000)):0;
       if(d.seconds>=54) {wearSeen+=dt;if(d.state==="off_candidate"){wearOff+=dt;wearReason=d.reason;}if(d.state==="hr_error")wearError+=dt;}
@@ -169,7 +167,7 @@ function create(options){
     if(!wearEnabled)return percent;
     if(wearOff>=60000&&wearOff>=covered/2)return NOT_WORN;
     if(wearError>=60000&&wearError>=covered/2)return HRM_FAILED;
-    return percent;
+    return activityCovered>=MIN_COVERAGE_MS?percent:NO_DATA;
   }
   var old=options.saved,i,b,v;
   if(old&&old.v<5)diag=diag.map(function(d){
@@ -184,15 +182,16 @@ function create(options){
           Math.min(5,1+Math.floor(Math.min(99,v)/20))*20:v;
       }
     }
-    if(old.active&&old.active.metric===3&&
+    if(old.active&&old.active.metric===4&&
        old.active.bucket===Math.floor(options.nowMs/SLOT_MS)&&
-       old.active.gate===threshold&&
+       old.active.gate===threshold&&old.active.scale===activityScale&&
        JSON.stringify(old.active.cuts)===JSON.stringify(cuts)){
       current=old.active.bucket;
       if(old.active.wearConfig===JSON.stringify(tracker.config)){
         wearOff=+old.active.wearOff||0;wearSeen=+old.active.wearSeen||0;wearError=+old.active.wearError||0;
       }
       covered=Math.max(0,Math.min(SLOT_MS,+old.active.covered||0));
+      activityCovered=Math.max(0,+old.active.activityCovered||0);pausedMs=Math.max(0,+old.active.pausedMs||0);
       activity=Math.max(0,+old.active.activity||0);
       peakCount=Math.max(0,+old.active.peakCount||0);
       if(isFinite(old.active.charge)&&old.active.charge>=0&&
@@ -203,56 +202,12 @@ function create(options){
   function resetPeak(){
     lpX=undefined;lpY=undefined;lpZ=undefined;qOld=undefined;qPrev=undefined;
   }
-  function clearHold(){holdPulse=HR_PENDING;holdX=undefined;holdRun=0;}
-  function establishHold(hr){
-    if(!wearEnabled||!holdEnabled||lastX===undefined)return;
-    if(hr!==HR_FOUND&&hr!==HR_ABSENT&&hr!==HR_FAILED)return;
-    holdPulse=hr;holdX=lastX;holdY=lastY;holdZ=lastZ;holdRun=0;
-  }
-  function checkHeldMotion(x,y,z){
-    if(holdPulse===HR_PENDING)return;
-    var dx=x-holdX,dy=y-holdY,dz=z-holdZ;
-    var d2=dx*dx+dy*dy+dz*dz,z2=wearG*wearG;
-    if(d2>z2)holdRun++;else holdRun=0;
-    if(holdRun>=2||d2>9*z2){clearHold();vecWornMotion=true;}
-  }
-  function flushVector(){
-    if(!vecCount)return;
-    var x=vecSX/vecCount,y=vecSY/vecCount,z=vecSZ/vecCount;
-    if(vecRefX===undefined){vecRefX=x;vecRefY=y;vecRefZ=z;}
-    else{
-      // Full 3D deviation from the starting acceleration vector in g.
-      // At ~1g, direction change theta gives 2*sin(theta/2) g deviation.
-      // Unlike unit-vector direction alone, translational motion counts too.
-      var dx=x-vecRefX,dy=y-vecRefY,dz=z-vecRefZ;
-      var d2=dx*dx+dy*dy+dz*dz;
-      if(d2>vecMaxD2)vecMaxD2=d2;
-      // Reject isolated noise in a motionless watch. Any large deviation
-      // (>3x) or two consecutive above-threshold seconds proves motion.
-      if(d2>wearG*wearG)vecMotionRun++;
-      else vecMotionRun=0;
-      if(vecMotionRun>=2||d2>9*wearG*wearG)vecWornMotion=true;
-    }
-    checkHeldMotion(x,y,z);
-    lastX=x;lastY=y;lastZ=z;
-    vecSX=0;vecSY=0;vecSZ=0;vecCount=0;
-  }
-  function resetVector(){
-    vecSX=0;vecSY=0;vecSZ=0;vecCount=0;vecSecond=-1;
-    vecRefX=undefined;vecRefY=undefined;vecRefZ=undefined;vecMaxD2=0;
-    vecMotionRun=0;vecWornMotion=false;
-  }
-  function addVector(a,ms){
-    var second=Math.floor(ms/1000);
-    if(second!==vecSecond){flushVector();vecSecond=second;}
-    vecSX+=a.x;vecSY+=a.y;vecSZ+=a.z;vecCount++;
-  }
   // Retained API name for diagnostics; eligibility is now independent of rest stage.
   function isStage5Candidate(bucket){
     return wearEnabled&&!charging&&bucket===current&&tracker.result(lastMs||0).stationary;
   }
   function setCharging(active,pct){
-    if(!!active!==charging)clearHold();
+    if(!!active!==charging){paused=false;resumeUntil=0;resetPeak();}
     tracker.setCharging(active);
     charging=!!active;
     if(charging){
@@ -260,58 +215,44 @@ function create(options){
       chargedThisBucket=chargePercent;
     }
   }
-  function updateClosed() {}
   function markProbe(bucket,status,confidence){
-    if(bucket===current){
-      pulseState=status;
-      if(status===HR_FAILED&&!vecWornMotion&&covered>=MIN_COVERAGE_MS)
-        establishHold(HR_FAILED);
-      if(isFinite(confidence)&&confidence>=0)pulseConfidence=confidence;
-    }else if(bucket===closedBucket){
-      closedPulse=status;
-      if(isFinite(confidence)&&confidence>=0)closedConfidence=confidence;
-      updateClosed();
-    }
+    if(bucket!==current)return;
+    pulseState=status;
+    if(isFinite(confidence)&&confidence>=0)pulseConfidence=confidence;
   }
   function roll(ms){
     var target=Math.floor(ms/SLOT_MS),changed=false;
     if(target===current)return false;
     if(current>=0&&target>current){
-      flushVector();
-      closedBucket=current;
+
       // One skipped accelerometer event must not invalidate 270+ seconds
       // of observed data. Missing major portions still yield NO_DATA.
-      closedVectorOK=vecRefX!==undefined&&covered>=MIN_COVERAGE_MS;
-      closedMotion=closedVectorOK&&vecWornMotion;
-      closedStill=closedVectorOK&&!closedMotion;
-      var corrected=closedVectorOK?activity300(activity,covered):undefined;
-      closedPercent=activityLevel(corrected===undefined?activity:corrected,cuts);
-      closedPulse=pulseState;closedConfidence=pulseConfidence;
-      closedCharge=chargedThisBucket;
+      var closedVectorOK=covered>=MIN_COVERAGE_MS;
+      var corrected=activityCovered>=MIN_COVERAGE_MS?activity300(activity,activityCovered)*activityScale:undefined;
+      var closedPercent=activityLevel(corrected===undefined?activity:corrected,cuts);
+      var closedWear=tracker.result(ms);
       i=current%COUNT;stamps[i]=current;
-      levels[i]=closedCharge>=0?chargingCode(closedCharge):wearLevel(closedVectorOK,closedPercent);
-      closedWear=tracker.result(ms);
+      levels[i]=chargedThisBucket>=0?chargingCode(chargedThisBucket):wearLevel(closedVectorOK,closedPercent);
       diag.push({bucket:current,coverageSec:Math.round(covered/1000),
-        driftG:Math.round(Math.sqrt(vecMaxD2)*10000)/10000,
-        motion:closedMotion,
+        driftG:Math.round(closedWear.driftG*10000)/10000,
+        motion:closedWear.state==="motion",
         activity:Math.round(activity*1000)/1000,
         activity300:corrected===undefined?null:Math.round(corrected*1000)/1000,
-        peaks:peakCount,valid:closedVectorOK,pulse:closedPulse,confidence:closedConfidence,
+        peaks:peakCount,valid:closedVectorOK,pulse:pulseState,confidence:pulseConfidence,
         result:levels[i],
         wearSeconds:Math.round(wearOff/1000),window:closedWear,
-        reason:closedCharge>=0?"charging":!closedVectorOK?"accel_missing":
-          levels[i]===NOT_WORN?wearReason:levels[i]===HRM_FAILED?"hrm_power_error":"rest_activity"});
+        activityCoverageSec:Math.round(activityCovered/1000),pausedSec:Math.round(pausedMs/1000),peakOps:peakOps,
+        reason:chargedThisBucket>=0?"charging":!closedVectorOK?"accel_missing":
+          levels[i]===NOT_WORN?wearReason:levels[i]===HRM_FAILED?"hrm_power_error":levels[i]===NO_DATA?"activity_partial":"rest_activity"});
       if(diag.length>12)diag.shift();
-      if(closedPercent!==100)clearHold();
-      if(closedCharge<0&&closedPercent===100&&closedVectorOK&&closedStill&&closedPulse!==HR_PENDING)
-        establishHold(closedPulse);
       changed=true;
     }else if(current>=0&&target<current){
       for(i=0;i<COUNT;i++)if(stamps[i]>=target){stamps[i]=0;levels[i]=0;}
-      clearHold();closedBucket=-1;changed=true;
+      paused=false;resumeUntil=0;changed=true;
     }
-    current=target;covered=0;activity=0;peakCount=0;resetPeak();resetVector();
-    wearOff=0;wearSeen=0;wearError=0;wearAt=-1;
+    current=target;covered=0;activity=0;peakCount=0;resetPeak();
+    activityCovered=0;pausedMs=0;peakOps=0;
+    wearOff=0;wearSeen=0;wearError=0;wearAt=-1;lastWindow=undefined;
     chargedThisBucket=charging?chargePercent:-1;
     // No persistent gap-failure flag: covered duration is authoritative.
     pulseState=HR_PENDING;pulseConfidence=-1;
@@ -327,15 +268,11 @@ function create(options){
     var alpha=dt/(HP_TAU_MS+dt);
     lpX+=alpha*(a.x-lpX);lpY+=alpha*(a.y-lpY);lpZ+=alpha*(a.z-lpZ);
     var x=a.x-lpX,y=a.y-lpY,z=a.z-lpZ,q=x*x+y*y+z*z;
-    // Detect brief displacements even if the one-second mean returns to rest.
-    if(holdPulse!==HR_PENDING&&q>9*wearG*wearG){
-      clearHold();vecWornMotion=true;
-    }
     // Gate on squared threshold BEFORE looking for a local maximum.
     // Only accepted peaks compute sqrt; subthreshold peaks never do.
     if(qOld!==undefined&&qPrev>=threshold2&&qPrev>qOld&&qPrev>=q){
       activity+=Math.sqrt(qPrev)-threshold;peakCount++;
-      if(activity>=cuts[0]&&holdPulse!==HR_PENDING)clearHold();
+
     }
     qOld=qPrev;qPrev=q;
   }
@@ -348,7 +285,7 @@ function create(options){
     if(!continuous){
       // Equal timestamps are possible when a boundary timer and accelerometer
       // event coincide; only a genuine gap/rewind invalidates the held state.
-      if(lastMs!==undefined&&(!valid||dt>MAX_GAP_MS||dt<0))clearHold();
+      if(lastMs!==undefined&&(!valid||dt>MAX_GAP_MS||dt<0)){paused=false;resumeUntil=ms+10000;}
       if(target!==current)roll(ms);
       resetPeak();
     }else if(target===current){
@@ -361,9 +298,19 @@ function create(options){
       covered+=ms-boundary;
     }
     if(valid){
-      tracker.sample(a,ms);updateWear(ms);
-      addVector(a,ms);
-      detectPeak(a,continuous?dt:0);
+      tracker.sample(a,ms);var window=updateWear(ms),wasPaused=paused;
+      var dx=paused?a.x-anchorX:0,dy=paused?a.y-anchorY:0,dz=paused?a.z-anchorZ:0;
+      if(paused&&(window.state!=="off_candidate"||dx*dx+dy*dy+dz*dz>wakeG2)){
+        paused=false;resumeUntil=ms+10000;wakes++;resetPeak();
+        if(continuous&&px!==undefined){lpX=px;lpY=py;lpZ=pz;qOld=0;qPrev=0;}
+      }
+      if(!paused&&wearEnabled&&window.state==="off_candidate"&&ms>=resumeUntil){paused=true;anchorX=a.x;anchorY=a.y;anchorZ=a.z;resetPeak();}
+      if(paused){if(continuous)pausedMs+=Math.min(dt,ms-current*SLOT_MS);}
+      else{
+        if(continuous&&!wasPaused)activityCovered+=Math.min(dt,ms-current*SLOT_MS);
+        peakOps++;detectPeak(a,continuous?dt:0);
+      }
+      px=a.x;py=a.y;pz=a.z;
     }
     lastMs=ms;lastValid=!!valid;
   }
@@ -398,29 +345,30 @@ function create(options){
       out+=("0"+v.toString(16)).slice(-2);
     }
     return {v:5,end:end,levels:out,diag:diag,
-      active:{metric:3,wearConfig:JSON.stringify(tracker.config),wearOff:wearOff,wearSeen:wearSeen,wearError:wearError,bucket:current,gate:threshold,cuts:cuts,
+      active:{metric:4,scale:activityScale,activityCovered:activityCovered,pausedMs:pausedMs,wearConfig:JSON.stringify(tracker.config),wearOff:wearOff,wearSeen:wearSeen,wearError:wearError,bucket:current,gate:threshold,cuts:cuts,
         covered:covered,activity:activity,peakCount:peakCount,
         charge:chargedThisBucket}};
   }
   return {sample:sample,sync:sync,setCharging:setCharging,
-    hrm:function(h,ms){tracker.hrm(h,ms);if(h&&isFinite(h.confidence))pulseConfidence=Math.max(pulseConfidence,h.confidence);},getWear:function(ms){return tracker.result(ms);},
+    hrm:function(h,ms){tracker.hrm(h,ms);if(h&&isFinite(h.confidence))pulseConfidence=Math.max(pulseConfidence,h.confidence);},getWear:function(ms){return lastWindow&&Math.floor(ms/10000)===Math.floor(lastWindow.time/10000)?lastWindow:tracker.result(ms);},
     setWearError:function(v){tracker.setError(v);},
     absentPulse:absentPulse,detectedPulse:detectedPulse,
     failedProbe:failedProbe,visit:visit,snapshot:snapshot,level:level,
     getDiagnostics:function(){return {window:tracker.result(lastMs||0),bucket:current,coverageSec:Math.round(covered/1000),
-      driftG:Math.round(Math.sqrt(vecMaxD2)*10000)/10000,
-      motion:vecWornMotion,vectorValid:vecRefX!==undefined,
+      driftG:tracker.result(lastMs||0).driftG,
+      motion:tracker.result(lastMs||0).state==="motion",vectorValid:covered>0,
+      activityCoverageSec:Math.round(activityCovered/1000),pausedSec:Math.round(pausedMs/1000),peakOps:peakOps,wakes:wakes,paused:paused,
       pulse:pulseState,confidence:pulseConfidence,holdState:tracker.result(lastMs||0).state==="off_candidate"?HR_ABSENT:tracker.result(lastMs||0).state==="still_pulse"?HR_FOUND:tracker.result(lastMs||0).state==="hr_error"?HR_FAILED:HR_PENDING,
       probeStatus:"0=pending,1=detected,2=absent,3=failed",
       recent:diag.slice()};},
-    hasMotion:function(bucket){return bucket===current&&vecWornMotion;},
+    hasMotion:function(bucket){return bucket===current&&tracker.result(lastMs||0).state==="motion";},
     hasPulse:function(bucket){return bucket===current&&pulseState===HR_FOUND;},
     hasRecentAccel:function(ms){return lastValid&&lastMs!==undefined&&
       ms>=lastMs&&ms-lastMs<=MAX_GAP_MS;},
-    getWearHold:function(){return holdPulse;},
+    getWearHold:function(){var d=tracker.result(lastMs||0);return d.state==="off_candidate"?HR_ABSENT:d.state==="still_pulse"?HR_FOUND:HR_PENDING;},
     isStage5Candidate:isStage5Candidate,
     getLive:function(ms){return {wear:wearEnabled?tracker.result(ms===undefined?lastMs||0:ms):undefined,bucket:current,covered:covered,peaks:peakCount,
-      activity:activity,level:activityLevel(activity,cuts),
+      activity:activity,activityCovered:activityCovered,pausedMs:pausedMs,paused:paused,level:activityCovered>=MIN_COVERAGE_MS?activityLevel(activity300(activity,activityCovered)*activityScale,cuts):NO_DATA,
        charging:charging,chargePercent:chargePercent};}};
 }
 function migrateSettings(settings) {
@@ -433,6 +381,7 @@ function migrateSettings(settings) {
     s.restAlgorithmVersion=4;
   }
   if(!isFinite(s.restActivityT5))s.restActivityT5=Math.max(500,(+s.restActivityT4||200)+1);
+  if(s.restPowerVersion!==1){s.restEco=true;s.restPowerVersion=1;}
   s.restScaleVersion=6;
   return s;
 }
@@ -440,7 +389,7 @@ function install(bangle,storage,events,clock) {
   clock=clock||function(){return Date.now();};
   if(bangle.orbitRest)return bangle.orbitRest;
   var engine,enabled=false,settings,key,probe,timer,chargeTimer,nextProbeAt=0,
-    nextBattery=0,nextSample=0,failures=0,probeCount=0,lastStatus="Not started",lastAt=-1,
+    nextBattery=0,nextSample=0,nextControl=0,failures=0,probeCount=0,lastStatus="Not started",lastAt=-1,
     charging=false,chargePercent=0;
   var HR_ID="orbitrest";
   function persist(){if(engine)try{storage.writeJSON("orbit.rest.json",engine.snapshot());}catch(e){}}
@@ -494,6 +443,8 @@ function install(bangle,storage,events,clock) {
     if(now>=nextBattery){nextBattery=now+60000;if(isCharging()!==charging)onCharging(isCharging());}
     if(charging){engine.sync(now);return;}
     engine.sample(a,now);
+    if(now<nextControl)return;
+    nextControl=(Math.floor(now/10000)+1)*10000;
     var d=verdict(now);
     if(!settings.restWearEnabled)return;
     if(!d.stationary) {
@@ -528,18 +479,18 @@ function install(bangle,storage,events,clock) {
   function configure(input) {
     var original=storage.readJSON("orbit.json",1)||{};
     var s=migrateSettings(Object.assign({},original,input||{})),newKey=JSON.stringify(restProfile(s)),on=s.restEnabled!==false;
-    if(original.restAlgorithmVersion!==4||original.restScaleVersion!==6)try{storage.writeJSON("orbit.json",s);}catch(e){}
+    if(original.restAlgorithmVersion!==4||original.restScaleVersion!==6||original.restPowerVersion!==1)try{storage.writeJSON("orbit.json",s);}catch(e){}
     if(enabled===on&&key===newKey)return;
     stopProbe();stopCharge();
     if(enabled){bangle.removeListener("accel",onAccel);bangle.removeListener("HRM",onHRM);bangle.removeListener("charging",onCharging);persist();}
     enabled=on;key=newKey;settings=s;
     settings.restWearEnabled=s.restWearEnabled!==false;
     settings.restProbeSeconds=limit(s.restProbeSeconds,30,60,30);
-    nextProbeAt=clock();nextBattery=0;nextSample=0;failures=0;charging=false;
+    nextProbeAt=clock();nextBattery=0;nextSample=0;nextControl=0;failures=0;charging=false;
     if(enabled) {
       engine=create({thresholdG:s.restThreshold,
         activityThresholds:[s.restActivityT1,s.restActivityT2,s.restActivityT3,s.restActivityT4,s.restActivityT5],
-        wearThresholdG:s.restWearThreshold,wearEnabled:s.restWearEnabled,
+        activityScale:s.restEco?1.65:1,wearThresholdG:s.restWearThreshold,wearEnabled:s.restWearEnabled,
         holdEnabled:s.restWearHold!==false,wearProfile:s,nowMs:clock(),
         saved:storage.readJSON("orbit.rest.json",1),onCommit:persist});
       bangle.on("accel",onAccel);bangle.on("HRM",onHRM);bangle.on("charging",onCharging);
@@ -703,7 +654,7 @@ function restProfile(base,override){
   var result={restThreshold:thresholdG(s.restThreshold),restActivityT1:cuts[0],
     restActivityT2:cuts[1],restActivityT3:cuts[2],restActivityT4:cuts[3],restActivityT5:cuts[4],
     restWearEnabled:wear.enabled,restWearHold:wear.hold,restWearThreshold:wear.z,
-    restProbeSeconds:wear.seconds,restPulseConfidence:wear.confidence,restEco:s.restEco===true,restAlgorithmVersion:4,restScaleVersion:6};
+    restProbeSeconds:wear.seconds,restPulseConfidence:wear.confidence,restEco:s.restEco!==false,restPowerVersion:1,restAlgorithmVersion:4,restScaleVersion:6};
   var wc=wearTracker(s).config;
   result.restWearNoiseG=wc.noiseG;result.restWearDriftG=wc.driftG;result.restQuietNoiseG=wc.quietNoiseG;result.restQuietDriftG=wc.quietDriftG;result.restAbsentRatio=wc.absentRatio;
   return result;

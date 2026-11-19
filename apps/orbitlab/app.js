@@ -38,7 +38,7 @@
     var compareBuffer="", lastCompare=-1;
     var buffered="", out="", lastBucket=-1, lastRow="", failed=false;
     var settings=engine.restProfile(config,Storage.readJSON(PROFILE,1));
-    var candidate=candidateEngine.create(settings);
+    var candidate={config:candidateEngine.defaults(settings)};
     session={end:t+minutes*60000};
     var active=session, listeners={}, service;
     function guardWrite(file,data) {
@@ -62,25 +62,25 @@
     }
     function onAccel(a) {
       var ms=Date.now();
-      candidate.sample(a,ms);
+
       if (a && isFinite(a.x)&&isFinite(a.y)&&isFinite(a.z))
         sample("accel",a.x,a.y,a.z,"","",ms);
       receive("accel",a);
     }
     function onHRM(h) {
       var ms=Date.now();
-      candidate.hrm(h,ms);
+
       if (h && isFinite(h.bpm)&&isFinite(h.confidence))
         sample("hrm","","","",h.bpm,h.confidence,ms);
       receive("HRM",h);
     }
-    function onCharge(v) { candidate.setCharging(v); sample("charging",v?1:0); receive("charging",v); }
+    function onCharge(v) { sample("charging",v?1:0); receive("charging",v); }
     function writeResult(snapshot) {
       var list=snapshot.diag;
       var d=list[list.length-1];
       if (!d || d.bucket<lastBucket) return;
       var row=[d.bucket*300000,(d.bucket+1)*300000,d.result,d.reason,d.coverageSec,
-        d.driftG,d.activity,d.activity300,d.peaks,d.pulse,d.confidence,0,""].join(",")+"\n";
+        d.driftG,d.activity,d.activity300,d.peaks,d.pulse,d.confidence,0,"",d.activityCoverageSec,d.pausedSec].join(",")+"\n";
       if (row!==lastRow) {
         out+=row; lastRow=row; lastBucket=d.bucket;
       }
@@ -99,7 +99,7 @@
     function writeComparison(ms,partial) {
       if (!partial && Math.floor(ms/10000)===lastCompare) return;
       lastCompare=Math.floor(ms/10000);
-      var r=candidate.result(ms);
+      var r=service&&service.getEngine()?service.getEngine().getWear(ms):candidateEngine.create(settings).result(ms);
       compareBuffer+=[r.start,r.time,r.state,r.seconds,r.noiseG,r.driftG,r.hrSeconds,r.goodSeconds,r.ratio,partial?1:0].join(",")+"\n";
     }
     function stop(message, showMenu) {
@@ -113,13 +113,14 @@
       if (service) {
         service.sync(Date.now());
         var current=service.getEngine(), live=current.getLive(), diag=current.getDiagnostics();
-        out+=[live.bucket*300000,Date.now(),255,"partial_unconfirmed",diag.coverageSec,diag.driftG,live.activity,"",live.peaks,diag.pulse,diag.confidence,1,live.level].join(",")+"\n";
+        out+=[live.bucket*300000,Date.now(),255,"partial_unconfirmed",diag.coverageSec,diag.driftG,live.activity,"",live.peaks,diag.pulse,diag.confidence,1,live.level,diag.activityCoverageSec,diag.pausedSec].join(",")+"\n";
+        writeComparison(Date.now(),true);
         service.configure({restEnabled:false});
       }
       if (continuous) {
         try { Bangle.setHRMPower(0,LAB_ID); } catch(e) {}
       }
-      writeComparison(Date.now(),true);
+      if(!service)writeComparison(Date.now(),true);
       flush();
       if (showMenu) E.showAlert(failed?"Write failed":message,"Rest Lab").then(menu);
     }
@@ -132,7 +133,7 @@
         stop(Date.now()>=active.end?"Recording saved":"Low storage",true);
     }
     guardWrite(raw,"time_ms,type,x_g,y_g,z_g,bpm,confidence\n");
-    guardWrite(decisions,"start_ms,end_ms,result,reason,coverage_s,drift_g,raw_sum_g,peak_sum_g,peaks,pulse,confidence,partial,provisional_result\n");
+    guardWrite(decisions,"start_ms,end_ms,result,reason,coverage_s,drift_g,raw_sum_g,peak_sum_g,peaks,pulse,confidence,partial,provisional_result,activity_coverage_s,paused_s\n");
     guardWrite(comparison,"start_ms,end_ms,state,accel_seconds,noise_g,drift_rms_g,hr_seconds,good_seconds,good_ratio,partial\n");
     if (failed || Storage.getFree()<131072) { stop("Low storage",true); return; }
     // The engine uses the same reducer and probe scheduler as tenkyu.
@@ -147,7 +148,6 @@
         if (!Bangle.setHRMPower(1,LAB_ID)) throw new Error("HRM unavailable");
       } catch(e) { stop("HRM unavailable",true); return; }
     }
-    candidate.setCharging(Bangle.isCharging());
     sample("charging",Bangle.isCharging()?1:0);
     // Include the frozen settings and HRM mode in the raw capture.
     buffered+=t+",profile,"+encodeURIComponent(JSON.stringify(Object.assign({},settings,{restWearNoiseG:candidate.config.noiseG,restWearDriftG:candidate.config.driftG,restAbsentRatio:candidate.config.absentRatio})))+","+(continuous?"continuous":"tenkyu")+"\n";

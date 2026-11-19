@@ -2,3 +2,4 @@
 0.02: Compare experimental 60-second motion/HR evidence with existing decisions; save partial final intervals.
 0.03: Use independent 60-second wear windows, quiet no-HR fallback and sustained pulse ratios; calibrate rest defaults.
 0.04: Use six rest levels 0-5, add a walking/running boundary and preserve old displayed history.
+0.05: Reduce duplicate work, pause peaks while unworn, calibrate default 5 Hz processing and crop charging redraws.

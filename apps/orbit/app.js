@@ -1,4 +1,4 @@
-/* tenkyu 0.115 (orbit storage) */
+/* tenkyu 0.116 (orbit storage) */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbit.json";
@@ -1062,6 +1062,7 @@
           if(!restReady){initRest();restReady=true;}
           // The yellow/green observer zenith line stays beneath rest history.
           drawObserver(sol);
+          rememberChargeBackground(sol,moon);
           timed(perf.staged,"rest",function(){drawRest(sol);});
           drawLocationStatus(moon);drawDateTime(moon);
           g.setColor(BLACK).fillRect(0,0,W-1,23);
@@ -1083,6 +1084,32 @@
       }
     }
     renderTimer=setTimeout(nextLayer,12);
+  }
+
+  var chargePatch,powerDraw;
+  function rememberChargeBackground(sol,moon){
+    chargePatch=undefined;
+    if(!REST_ENABLED||selectedDayOffset!==0||!Bangle.isCharging||!Bangle.isCharging())return;
+    if(!powerDraw){
+      var source=Storage.read("orbit.power");
+      if(source){powerDraw={};(new Function("exports",source))(powerDraw);}
+    }
+    if(!powerDraw||!powerDraw.capture)return;
+    chargePatch=powerDraw.capture(g,{cx:EARTHX,cy:EARTHY,radius:MOONORBIT,height:REST_MAX_HEIGHT,
+      angle:SUNANG+(VIEW_SOUTH?sol.ha:-sol.ha),south:VIEW_SOUTH,
+      bucket:Math.floor(Date.now()/300000),moon:moon},
+      typeof process!=="undefined"&&process.env?process.env.VERSION:"");
+  }
+  function drawChargeOnly(){
+    if(!chargePatch||!powerDraw||busy||selectedDayOffset!==0||
+       chargePatch.bucket!==Math.floor(Date.now()/300000))return false;
+    var sol=safeSolar();
+    var ok=powerDraw.draw(g,chargePatch,function(){drawRest(sol);},function(){
+      drawLocationStatus(chargePatch.moon);drawDateTime(chargePatch.moon);
+    },function(){drawTimeOnly();try{Bangle.drawWidgets();}catch(e){}drawHeaderClock();});
+    if(ok)lastClockMinute=Math.floor(Date.now()/60000);
+    else chargePatch=undefined;
+    return ok;
   }
 
   function drawBase(){
@@ -1107,6 +1134,7 @@
     timed(perf.full,"dial",function(){drawOrbitHours(sol);});
     // Observer zenith line is behind the rest graph.
     drawObserver(sol);
+    rememberChargeBackground(sol,moon);
     timed(perf.full,"rest",function(){drawRest(sol);});
     drawLocationStatus(moon);
     drawDateTime(moon);
@@ -1361,9 +1389,10 @@
         /* Rebuild Earth when shadow moves/disappears: no accumulated black trail.
            Far from eclipse, keep the original five-minute base refresh. */
         if(wasActive||eclipseActive||Math.floor(Date.now()/300000)!==lastBaseBucket||
-           (REST_ENABLED&&typeof Bangle.isCharging==="function"&&Bangle.isCharging())||
            (safeSolar().el>=0)!==lastObserverDay)drawBase();
-        else if(Math.floor(Date.now()/60000)!==lastClockMinute){
+        else if(REST_ENABLED&&Bangle.isCharging&&Bangle.isCharging()){
+          if(!drawChargeOnly())drawBase();
+        }else if(Math.floor(Date.now()/60000)!==lastClockMinute){
           lastClockMinute=Math.floor(Date.now()/60000);
           drawTimeOnly();try{g.flip();}catch(e){}
         }
@@ -1384,7 +1413,7 @@
 
   function cleanup(){
     if(killed)return;
-    killed=true;
+    killed=true;chargePatch=undefined;powerDraw=undefined;
     clear(transitionTimer);transitionTimer=undefined;
     stopOrbitTimers();cancelProgressive();
     if(eclipseDisplay)eclipseDisplay.reset();
