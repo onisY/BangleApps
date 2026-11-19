@@ -47,3 +47,6 @@ const prior=r.wearTracker(cfg,{lastConfirmed:start-600000});
 assert.equal(segment(prior,start,start+600000,'still',false).state,'wear_held','guard overrides an earlier off verdict when wear was recently confirmed');
 assert.equal(t.result(start+1800000).state,'insufficient');
 assert.equal(segment(t,start+1800000,start+2100000,'still',false).state,'wear_held','sensor gaps do not erase confirmed wear history');
+
+const readHistory=t.memory().lastConfirmed;t.result(start+1800000);
+assert.equal(t.memory().lastConfirmed,readHistory,'older diagnostics reads never erase confirmed wear');

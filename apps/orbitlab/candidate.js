@@ -50,6 +50,9 @@ function wearTracker(profile,memory) {
     hrGood[i]=h.bpm>0&&h.confidence>cfg.confidence?1:0;
   }
   function result(ms) {
+    // Diagnostics may ask for the last sample after a newer timer read.
+    // A read must never rewind sensor state or erase confirmed wear.
+    if(sec>=0&&ms<sec*1000)ms=sec*1000;
     advance(ms);
     var now=Math.floor(ms/10000);
     if(cached&&now===at)return cached;
