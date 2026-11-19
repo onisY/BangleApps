@@ -83,7 +83,7 @@ function wearTracker(profile) {
 
 /* tenkyu 3-axis high-pass peak-excess rest recorder; MIT.
  * Each valid 5-minute bin sums (|3D HPF peak| - noise threshold) for
- * suprathreshold local maxima, then maps that sum into five rest stages.
+ * suprathreshold local maxima, then maps that sum into six rest stages.
  * Non-wear retains 1-second XYZ mean-vector drift and periodic HRM probing.
  */
 var SLOT_MS=300000,COUNT=288,DAY_MS=SLOT_MS*COUNT;
@@ -94,10 +94,10 @@ function chargingCode(v){return CHARGE_BASE+batteryPercent(v);}
 var HR_PENDING=0,HR_FOUND=1,HR_ABSENT=2,HR_FAILED=3;
 var MAX_GAP_MS=2500,MIN_COVERAGE_MS=270000;
 var THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
-var ACTIVITY_DEFAULTS=[0.1,3,60,200],HP_TAU_MS=1600; // ~0.1Hz at 12.5Hz
+var ACTIVITY_DEFAULTS=[0.1,3,60,200,500],HP_TAU_MS=1600; // ~0.1Hz at 12.5Hz
 function activityThresholds(v){
   var a=[],prev=0;
-  for(var i=0;i<4;i++){
+  for(var i=0;i<5;i++){
     var n=v&&v[i];
     if(!isFinite(n)||n<=prev)n=ACTIVITY_DEFAULTS[i];
     if(n<=prev)n=prev+0.1;
@@ -106,8 +106,8 @@ function activityThresholds(v){
   return a;
 }
 function activityLevel(sum,cuts){
-  return sum>=cuts[3]?0:sum>=cuts[2]?20:
-    sum>=cuts[1]?40:sum>=cuts[0]?60:100;
+  return sum>=cuts[4]?0:sum>=cuts[3]?20:sum>=cuts[2]?40:
+    sum>=cuts[1]?60:sum>=cuts[0]?80:100;
 }
 // Extrapolate a valid >=270s observation to one full five-minute window.
 // Lower coverage is UNKNOWN, never a reliable extrapolation.
@@ -130,10 +130,10 @@ function wearConfig(s){return {enabled:s.restWearEnabled!==false,
 
 
 /* Rest history retains 0..100 presentation codes for v2/v3 compatibility.
- * New results are quantized into 0,20,40,60,100 (stages 1..5).
+ * New results are quantized into 0,20,40,60,80,100 (stages 0..5).
  * 101..201=charging (red 0..100% radial bar).
  * 253=HRM failed (white arc); 254=unworn (white marker); 255=missing XYZ (blank).
- * Old percentages keep their displayed stages.
+ * v2-v4 percentages are migrated once to preserve their previous displayed stages.
  */
 function create(options){
   options=options||{};
@@ -172,12 +172,16 @@ function create(options){
     return percent;
   }
   var old=options.saved,i,b,v;
-  if(old&&(old.v===2||old.v===3||old.v===4)&&isFinite(old.end)&&typeof old.levels==="string"&&old.levels.length===COUNT*2){
+  if(old&&old.v<5)diag=diag.map(function(d){
+    var copy=Object.assign({},d);if(old.v===2&&copy.result===0)copy.result=NO_DATA;else if(copy.result<=100)copy.result=Math.min(5,1+Math.floor(Math.min(99,copy.result)/20))*20;return copy;
+  });
+  if(old&&(old.v===2||old.v===3||old.v===4||old.v===5)&&isFinite(old.end)&&typeof old.levels==="string"&&old.levels.length===COUNT*2){
     for(i=0;i<COUNT;i++){
       b=old.end-COUNT+1+i;v=parseInt(old.levels.substr(2*i,2),16);
       if(b>=0&&isFinite(v)&&v>=0&&v<=255){
         stamps[b%COUNT]=b;
-        levels[b%COUNT]=old.v===2&&v===0?NO_DATA:v;
+        levels[b%COUNT]=old.v===2&&v===0?NO_DATA:old.v<5&&v<=100?
+          Math.min(5,1+Math.floor(Math.min(99,v)/20))*20:v;
       }
     }
     if(old.active&&old.active.metric===3&&
@@ -393,7 +397,7 @@ function create(options){
       else v=levels[b%COUNT];
       out+=("0"+v.toString(16)).slice(-2);
     }
-    return {v:4,end:end,levels:out,diag:diag,
+    return {v:5,end:end,levels:out,diag:diag,
       active:{metric:3,wearConfig:JSON.stringify(tracker.config),wearOff:wearOff,wearSeen:wearSeen,wearError:wearError,bucket:current,gate:threshold,cuts:cuts,
         covered:covered,activity:activity,peakCount:peakCount,
         charge:chargedThisBucket}};
@@ -428,6 +432,8 @@ function migrateSettings(settings) {
     if(s.restProbeSeconds===15)s.restProbeSeconds=30;
     s.restAlgorithmVersion=4;
   }
+  if(!isFinite(s.restActivityT5))s.restActivityT5=Math.max(500,(+s.restActivityT4||200)+1);
+  s.restScaleVersion=6;
   return s;
 }
 function install(bangle,storage,events,clock) {
@@ -522,7 +528,7 @@ function install(bangle,storage,events,clock) {
   function configure(input) {
     var original=storage.readJSON("orbit.json",1)||{};
     var s=migrateSettings(Object.assign({},original,input||{})),newKey=JSON.stringify(restProfile(s)),on=s.restEnabled!==false;
-    if(original.restAlgorithmVersion!==4)try{storage.writeJSON("orbit.json",s);}catch(e){}
+    if(original.restAlgorithmVersion!==4||original.restScaleVersion!==6)try{storage.writeJSON("orbit.json",s);}catch(e){}
     if(enabled===on&&key===newKey)return;
     stopProbe();stopCharge();
     if(enabled){bangle.removeListener("accel",onAccel);bangle.removeListener("HRM",onHRM);bangle.removeListener("charging",onCharging);persist();}
@@ -532,7 +538,7 @@ function install(bangle,storage,events,clock) {
     nextProbeAt=clock();nextBattery=0;nextSample=0;failures=0;charging=false;
     if(enabled) {
       engine=create({thresholdG:s.restThreshold,
-        activityThresholds:[s.restActivityT1,s.restActivityT2,s.restActivityT3,s.restActivityT4],
+        activityThresholds:[s.restActivityT1,s.restActivityT2,s.restActivityT3,s.restActivityT4,s.restActivityT5],
         wearThresholdG:s.restWearThreshold,wearEnabled:s.restWearEnabled,
         holdEnabled:s.restWearHold!==false,wearProfile:s,nowMs:clock(),
         saved:storage.readJSON("orbit.rest.json",1),onCommit:persist});
@@ -558,8 +564,8 @@ function install(bangle,storage,events,clock) {
   return api;
 }
 function stageFor(percent){
-  // Five visible lengths for worn records. No-data / non-wear are not visited.
-  return Math.max(1,Math.min(5,1+Math.floor(Math.min(99,percent)/20)));
+  // Six levels: level 0 has zero radial length; level 5 is full scale.
+  return Math.max(0,Math.min(5,Math.round(percent/20)));
 }
 function draw(graphics,engine,map){
   if(!engine)return;
@@ -682,20 +688,22 @@ exports.wearTracker=wearTracker;
 exports.migrateSettings=migrateSettings;
 
 function restProfile(base,override){
-  base=migrateSettings(base||{});override=override?migrateSettings(override):override;
+  base=migrateSettings(base||{});
+  var originalOverride=override;override=override?migrateSettings(override):override;
+  if(originalOverride&&originalOverride.restActivityT5===undefined&&originalOverride.restActivityT4===undefined)delete override.restActivityT5;
   var s={},keys=["restThreshold","restActivityT1","restActivityT2","restActivityT3",
-    "restActivityT4","restWearEnabled","restWearHold","restWearThreshold",
+    "restActivityT4","restActivityT5","restWearEnabled","restWearHold","restWearThreshold",
     "restProbeSeconds","restPulseConfidence","restEco","restWearNoiseG","restWearDriftG","restQuietNoiseG","restQuietDriftG","restAbsentRatio"];
   keys.forEach(function(k){
     var x=override&&override[k];
     s[k]=typeof x==="boolean"&&/Enabled|Hold|Eco/.test(k)||typeof x==="number"&&isFinite(x)?x:base[k];
   });
   var wear=wearConfig(s);
-  var cuts=activityThresholds([s.restActivityT1,s.restActivityT2,s.restActivityT3,s.restActivityT4]);
+  var cuts=activityThresholds([s.restActivityT1,s.restActivityT2,s.restActivityT3,s.restActivityT4,s.restActivityT5]);
   var result={restThreshold:thresholdG(s.restThreshold),restActivityT1:cuts[0],
-    restActivityT2:cuts[1],restActivityT3:cuts[2],restActivityT4:cuts[3],
+    restActivityT2:cuts[1],restActivityT3:cuts[2],restActivityT4:cuts[3],restActivityT5:cuts[4],
     restWearEnabled:wear.enabled,restWearHold:wear.hold,restWearThreshold:wear.z,
-    restProbeSeconds:wear.seconds,restPulseConfidence:wear.confidence,restEco:s.restEco===true,restAlgorithmVersion:4};
+    restProbeSeconds:wear.seconds,restPulseConfidence:wear.confidence,restEco:s.restEco===true,restAlgorithmVersion:4,restScaleVersion:6};
   var wc=wearTracker(s).config;
   result.restWearNoiseG=wc.noiseG;result.restWearDriftG=wc.driftG;result.restQuietNoiseG=wc.quietNoiseG;result.restQuietDriftG=wc.quietDriftG;result.restAbsentRatio=wc.absentRatio;
   return result;

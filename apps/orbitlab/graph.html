@@ -12,6 +12,7 @@ table{border-collapse:collapse;font-size:.85rem} th,td{border-bottom:1px solid #
 <h1>tenkyu Rest Lab グラフ</h1>
 <label>センサー CSV（-raw.csv） <input id="raw" type="file" accept=".csv"></label>
 <label>判定 CSV（-out.csv） <input id="out" type="file" accept=".csv"></label>
+<p>安静度：5＝夜の睡眠相当、4＝居眠り・腕を机に置く、3＝集中したデスクワーク、2＝日常生活活動、1＝歩行・階段、0＝走行・運動。睡眠状態の確定判定ではありません。</p>
 <p>非装着方式は60秒窓を10秒おきに再計算します。非常に静かな場合は心拍イベントがなくても非装着と推定します。装着静止でも誤判定する可能性が残ります。</p>
 <label>候補：揺れ上限 [g] <input id="noise" type="number" value="0.03" min="0.001" max="1" step="0.001"></label>
 <label>候補：姿勢変動RMS上限 [g] <input id="drift" type="number" value="0.025" min="0.001" max="1" step="0.001"></label>
@@ -24,8 +25,10 @@ table{border-collapse:collapse;font-size:.85rem} th,td{border-bottom:1px solid #
 const raw = document.getElementById("raw"), out = document.getElementById("out");
 const canvas = document.getElementById("plot"), status = document.getElementById("status");
 const table = document.getElementById("details"), ctx = canvas.getContext("2d");
+let sixScale=false;
+const stageOf=n=>sixScale?Math.max(0,Math.min(5,Math.round(n/20))):Math.floor(Math.min(99,n)/20)+1;
 const label = n => n===254?"非装着":n===253?"HRM失敗":n===255?"データ不足":
-  n>=101&&n<=201?"充電 "+(n-101)+"%":"安静"+(Math.floor(Math.min(99,n)/20)+1);
+  n>=101&&n<=201?"充電 "+(n-101)+"%":"安静"+stageOf(n);
 const date = ms => new Date(ms).toLocaleTimeString("ja-JP");
 function rows(text, header) {
   const lines = text.trim().split(/\r?\n/);
@@ -50,6 +53,7 @@ async function redraw() {
     }
     profile.restWearNoiseG=+document.getElementById("noise").value;
     profile.restWearDriftG=+document.getElementById("drift").value;
+    sixScale=profile.restScaleVersion>=6;
     const trial=RestLabCandidate.create(profile), comparison=[];
     const ordered=samples.filter(r=>["accel","hrm","charging"].includes(r[1])).sort((a,b)=>+a[0]-b[0]);
     let next=ordered.length?Math.ceil(+ordered[0][0]/10000)*10000:0;
@@ -98,7 +102,7 @@ async function redraw() {
     const sy=v=>500-v*17;
     axis(390,"安静度・非装着    非装着＝青    HRM失敗＝赤    充電＝紫",[0,1,2,3,4,5],sy);
     decisions.forEach(r=>{
-      const v=+r[2], stage=Math.floor(Math.min(99,v)/20)+1;
+      const v=+r[2], stage=stageOf(v);
       if(v===255)return;
       ctx.fillStyle=v===254?"#2a57b6":v===253?"#b32e2e":v>100?"#7640a9":"#148153";
       ctx.fillRect(x(+r[0]),v>100?505:sy(stage),Math.max(1,x(+r[1])-x(+r[0])),4);
@@ -108,7 +112,7 @@ async function redraw() {
     const states=["motion","still_pulse","off_candidate","hr_uncertain","hr_missing","insufficient","charging","hr_error"];
     const names=["動きあり","静止・脈あり","非装着候補","HR判定保留","HR不足","加速度不足","充電","HR電源エラー"];
     const colors=["#c77720","#148153","#2a57b6","#7640a9","#b32e2e","#888888","#cc3388","#b32e2e"];
-    ctx.font="15px system-ui";ctx.fillText("非装着方式（v0.114）：60秒窓 / 10秒更新",left,574);
+    ctx.font="15px system-ui";ctx.fillText("非装着方式：60秒窓 / 10秒更新",left,574);
     names.forEach((name,i)=>{ctx.fillStyle=colors[i];ctx.fillText(name,4,600+i*21);});
     comparison.forEach((r,i)=>{
       const j=states.indexOf(r.state);ctx.fillStyle=colors[j];

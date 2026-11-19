@@ -2,23 +2,23 @@
 (function(back){
   var Storage=require("Storage");
   // Read-only version display: title is not a selectable button.
-  var VERSION="0.114";
+  var VERSION="0.115";
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
-  var REST_ACTIVITY_DEFAULTS=[0.1,3,60,200];
+  var REST_ACTIVITY_DEFAULTS=[0.1,3,60,200,500];
   // Bangle.js 2 has a 3-bit colour screen (8 actual dial colours).
   var DIAL_COLOR_NAMES=["White","Red","Green","Blue","Yellow","Cyan","Magenta","Black"];
   var DIAL_COLOR_VALUES=[0xFFFF,0xF800,0x07E0,0x001F,0xFFE0,0x07FF,0xF81F,0];
   function restActivityCuts(s){
     var a=[],prev=0;
-    for(var i=0;i<4;i++){
+    for(var i=0;i<5;i++){
       var n=+s["restActivityT"+(i+1)];
       if(!isFinite(n)||n<=0)n=REST_ACTIVITY_DEFAULTS[i];
       if(i===0){
         // Only the L5/L4 boundary uses 0.1-resolution.
-        n=Math.max(0.1,Math.min(995.9,Math.round(n*10)/10));
+        n=Math.max(0.1,Math.min(994.9,Math.round(n*10)/10));
       }else{
         n=Math.round(n);
-        n=Math.max(Math.floor(prev)+1,Math.min(996+i,n));
+        n=Math.max(Math.floor(prev)+1,Math.min(995+i,n));
       }
       a.push(n);prev=n;
     }
@@ -143,7 +143,7 @@
     set("restBarHeight",Math.max(1,Math.min(14,isFinite(s.restBarHeight)?s.restBarHeight|0:10)));
     set("restThreshold",REST_THRESHOLDS[thresholdIndex(s.restThreshold===undefined?0.003:s.restThreshold)]);
     var activityCuts=restActivityCuts(s);
-    for(var ai=0;ai<4;ai++)set("restActivityT"+(ai+1),activityCuts[ai]);
+    for(var ai=0;ai<5;ai++)set("restActivityT"+(ai+1),activityCuts[ai]);
     set("restWearEnabled",s.restWearEnabled!==false);
     set("restWearHold",s.restWearHold!==false);
     set("restWearThreshold",REST_THRESHOLDS[thresholdIndex(s.restWearThreshold===undefined?0.009:s.restWearThreshold)]);
@@ -834,7 +834,7 @@
     m["Result"]=readOnly(!last?"--":last.result>=101&&last.result<=201?
       "Charge "+(last.result-101)+"%":last.result===254?"Unworn":
       last.result===253?"HRM failed":
-      last.result===255?"Unknown":"Rest "+(1+Math.min(4,Math.floor(Math.min(99,last.result)/20))));
+      last.result===255?"Unknown":"Rest "+Math.max(0,Math.min(5,Math.round(last.result/20))));
     m["Reason"]=readOnly(last?(reasons[last.reason]||last.reason):"--");
     m["Pulse"]=readOnly(last?(hr[last.pulse]||"?"):"--");
     var win=d&&d.window;
@@ -921,7 +921,7 @@
             Math.floor(old/place)%10;
           var next=Math.round((old+(v-oldDigit)*place)*10)/10;
           var low=k?Math.floor(all[k-1])+1:0.1;
-          var high=k<3?all[k+1]-(k===0?0.1:1):999;
+          var high=k<4?all[k+1]-(k===0?0.1:1):999;
           if(next<low-0.000001||next>high+0.000001){
             E.showAlert("Allowed: "+low+" to "+high,"Boundary")
               .then(function(){activityDigitMenu(s,k);});
@@ -936,10 +936,17 @@
       format:function(){return activityCutLabel(restActivityCuts(s)[k],k);}};
     E.showMenu(m);
   }
+  function levelGuide(s){
+    var guide={"":{title:"Rest 0-5"},"< Back":function(){restMenu(s);}};
+    ["Run / exercise","Walk / stairs","Daily activity","Focused desk work","Doze / arm on desk","Night sleep level"].forEach(function(name,i){
+      guide["Level "+i]={value:0,min:0,max:0,format:function(){return name;}};
+    });
+    E.showMenu(guide);
+  }
   function activityMenu(s){
     var cuts=restActivityCuts(s);
     var m={"":{title:"Rest levels"},"< Back":function(){restMenu(s);}};
-    for(var i=0;i<4;i++)(function(k){
+    for(var i=0;i<5;i++)(function(k){
       m["L"+(5-k)+"/"+(4-k)+"  "+activityCutLabel(cuts[k],k)]=function(){
         activityDigitMenu(s,k);
       };
@@ -955,6 +962,7 @@
         format:function(v){return v+" px";},onchange:function(v){s.restBarHeight=v;write(CFG,s);}},
       "Peak gate":thresholdMenu(s,"restThreshold"),
       "Stage boundaries":function(){activityMenu(s);},
+      "Level guide":function(){levelGuide(s);},
       "Non-wear":function(){wearMenu(s);},
       "Import test profile":function(){
         var p=Storage.readJSON("orbit.restcfg.json",1);

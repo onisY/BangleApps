@@ -116,6 +116,10 @@ async function checkGraph(rawText, outText) {
   await context.redraw();
   assert.equal(elements.plot.hidden,false,elements.status.textContent);
   assert(elements.status.textContent.includes('判定枠'));
+  const profileRow=rawText.split('\n').find(x=>x.includes(',profile,'));
+  const profile=profileRow?JSON.parse(decodeURIComponent(profileRow.split(',')[2])):{};
+  assert.equal(vm.runInContext('stageOf(0)',context),profile.restScaleVersion>=6?0:1);
+  assert.equal(vm.runInContext('stageOf(100)',context),5);
 }
 (async () => {
   await checkGraph(saved('-raw.csv'),saved('-out.csv'));
