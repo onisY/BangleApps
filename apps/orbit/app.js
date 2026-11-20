@@ -76,12 +76,7 @@
   })();
   /* GPS is settings-only; release any stale settings-owned request. */
   try{Bangle.setGPSPower(0,"orbitsettings");}catch(e){}
-  var calModule,calendar;
-  try{
-    var calSource=Storage.read("orbit.cal.js");
-    if(calSource){calModule=eval(calSource);calendar=calModule.create();}
-    calSource=undefined;
-  }catch(calErr){calModule=undefined;calendar=undefined;}
+  var calendar;
   var BLACK=0x0000,WHITE=0xFFFF,NAVY=0x000F,DARKBLUE=0x0008,BLUE=0x001F,CYAN=0x07FF,YELLOW=0xFFE0,ORANGE=0xFD20,RED=0xF800,GREEN=0x04C0;
   var ECLIPSE_ENABLED=cfg.eclipseEnabled===undefined?true:cfg.eclipseEnabled!==false;
   var ECLIPSE_UPDATE_MS=30000,eclipseDisplay,eclipseActive=false,lastClockMinute=-1;
@@ -879,18 +874,25 @@
   }
   function updateEclipse(){
     if(!ECLIPSE_ENABLED)return false;
-    if(!eclipseDisplay){
-      var engine=loadEclipseModule("orbit.eclipse");
-      var renderer=loadEclipseModule("orbit.ecldraw");
-      eclipseDisplay=renderer.create(engine);
-      ECLIPSE_UPDATE_MS=renderer.UPDATE_MS;
+    try{
+      if(!eclipseDisplay){
+        var engine=loadEclipseModule("orbit.eclipse");
+        var renderer=loadEclipseModule("orbit.ecldraw");
+        eclipseDisplay=renderer.create(engine);
+        ECLIPSE_UPDATE_MS=renderer.UPDATE_MS;
+      }
+      var active=eclipseDisplay.update(new Date(virtualNowMs()));
+      // Keep 5-minute checks far from eclipse; tighten to 1 minute near
+      // the penumbral boundary, 30 seconds once the global eclipse starts.
+      nextEclipseCheck=Date.now()+(active?30000:
+        (eclipseDisplay.getState()?60000:300000));
+      return active;
+    }catch(e){
+      perf.eclipseError=String(e);
+      ECLIPSE_ENABLED=false;
+      eclipseDisplay=undefined;
+      return false;
     }
-    var active=eclipseDisplay.update(new Date(virtualNowMs()));
-    // Keep 5-minute checks far from eclipse; tighten to 1 minute near
-    // the penumbral boundary, 30 seconds once the global eclipse starts.
-    nextEclipseCheck=Date.now()+(active?30000:
-      (eclipseDisplay.getState()?60000:300000));
-    return active;
   }
   function drawEclipse(sol){
     if(!eclipseActive||!eclipseDisplay)return;
@@ -901,14 +903,16 @@
 
   function initRest(){
     if(!REST_ENABLED)return;
-    restService=Bangle.orbitRest;
-    if(!restService){
-      var source=Storage.read("orbit.rest");
-      if(!source)return;
-      var exports={};(new Function("exports",source))(exports);
-      restService=exports.install(Bangle,Storage,E);
-    }
-    restService.configure(Storage.readJSON(CFGFILE,1)||{});
+    try{
+      restService=Bangle.orbitRest;
+      if(!restService){
+        var source=Storage.read("orbit.rest");
+        if(!source)return;
+        var exports={};(new Function("exports",source))(exports);
+        restService=exports.install(Bangle,Storage,E);
+      }
+    }catch(e){perf.restError=String(e);restService=undefined;}
+    // Both service installation paths already read orbit.json.
   }
   function sunEvents(noon){
     var sol=solarPosition(noon,TESTLAT,TESTLON);
@@ -969,6 +973,9 @@
   // Diagnostic comparison is run on demand, never during routine redraw.
   function drawRest(sol){
     if(!restService||selectedDayOffset!==0)return;
+    try{drawRestHistory(sol);}catch(e){perf.restError=String(e);restService=undefined;}
+  }
+  function drawRestHistory(sol){
     var now=Date.now();restService.sync(now);
     var args={nowMs:now,radiusPx:MOONORBIT,
       maxHeightPx:REST_MAX_HEIGHT,cx:EARTHX,cy:EARTHY,south:VIEW_SOUTH,
@@ -995,18 +1002,15 @@
       bars:perf.restParts.bars,at:Date.now()});
   }
 
-  function showProgressStatus(label,step,total){
-    if(killed||mode!=="tenkyu")return;
-    try{
-      var w=g.getWidth(),y=0;
-      g.setColor(BLACK).fillRect(0,y,w-1,23);
-      g.setBgColor(BLACK).setColor(WHITE).setFont("6x8",1).setFontAlign(-1,-1);
-      g.drawString(label,2,y+2);
-      var barX=2,barY=y+9,barW=Math.max(20,w-26),barH=3;
-      var fillW=Math.max(0,Math.round((barW*(step+1))/Math.max(1,total)));
-      g.setColor(0x4444).drawRect(barX,barY,barX+barW,barY+barH);
-      g.setColor(0x07E0).fillRect(barX+1,barY+1,barX+fillW,barY+barH-1);
-    }catch(e){}
+  function paintHeader(){
+    g.reset().setColor(g.theme.bg).fillRect(0,0,W-1,23);
+    try{Bangle.drawWidgets();}catch(e){perf.widgetError=String(e);}
+    if(!widgetDrawWrapper||perf.widgetError)drawHeaderClock();
+  }
+  function recoverFrame(e){
+    busy=false;
+    perf.renderError=String(e);
+    try{paintHeader();g.flip();}catch(headerError){perf.headerError=String(headerError);}
   }
 
   function cancelProgressive(){
@@ -1030,7 +1034,7 @@
     drawSun();
     g.setColor(0x8410).drawCircle(EARTHX,EARTHY,MOONORBIT);
     g.setColor(CYAN).drawCircle(EARTHX,EARTHY,EARTHR);
-    showProgressStatus("Loading sky...",0,3);
+    paintHeader();
     try{g.flip();}catch(e){}
     function nextLayer(){
       renderTimer=undefined;
@@ -1040,10 +1044,8 @@
         if(step===0){
           if(!earthCacheReady){/* map now comes from fixed flash masks */earthCacheReady=true;}
           sol=safeSolar();
-          showProgressStatus("Earth...",0,3);
           timed(perf.staged,"earth",function(){drawEarth(sol);});
         }else if(step===1){
-          showProgressStatus("Moon...",1,3);
           eclipseActive=updateEclipse();
           // The first minute timer was armed before eclipse discovery.
           // Switch to 30-second updates when the initial shadow is active.
@@ -1065,9 +1067,7 @@
           rememberChargeBackground(sol,moon);
           timed(perf.staged,"rest",function(){drawRest(sol);});
           drawLocationStatus(moon);drawDateTime(moon);
-          g.setColor(BLACK).fillRect(0,0,W-1,23);
-          try{Bangle.drawWidgets();}catch(e){}
-          drawHeaderClock();
+          paintHeader();
         }
         try{g.flip();if(step===2)captureSolarFrame();}catch(e){}
         perf.staged["stage"+step]=Date.now()-stageStart;
@@ -1080,7 +1080,7 @@
       }catch(e){
         // A failed incremental stage must not leave touch permanently blocked.
         cancelProgressive();
-        try{drawBase();}catch(ex){busy=false;}
+        recoverFrame(e);
       }
     }
     renderTimer=setTimeout(nextLayer,12);
@@ -1117,6 +1117,10 @@
   function drawBase(){
     cancelProgressive();
     busy=true;
+    try{drawFullFrame();}catch(e){recoverFrame(e);}
+    busy=false;
+  }
+  function drawFullFrame(){
     var perfStart=Date.now();
     // A timer may request a normal redraw before the staged opening has
     // completed; build any missing caches only in that exceptional path.
@@ -1145,7 +1149,6 @@
     try{g.flip();captureSolarFrame();}catch(err){}
     endPerf(perf.full,perfStart);
     perf.count++;
-    busy=false;
   }
 
   function clearTaps(){
@@ -1255,6 +1258,10 @@
     if(killed||mode!=="tenkyu")return;
     queueTransition("Calendar...",function(){
       mode="calendar";
+      if(!calendar)try{
+        var source=Storage.read("orbit.cal.js");
+        if(source)calendar=eval(source).create();
+      }catch(e){perf.calendarError=String(e);}
       if(!calendar){startOrbit(true);return;}
       var focus=hasSelectedDate?virtualDate():new Date();
       try{
@@ -1386,36 +1393,42 @@
     minuteTimer=setTimeout(function(){
       minuteTimer=undefined;
       if(!killed&&mode==="tenkyu"){
-        var wasActive=eclipseActive;
-        if(ECLIPSE_ENABLED&&Date.now()>=nextEclipseCheck)eclipseActive=updateEclipse();
-        /* Rebuild Earth when shadow moves/disappears: no accumulated black trail.
-           Far from eclipse, keep the original five-minute base refresh. */
-        if(wasActive||eclipseActive||Math.floor(Date.now()/300000)!==lastBaseBucket||
-           (safeSolar().el>=0)!==lastObserverDay)drawBase();
-        else if(REST_ENABLED&&Bangle.isCharging&&Bangle.isCharging()){
-          if(!drawChargeOnly())drawBase();
-        }else if(Math.floor(Date.now()/60000)!==lastClockMinute){
-          lastClockMinute=Math.floor(Date.now()/60000);
-          drawTimeOnly();try{g.flip();}catch(e){}
-        }
+        try{
+          var wasActive=eclipseActive;
+          if(ECLIPSE_ENABLED&&Date.now()>=nextEclipseCheck)eclipseActive=updateEclipse();
+          /* Rebuild Earth when shadow moves/disappears: no accumulated black trail.
+             Far from eclipse, keep the original five-minute base refresh. */
+          if(wasActive||eclipseActive||Math.floor(Date.now()/300000)!==lastBaseBucket||
+             (safeSolar().el>=0)!==lastObserverDay)drawBase();
+          else if(REST_ENABLED&&Bangle.isCharging&&Bangle.isCharging()){
+            if(!drawChargeOnly())drawBase();
+          }else if(Math.floor(Date.now()/60000)!==lastClockMinute){
+            lastClockMinute=Math.floor(Date.now()/60000);
+            drawTimeOnly();try{g.flip();}catch(e){}
+          }
+        }catch(e){recoverFrame(e);}
         armMinute();
       }
     },tick-(Date.now()%tick)+25);
   }
 
-  // Charger transitions are rare; refresh the active graph immediately,
-  // while keeping the boot-owned rest recorder independent of the clock.
-  function onChargingChange(){
-    if(killed||mode!=="tenkyu"||selectedDayOffset!==0)return;
-    if(typeof Bangle.isLCDOn==="function"&&!Bangle.isLCDOn())return;
-    setTimeout(function(){
-      if(!killed&&mode==="tenkyu"&&!busy)drawBase();
-    },50);
+  // A new live two-pixel marker (or its removal) is visible before the next bin.
+  var restRedrawTimer;
+  function onRestChange(){
+    if(killed||mode!=="tenkyu"||selectedDayOffset!==0||restRedrawTimer!==undefined)return;
+    function refresh(){
+      restRedrawTimer=undefined;
+      if(killed||mode!=="tenkyu"||selectedDayOffset!==0)return;
+      if(Bangle.isLCDOn&&!Bangle.isLCDOn())return;
+      if(busy){restRedrawTimer=setTimeout(refresh,150);return;}
+      drawBase();
+    }
+    restRedrawTimer=setTimeout(refresh,50);
   }
 
   function cleanup(){
     if(killed)return;
-    killed=true;chargePatch=undefined;powerDraw=undefined;
+    killed=true;clear(restRedrawTimer);chargePatch=undefined;powerDraw=undefined;
     clear(transitionTimer);transitionTimer=undefined;
     stopOrbitTimers();cancelProgressive();
     if(eclipseDisplay)eclipseDisplay.reset();
@@ -1428,7 +1441,7 @@
     try{Bangle.removeListener("faceUp",onFaceUp);}catch(e){}
     try{Bangle.removeListener("twist",onTwist);}catch(e){}
     try{Bangle.removeListener("lcdPower",onLCD);}catch(e){}
-    try{Bangle.removeListener("charging",onChargingChange);}catch(e){}
+    try{Bangle.removeListener("charging",onRestChange);Bangle.removeListener("orbitWear",onRestChange);}catch(e){}
     try{E.removeListener("kill",cleanup);}catch(e){}
   }
 
@@ -1443,7 +1456,8 @@
   Bangle.on("faceUp",onFaceUp);
   Bangle.on("twist",onTwist);
   Bangle.on("lcdPower",onLCD);
-  Bangle.on("charging",onChargingChange);
+  Bangle.on("charging",onRestChange);
+  Bangle.on("orbitWear",onRestChange);
   E.on("kill",cleanup);
   try{Bangle.setLocked(false);}catch(e){}
   drawProgressively();

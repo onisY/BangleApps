@@ -1,4 +1,4 @@
-# tenkyu Rest Lab v0.06
+# tenkyu Rest Lab v0.07
 
 Bangle.js 2の独立診断アプリです。[自用App Loader](https://onisy.github.io/BangleApps/?id=orbitlab&dev_id=BANGLEJS2)からインストールできます。tenkyu v0.117と同じ安静・非装着判定を使います。
 
@@ -6,39 +6,12 @@ Bangle.js 2の独立診断アプリです。[自用App Loader](https://onisy.git
 2. Stop、時間満了、アプリ終了、空き容量128 KiB未満で停止します。
 3. App LoaderのBackup ZIPから同じ計測回のraw/out CSVを取り出し、[グラフページ](https://onisy.github.io/BangleApps/apps/orbitlab/graph.html)で選択します。ファイルはブラウザ内で処理します。
 
-- raw CSV：各加速度イベント、心拍イベント、充電状態、開始時の正規化済み設定。
-- out CSV：新しい判定器の5分結果と診断値。最後の未完了枠は `partial_unconfirmed` で保存します。
-- cmp CSV：約10秒ごとの60秒窓状態。既存CSVは保持し、自動削除しません。
+- raw CSVには、各加速度イベント、心拍イベント、充電状態、共通設定、気圧センサーの温度（`temperature_c`）を書き込みます。`probe` 行は電源を確保して終えた心拍測定の開始時刻、`hr_error` 行は電源エラーの有無、`check` 行は時計の判定時刻と理由を `event_value` に記録します。
+- out CSVには5分ごとの安静度0〜5、非装着、充電の判定、理由、直近の温度、変化率、温度の観測時刻を保存します。最後の未完了枠は `partial_unconfirmed` です。
+- cmp CSVには約10秒ごとの状態、3軸の揺れと姿勢のRMS、心拍信頼度の集計、温度、符号付き変化率（℃/分）、基準傾向からのずれ（℃）、判定理由を保存します。
 
-グラフの上段はCSVに記録済みの5分判定、下段は新しい60秒方式による再計算です。旧版CSVの上段は当時の判定のままです。60秒方式は10秒ごとの更新で、時計の4秒タイマーによるcmp記録時刻とは数秒異なる場合があります。
+グラフは同じ時間軸に加速度・心拍信頼度・安静度・装着状態・温度・変化率を表示します。揺れ、姿勢、温度の閾値を変えると、生データから装着状態を再計算します。上段の5分結果は時計が記録したものです。温度を記録していない旧版のCSVも旧版用の判定器で読み込めます。
 
-心拍連続測定はテスト用で消費電力が増えます。オフならtenkyuと同じ間欠プローブを実行し、他アプリの心拍イベントも利用します。どちらでも非常に静かな加速度条件を満たせば、心拍イベントがない場合も非装着を推定します。心拍電源エラーは別に扱います。
+HRM continuousをオフにすると、時計と同じ間欠測定を行います。オンにすると記録中はRest Labの心拍電源要求を維持します。記録終了時にはRest Labが確保した電源要求を解放します。tenkyuと同時に温度を要求した場合は進行中の測定を共有します。Labの装着履歴は計測回ごとに開始します。
 
-設定は `orbit.restcfg.json` に置けます。Save test profileは既存ファイルを上書きしません。tenkyu v0.117のRest graph → Import test profileで同じ設定を取り込めます。
-
-```json
-{
-  "restThreshold": 0.003,
-  "restActivityT1": 0.1,
-  "restActivityT2": 3,
-  "restActivityT3": 60,
-  "restActivityT4": 200,
-  "restActivityT5": 500,
-  "restScaleVersion": 6,
-  "restWearNoiseG": 0.030,
-  "restWearDriftG": 0.025,
-  "restQuietNoiseG": 0.012,
-  "restQuietDriftG": 0.012,
-  "restAbsentRatio": 0.10,
-  "restPulseConfidence": 90,
-  "restProbeSeconds": 30
-}
-```
-
-[判定条件の詳細](../orbit/REST.md)。本版の閾値は3回の記録に基づくもので、装着したまま完全静止する場合などの未知条件で誤判定する可能性が残ります。
-
-安静度は0〜5の6段階です。5＝夜の睡眠相当、4＝居眠り・腕を机に置く、3＝集中したデスクワーク、2＝日常生活活動、1＝歩行・階段、0＝走行・運動を目安とします。旧CSVの5段階表記は維持します。
-
-v0.06ではtenkyuと同じ5Hz処理・非装着中の積算休止を使用します。raw CSVは届いたイベントを全件保持します。out CSVの `activity_coverage_s` は積算した秒数、`paused_s` は休止秒数です。`drift_g` は新しい記録ではPose RMSです。cmp CSVは別の判定器を動かさず、本体判定器の60秒窓を記録します。従来同様、rawデータの連続保存とHRM continuousは検証用で、通常の時計動作より電力を使います。
-
-v0.06では夜間保護（初期22〜8時）を共通化しています。`wear_held` は過去24時間の装着確認履歴を使う状態、`wear_uncertain` は夜間の非装着判定を保留する状態です。どちらも現在の心拍検出成功を意味しません。時計本体は装着確認履歴を保存し、Rest Labの各計測は記録開始後の履歴を使います。
+**Save test profile** は `orbit.restcfg.json` を作成します。既存ファイルがある場合はその設定を使います。温度変化量の下限は `restTempDeltaC`（初期0.20℃）です。tenkyuでは **Rest graph → Import test profile** から同じ設定を取り込めます。[判定条件の詳細](../orbit/REST.md)

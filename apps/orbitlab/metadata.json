@@ -2,9 +2,9 @@
   "id": "orbitlab",
   "name": "tenkyu Rest Lab",
   "shortName": "Rest Lab",
-  "version": "0.06",
+  "version": "0.07",
   "author": "onisY",
-  "description": "Record accelerometer, HRM confidence and tenkyu rest decisions for local graphing.",
+  "description": "Record acceleration, case temperature, pulse confidence and tenkyu wear decisions for local graphing.",
   "icon": "app.png",
   "tags": "tools",
   "supports": [
@@ -19,10 +19,6 @@
     {
       "name": "orbitlab.rest",
       "url": "rest.js"
-    },
-    {
-      "name": "orbitlab.cand",
-      "url": "candidate.js"
     },
     {
       "name": "orbitlab.img",

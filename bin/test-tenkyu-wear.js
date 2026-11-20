@@ -1,8 +1,8 @@
 /* Run: node bin/test-tenkyu-wear.js [directory containing orbitlab-*-raw.csv] */
 const assert=require('assert'),fs=require('fs'),path=require('path'),vm=require('vm');
 const {EventEmitter}=require('events');
-const r=require('../apps/orbit/rest.js'),lab=require('../apps/orbitlab/rest.js'),candidate=require('../apps/orbitlab/candidate.js');
-assert.equal(r.wearTracker.toString(),candidate.create.toString());
+const r=require('../apps/orbit/rest.js'),lab=require('../apps/orbitlab/rest.js');
+assert.equal(r.wearTracker.toString(),lab.wearTracker.toString());
 assert.equal(fs.readFileSync(path.join(__dirname,'../apps/orbit/rest.js'),'utf8'),fs.readFileSync(path.join(__dirname,'../apps/orbitlab/rest.js'),'utf8'));
 assert.deepEqual(r.activityDefaults,[.1,3,60,200,500]);
 assert.equal(r.restProfile({}).restThreshold,.003);
@@ -17,21 +17,21 @@ function feed(tracker,mode,step=80) {
   }
   return tracker.result(base+70000);
 }
-for(const step of [80,200])assert.equal(feed(r.wearTracker({restSleepGuard:false}),'quiet',step).state,'off_candidate');
-assert.equal(feed(r.wearTracker({restSleepGuard:false}),'moving').state,'motion');
-assert.equal(feed(r.wearTracker({restSleepGuard:false}),'noisy').state,'hr_missing');
-let t=r.wearTracker({restSleepGuard:false});assert.equal(feed(t,'pulse').state,'still_pulse');
+for(const step of [80,200])assert.equal(feed(r.wearTracker({}),'quiet',step).state,'wear_uncertain');
+assert.equal(feed(r.wearTracker({}),'moving').state,'motion');
+assert.equal(feed(r.wearTracker({}) ,'noisy').state,'wear_uncertain');
+let t=r.wearTracker({});assert.equal(feed(t,'pulse').state,'still_pulse');
 for(let dt=70000;dt<150000;dt+=80)t.sample({x:0,y:0,z:1},base+dt);
-assert.equal(t.result(base+150000).state,'still_pulse','confirmed worn state survives HRM sleep');
+assert.equal(t.result(base+150000).state,'wear_held','confirmed worn state survives HRM sleep');
 assert.equal(t.result(base+300000).state,'insufficient','stale accel cannot hold a verdict');
-t=r.wearTracker({restSleepGuard:false});feed(t,'quiet');t.setError(true);assert.equal(t.result(base+70000).state,'hr_error');
+t=r.wearTracker({});feed(t,'quiet');t.setError(true);assert.equal(t.result(base+70000).state,'hr_error');
 t.setCharging(true);assert.equal(t.result(base+70000).state,'charging');t.setCharging(false);assert.equal(t.result(base+70000).state,'insufficient');
 
 function environment({error=false,shared=false}={}) {
  let now=base,id=0;const timers=new Map(),files={'orbit.json':{tzBase:540}},power=[];
  const b=new EventEmitter(),events=new EventEmitter();
- b.isCharging=()=>false;b.isHRMOn=()=>shared;
- b.setHRMPower=(v,owner)=>{power.push([now,v,owner]);return error?false:true;};
+ let owned=false;b.isCharging=()=>false;b.isHRMOn=()=>shared||owned;
+ b.setHRMPower=(v,owner)=>{power.push([now,v,owner]);owned=!error&&!!v;return error?false:shared||owned;};
  events.getBattery=()=>80;
  const context={exports:{},setTimeout:(fn,ms)=>{timers.set(++id,{fn,at:now+ms});return id;},clearTimeout:i=>timers.delete(i)};
  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../apps/orbit/rest.js'),'utf8'),context);
@@ -45,13 +45,14 @@ function environment({error=false,shared=false}={}) {
  return {b,events,service,files,power,timers,run,advance};
 }
 let env=environment();env.run(base+300000,'quiet');
-assert.equal(env.service.getEngine().snapshot().levels.slice(-2),'fe');
-assert.equal(env.power.length,0,'very quiet fallback needs no HRM request');
+assert.equal(env.service.getEngine().snapshot().levels.slice(-2),'64');
+assert(env.power.some(p=>p[1]),'unknown static watch receives a limited probe');
 assert.equal(env.files['orbit.json'].restAlgorithmVersion,4);
 env=environment();env.run(base+200000,'noisy',true);
 assert(env.power.some(x=>x[1]===1));assert.equal(env.power.at(-1)[1],0,'own probe request released');
-assert.equal(env.service.getEngine().getWear(base+200000).state,'off_candidate');
-env=environment({shared:true});env.run(base+100000,'noisy',true);assert.equal(env.power.length,0,'reuse shared HRM');
+assert.equal(env.service.getEngine().getWear(base+200000).state,'wear_uncertain');
+env=environment({shared:true});env.run(base+100000,'noisy',true);assert(env.b.isHRMOn(),'external HRM owner remains active after a probe');
+assert(env.power.every(p=>p[2]==='orbitrest'));
 env.events.emit('kill');assert.equal(env.timers.size,0);assert.equal(env.b.listenerCount('accel'),0);
 env=environment();env.run(base+65000,"noisy");assert(env.service.isProbing());
 env.b.emit("charging",true);assert(!env.service.isProbing());assert.equal(env.power.at(-1)[1],0);
@@ -83,7 +84,7 @@ if(process.argv[2]){
  for(const [id,expected] of Object.entries(expectations)){
   const file=path.join(process.argv[2],'orbitlab-'+id+'-raw.csv');
   const rows=fs.readFileSync(file,'utf8').trim().split('\n').slice(1).map(x=>x.split(','));
-  const p=r.restProfile(Object.assign({tzBase:540,restSleepGuard:false},JSON.parse(decodeURIComponent(rows.find(x=>x[1]==='profile')[2]))));
+  const p=r.restProfile(Object.assign({},JSON.parse(decodeURIComponent(rows.find(x=>x[1]==='profile')[2]))));
   const data=rows.filter(x=>['accel','hrm'].includes(x[1])).sort((a,b)=>+a[0]-b[0]);
   const e=r.create({nowMs:+data[0][0],wearEnabled:true,holdEnabled:true,wearProfile:p,thresholdG:p.restThreshold,
     activityThresholds:[p.restActivityT1,p.restActivityT2,p.restActivityT3,p.restActivityT4,p.restActivityT5]});
@@ -94,9 +95,9 @@ if(process.argv[2]){
    if(x[1]==='accel'){if(!p.restEco||+x[0]>=nextAccel){nextAccel=nextAccel&&+x[0]-nextAccel<=200?nextAccel+200:+x[0]+200;e.sample({x:+x[2],y:+x[3],z:+x[4]},+x[0]);}}else e.hrm({bpm:+x[5],confidence:+x[6]},+x[0]);
   }
   const d=e.getDiagnostics().recent;
-  if(expected.off){assert(d.filter(x=>x.valid).every(x=>x.result===254));assert.equal(e.getLive().wear.state,'off_candidate');}
+  if(expected.off){assert.equal(offWindows,0,'already stationary table without temperature or previous state is uncertain');assert.equal(e.getLive().wear.state,'wear_uncertain');}
   if(expected.worn){assert.equal(offWindows,0);assert(d.filter(x=>x.valid).every(x=>x.result<=60));assert.deepEqual([20,40,60].map(v=>d.filter(x=>x.valid&&x.result===v).length),[1,3,7]);}
-  if(expected.mixed){assert.equal(workOff,0);assert.equal(e.getLive().wear.state,'off_candidate');}
+  if(expected.mixed){assert.equal(workOff,0);assert.notEqual(e.getLive().wear.state,'off_candidate','archived recording contains no temperatures');}
   console.log(id,JSON.stringify({windowsOff:offWindows,bins:d.map(x=>[x.result,x.wearSeconds]),final:e.getLive().wear.state}));
  }
 }

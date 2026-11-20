@@ -7,6 +7,8 @@
   if(s.restEnabled===false||Bangle.orbitRest)return;
   var source=storage.read("orbit.rest");
   if(!source)return;
-  var exports={};(new Function("exports",source))(exports);
-  exports.install(Bangle,storage,E);
+  try{
+    var exports={};(new Function("exports",source))(exports);
+    exports.install(Bangle,storage,E);
+  }catch(e){Bangle.orbitBootError=String(e);}
 })();

@@ -1,3 +1,4 @@
+// Browser replay of recordings made before the case-temperature classifier.
 // Fixed-size 60-second sensor window: under 2 KiB of typed-array storage.
 // Acceleration-only non-wear is a heuristic for exceptionally quiet placement.
 function wearTracker(profile,memory) {

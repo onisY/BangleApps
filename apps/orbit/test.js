@@ -109,7 +109,7 @@ function appHarness(enabled,iso,options={}){
       log.push({op:k,args:a,color});return g;
     }});
   class Clock extends Date{constructor(...a){super(...(a.length?a:[now]));}static now(){return now;}}
-  const bangle={setGPSPower:()=>{},setUI:()=>{},loadWidgets:()=>{},drawWidgets:()=>{},
+  const bangle={orbitRest:options.rest,setGPSPower:()=>{},setUI:()=>{},loadWidgets:()=>{},drawWidgets:()=>{},
     setLocked:()=>{},setBacklight:()=>{},isLCDOn:()=>options.lcdOn!==false,on:(n,f)=>events[n]=f,removeListener:()=>{},showLauncher:()=>{}};
   const context={g,Bangle:bangle,Date:Clock,require:n=>{assert(n==="Storage");return storage;},
     E:{on:(n,f)=>events[n]=f,removeListener:()=>{}},setTimeout:(f,ms)=>{timers.set(++nextId,{f,ms});return nextId;},
@@ -118,6 +118,8 @@ function appHarness(enabled,iso,options={}){
   // Opening is progressive: the Sun/orbit are flushed before heavy data
   // loads, then Earth, eclipse/Moon and overlays appear in three turns.
   const firstFlush=log.findIndex(x=>x.op==="flip");
+  assert(log.slice(0,firstFlush).some(x=>x.op==="drawString"&&/^\d{1,2}:\d{1,2}$/.test(x.args[0])));
+  assert(!reads.includes("orbit.cal.js"));
   assert(firstFlush>=0&&log.slice(0,firstFlush).some(x=>
     x.op==="fillCircle"&&x.color===0xFFE0));
   assert(!reads.some(n=>n.startsWith("orbit.ecl")),
@@ -132,8 +134,19 @@ function appHarness(enabled,iso,options={}){
   assert.strictEqual(stages,3);
   assert(log.filter(x=>x.op==="flip").length>=4,
     "Clock layers must visibly appear before rendering completes");
-  return {timers,events,log,reads,captures,advance:ms=>now+=ms};
+  return {perf:bangle.orbitPerf,timers,events,log,reads,captures,advance:ms=>now+=ms};
 }
+const brokenRest=appHarness(false,"2026-03-20T03:00:00Z",{rest:{
+  sync(){throw new Error("test recorder failure");}
+}});
+assert(/test recorder failure/.test(brokenRest.perf.restError));
+const minuteEntry=[...brokenRest.timers].find(([,t])=>t.ms>59000);
+brokenRest.timers.delete(minuteEntry[0]);
+brokenRest.advance(60000);
+const afterStartup=brokenRest.log.length;
+minuteEntry[1].f();
+assert(brokenRest.log.slice(afterStartup).some(x=>x.op==="drawString"&&x.args[0].endsWith(":1")));
+assert([...brokenRest.timers.values()].some(t=>t.ms>59000));
 // Tokyo geometric events on March 20, with the test watch running in UTC.
 const tokyo={lat:35.69,lon:139.75};
 const morning="2026-03-19T20:53:00Z",evening="2026-03-20T08:50:00Z";
@@ -210,7 +223,7 @@ app.events.lcdPower(false);assert(app.timers.size===0);
 const off=appHarness(false,refs[1].date);assert(!off.reads.some(n=>n.startsWith("orbit.ecl")));
 assert.strictEqual(redMoonRims(off).length,0);
 assert([...off.timers.values()][0].ms>30000);
-// Stage-5-gated non-wear regression. Source tests are never installed on Bangle.
+// Rest-bin integration without temperature evidence. Source tests are never installed on Bangle.
 const wearR=require("./rest.js"),wearS=wearR.constants.slotMs;
 const wearBase=Math.floor(Date.parse("2026-11-11T12:00:00Z")/wearS)*wearS;
 function wearHarness(spike,kind,accelGap) {
@@ -224,7 +237,7 @@ function wearHarness(spike,kind,accelGap) {
   const watch={
     on:(name,fn)=>(listeners[name]??=[]).push(fn),
     removeListener:(name,fn)=>listeners[name]=(listeners[name]||[]).filter(v=>v!==fn),
-    isCharging:()=>charging,isHRMOn:()=>false,
+    isCharging:()=>charging,isHRMOn:()=>!!power.length&&!!power.at(-1)[1],
     setHRMPower:(state,id)=>{power.push([now-wearBase,state,id]);return !!state;}
   };
   const events={on:()=>{},getBattery:()=>battery};
@@ -262,16 +275,16 @@ function wearHarness(spike,kind,accelGap) {
   return {level:service.getEngine().snapshot().levels.slice(-2),
     diag:service.getDiagnostics().recent.at(-1),power,service};
 }
-// Independent v4 wear logic is verified with sparse HR, real captures and power ownership.
+// Independent wear logic is verified with sparse HR, real captures and power ownership.
 require("../../bin/test-tenkyu-wear.js");
 const quietSpikes=wearHarness(.045,"low");
-assert.strictEqual(quietSpikes.level,"fe","Sparse small spikes do not defeat quiet-table detection");
-assert.deepStrictEqual(quietSpikes.power,[]);
+assert.notStrictEqual(quietSpikes.level,"fe","Sparse spikes and weak HR without temperature cannot establish non-wear");
+assert(quietSpikes.power.some(p=>p[1]===1));
 const nonWornRest5=wearHarness(0,"none");
-assert.strictEqual(nonWornRest5.level,"fe");
-assert.strictEqual(wearHarness(0,"good").level,"fe","A single good HR event is insufficient");
+assert.strictEqual(nonWornRest5.level,"64");
+assert.strictEqual(wearHarness(0,"good").diag.window.state,"wear_uncertain","A single good HR event is insufficient");
 assert.strictEqual(wearHarness(0,"charge").level,(101+68).toString(16));
-assert.strictEqual(wearHarness(0,"none",[266000,272000]).level,"fe");
+assert.strictEqual(wearHarness(0,"none",[266000,272000]).level,"64");
 
 // Only the L5/L4 activity boundary is configurable to one decimal place.
 const wearConfig={restEnabled:false,coordVersion:2,locationSource:"manual",
@@ -314,6 +327,7 @@ for(const src of foregroundParts){
 assert(clockSource.includes("var zenEndR=REST_ENABLED?MOONORBIT-3:MOONORBIT+MOONR/2;"),
   "The wide observer ray must end before the radial rest graph begins");
 const unwornDraw=wearR.create({nowMs:wearBase,wearEnabled:true,
+  saved:{wearMemory:{version:1,known:"off",offReason:"thermal_cooling",seen:wearBase-1000}},
   activityThresholds:[.1,2,6,18]});
 for(let t=0;t<=wearS;t+=80)
   unwornDraw.sample({x:0,y:0,z:1},wearBase+t);

@@ -4,17 +4,22 @@ const base=Date.parse('2026-11-17T23:15:00Z');
 assert.equal(r.restProfile({}).restEco,true);
 assert.equal(r.migrateSettings({restEco:false}).restEco,true);
 assert.equal(r.migrateSettings({restEco:false,restPowerVersion:1}).restEco,false);
-const e=r.create({wearEnabled:true,wearProfile:{restEco:true,restSleepGuard:false},nowMs:base});
-for(let t=base;t<base+120000;t+=200)e.sample({x:0,y:0,z:1},t);
+const e=r.create({wearEnabled:true,wearProfile:{restEco:true},nowMs:base});
+for(let t=base;t<base+120000;t+=200){
+  const ms=t-base;
+  e.sample({x:ms<30000?Math.sin(ms/1000):0,y:0,z:1},t);
+  if(ms%10000===0)e.temperature(30+Math.min(2,Math.max(0,(ms-30000)/100000)),t);
+  if(ms===80000)e.probeDone(base+50000,t);
+}
 let d=e.getDiagnostics();assert(d.paused);const oldOps=d.peakOps;
 for(let t=base+120000;t<base+180000;t+=200)e.sample({x:0,y:0,z:1},t);
 assert.equal(e.getDiagnostics().peakOps,oldOps,'no peak filter work in stable non-wear');
-assert(e.getDiagnostics().pausedSec>=110);
+assert(e.getDiagnostics().pausedSec>=75);
 e.sample({x:.8,y:0,z:.6},base+180000);
 assert(!e.getDiagnostics().paused,'wake on first large-motion sample');
 assert.equal(e.getDiagnostics().peakOps,oldOps+1);
 assert.equal(e.getDiagnostics().wakes,1);
-for(let t=base+180200;t<=base+300000;t+=200)e.sample({x:.8,y:.05*Math.sin(t/1000),z:.6},t);
+for(let t=base+180200;t<=base+300000;t+=200){e.sample({x:.8,y:.05*Math.sin(t/1000),z:.6},t);if(t%1000===0)e.hrm({bpm:70,confidence:99},t);}
 assert.equal(e.getDiagnostics().recent.at(-1).result,255,'short resumed observation is not extrapolated');
 assert.equal(e.getDiagnostics().recent.at(-1).reason,'activity_partial');
 

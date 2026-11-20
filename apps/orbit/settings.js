@@ -144,14 +144,11 @@
     set("restThreshold",REST_THRESHOLDS[thresholdIndex(s.restThreshold===undefined?0.003:s.restThreshold)]);
     var activityCuts=restActivityCuts(s);
     for(var ai=0;ai<5;ai++)set("restActivityT"+(ai+1),activityCuts[ai]);
-    set("restSleepGuard",s.restSleepGuard!==false);
-    set("restSleepStart",isFinite(s.restSleepStart)?Math.max(0,Math.min(23,s.restSleepStart|0)):22);
-    set("restSleepEnd",isFinite(s.restSleepEnd)?Math.max(0,Math.min(23,s.restSleepEnd|0)):8);
     set("restWearEnabled",s.restWearEnabled!==false);
     set("restWearHold",s.restWearHold!==false);
     set("restWearThreshold",REST_THRESHOLDS[thresholdIndex(s.restWearThreshold===undefined?0.009:s.restWearThreshold)]);
     [["restWearNoiseG",0.001,1,0.030],["restWearDriftG",0.001,1,0.025],
-      ["restQuietNoiseG",0.001,1,0.012],["restQuietDriftG",0.001,1,0.012],
+      ["restTempDeltaC",0.05,3,0.2],
       ["restAbsentRatio",0,0.5,0.1],["restProbeSeconds",30,60,30],
       ["restPulseConfidence",1,100,90]].forEach(function(q){
       set(q[0],Math.max(q[1],Math.min(q[2],isFinite(s[q[0]])?+s[q[0]]:q[3])));
@@ -795,17 +792,15 @@
   function rmsMenu(s,key){return {value:s[key],min:0.001,max:1,step:0.001,
     format:function(v){return v.toFixed(3)+" g";},onchange:function(v){s[key]=v;applyRest(s);}};}
   function wearMenu(s){
-    E.showMenu({"":{title:"Non-wear"},"< Back":function(){restMenu(s);},
+    E.showMenu({"":{title:"Thermal wear"},"< Back":function(){restMenu(s);},
       "Enabled":{value:s.restWearEnabled,onchange:function(v){s.restWearEnabled=!!v;applyRest(s);}},
-      "Keep until move":{value:s.restWearHold,format:function(v){return v?"On":"Off";},
+      "Hold worn":{value:s.restWearHold,format:function(v){return v?"On":"Off";},
         onchange:function(v){s.restWearHold=!!v;applyRest(s);}},
-      "Sleep guard":{value:s.restSleepGuard,onchange:function(v){s.restSleepGuard=v;applyRest(s);}},
-      "Guard from":{value:s.restSleepStart,min:0,max:23,step:1,format:function(v){return v+":00";},onchange:function(v){s.restSleepStart=v;applyRest(s);}},
-      "Guard until":{value:s.restSleepEnd,min:0,max:23,step:1,format:function(v){return v+":00";},onchange:function(v){s.restSleepEnd=v;applyRest(s);}},
       "Noise RMS":rmsMenu(s,"restWearNoiseG"),
       "Pose RMS":rmsMenu(s,"restWearDriftG"),
-      "Quiet noise":rmsMenu(s,"restQuietNoiseG"),
-      "Quiet pose":rmsMenu(s,"restQuietDriftG"),
+      "Temp change":{value:s.restTempDeltaC,min:0.05,max:3,step:0.05,
+        format:function(v){return v.toFixed(2)+" C";},
+        onchange:function(v){s.restTempDeltaC=v;applyRest(s);}},
       "Low pulse ratio":{value:s.restAbsentRatio,min:0,max:0.5,step:0.01,
         format:function(v){return Math.round(v*100)+" %";},onchange:function(v){s.restAbsentRatio=v;applyRest(s);}},
       "Probe seconds":{value:s.restProbeSeconds,min:30,max:60,step:5,
@@ -820,14 +815,16 @@
     var list=d&&d.recent,last=list&&list.length?list[list.length-1]:undefined;
     var hr=["Pending","Detected","Absent","Failed"];
     var reasons={
-      accel_missing:"No accel",nonwear_disabled:"Disabled",
+      thermal_warming:"Warming on surface",thermal_cooling:"Cooling on surface",thermal_pickup:"Pickup + temperature",
+      thermal_pending:"Checking change",wear_unconfirmed:"Wear uncertain",wear_history:"Wear held",
+      sustained_pulse:"Pulse confirmed",window_motion:"Moving",accel_missing:"No accel",nonwear_disabled:"Disabled",
       motion:"Motion",pulse_detected_still:"Pulse+still",
       nonwear_hrm_failed:"HRM failed",hrm_retry_wait:"Retry wait",
       nonwear_hrm_unknown:"HRM unknown",
       nonwear:"No pulse",nonwear_held:"Held unworn",
       pulse_pending_rest5:"Pulse pending",rest_1_to_4:"Rest 1-4",
       pulse_held_still:"Held worn",accel_uncertain:"Uncertain",
-      sleep_wear_history:"Sleep wear held",sleep_nonwear_deferred:"Sleep uncertain",rest_activity:"Rest peaks",nonwear_quiet:"Quiet unworn",nonwear_quiet_no_hr:"Quiet, no HR events",
+      rest_activity:"Rest peaks",nonwear_quiet:"Quiet unworn",nonwear_quiet_no_hr:"Quiet, no HR events",
       nonwear_low_pulse_ratio:"Low pulse ratio",nonwear_held_window:"Held unworn",hrm_power_error:"HRM power error",charging:"Charging"
     };
     // E.showAlert does not scroll on Bangle.js 2. Use read-only
@@ -845,6 +842,9 @@
     m["Pulse"]=readOnly(last?(hr[last.pulse]||"?"):"--");
     var win=d&&d.window;
     m["Window"]=readOnly(win?win.state:"--");
+    m["Window reason"]=readOnly(win?(reasons[win.reason]||win.reason):"--");
+    m["Case temp"]=readOnly(win&&isFinite(win.temperature)?win.temperature.toFixed(2)+" C":"--");
+    m["Temp rate"]=readOnly(win&&isFinite(win.tempRate)?win.tempRate.toFixed(2)+" C/min":"--");
     m["Noise RMS"]=readOnly(win?win.noiseG.toFixed(4)+" g":"--");
     m["Pose RMS"]=readOnly(win?win.driftG.toFixed(4)+" g":"--");
     m["HR seconds"]=readOnly(win?win.hrSeconds:"--");
