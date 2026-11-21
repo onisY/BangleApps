@@ -84,10 +84,11 @@ function wearThresholds(profile) {
     hold:profile.restWearHold!==false,thermalVersion:1};
 }
 // A rolling 60-second window, plus the last 10 seconds of the same samples.
-function wearTracker(profile,memory) {
+function wearTracker(profile,memory,legacySampling) {
   var cfg=wearThresholds(profile);
   var trend=temperatureTrend(cfg.tempDelta),stamps=new Uint32Array(60),data=new Float32Array(240),
     hrStamps=new Uint32Array(60),hrGood=new Uint8Array(60),sec=-1,n=0,sx,sy,sz,sq,first,last,
+    prevEnd=-1,prevX,prevY,prevZ,continuousFrom=-1,
     charging=false,powerError=false,cached,at=-1,movingFrom=-1,lastMotion=-1,briefMotion=-1,settled=false,
     probeStart=-1,probeEnd=-1,probeNoContact=false,lastReliable=-1,known="",offReason="",seen=-1,ignoreUntil=0;
   if(memory&&memory.version===1) {
@@ -96,7 +97,7 @@ function wearTracker(profile,memory) {
     trend.reset(ignoreUntil);
   }
   function clearWindows(){
-    stamps.fill(0);hrStamps.fill(0);sec=-1;n=0;cached=undefined;at=-1;
+    stamps.fill(0);hrStamps.fill(0);sec=-1;n=0;cached=undefined;at=-1;prevEnd=continuousFrom=-1;
     movingFrom=lastMotion=briefMotion=probeStart=probeEnd=lastReliable=-1;probeNoContact=false;settled=false;
   }
   function advance(ms){
@@ -109,22 +110,31 @@ function wearTracker(profile,memory) {
       known="";seen=-1;trend.reset(ignoreUntil);
     }
     if(next===sec)return;
-    if(sec>=0&&n>=3&&last-first>=500){
+    if(sec>=0&&n){
       var i=sec%60,k=i*4,x=sx/n,y=sy/n,z=sz/n;
-      // A short lift or flip can fall entirely between two ten-second checks.
-      var prev=((sec+59)%60)*4;
-      if(stamps[prev/4]===sec){
-        var dx=x-data[prev],dy=y-data[prev+1],dz=z-data[prev+2];
-        if(dx*dx+dy*dy+dz*dz>0.0225)briefMotion=sec*1000;
+      var dense=n>=3&&last-first>=500;
+      // A sparse second needs an actual previous measurement. Use the change
+      // between observed means as a lower bound on noise for this second.
+      var sparse=!legacySampling&&!dense&&prevEnd>=0&&first>prevEnd&&
+        first-prevEnd<=MAX_GAP_MS&&last-prevEnd>=500;
+      if(dense||sparse){
+        var noise2=Math.max(0,sq/n-x*x-y*y-z*z);
+        if(sparse||stamps[(sec+59)%60]===sec){
+          var dx=x-prevX,dy=y-prevY,dz=z-prevZ,change2=dx*dx+dy*dy+dz*dz;
+          if(change2>0.0225)briefMotion=sec*1000;
+          if(sparse)noise2=Math.max(noise2,change2);
+        }
+        stamps[i]=sec+1;data[k]=x;data[k+1]=y;data[k+2]=z;data[k+3]=Math.sqrt(noise2);
       }
-      stamps[i]=sec+1;data[k]=x;data[k+1]=y;data[k+2]=z;
-      data[k+3]=Math.sqrt(Math.max(0,sq/n-x*x-y*y-z*z));
+      prevX=x;prevY=y;prevZ=z;prevEnd=last;
     }
     sec=next;n=0;sx=sy=sz=sq=0;
   }
   function sample(a,ms){
     if(!a||!isFinite(a.x)||!isFinite(a.y)||!isFinite(a.z)||!isFinite(ms))return;
-    advance(ms);seen=ms;if(!n)first=ms;
+    advance(ms);
+    if(continuousFrom<0||ms<seen||ms-seen>MAX_GAP_MS)continuousFrom=ms;
+    seen=ms;if(!n)first=ms;
     last=ms;n++;sx+=a.x;sy+=a.y;sz+=a.z;sq+=a.x*a.x+a.y*a.y+a.z*a.z;
   }
   function hrm(h,ms){
@@ -163,7 +173,11 @@ function wearTracker(profile,memory) {
     noise.sort(function(a,b){return a-b;});
     var count=noise.length,rms=count?noise[Math.floor(count/2)]:0,drift=pose(count,x,y,z,q);
     var still=count>=54&&rms<=cfg.noiseG&&drift<=cfg.driftG;
-    var shortValid=shortN>=9, shortStill=shortValid&&shortQuiet>=shortN*0.8&&
+    // With off already confirmed, the same ten seconds of motion can be
+    // monitored at a lower cadence. Never bridge a break in observations.
+    var sparseHold=!legacySampling&&known==="off"&&shortN>=4&&continuousFrom>=0&&
+      ms-continuousFrom>=9000&&ms-seen<=MAX_GAP_MS;
+    var shortValid=shortN>=9||sparseHold, shortStill=shortValid&&shortQuiet>=shortN*0.8&&
       pose(shortN,shortX,shortY,shortZ,shortQ)<=cfg.driftG;
     var pulse=afterGood>=10&&afterGood>=0.6*afterHR&&recentGood>0;
     var state="insufficient",reason="accel_missing",needsProbe=false, fast=false;
@@ -225,7 +239,7 @@ function wearTracker(profile,memory) {
         (!fullProbe&&(fast||responded)))||(shortStill&&still&&!known&&!phase));
     }
     var reading=trend.latest();
-    cached={time:ms,start:(sec-60)*1000,state:state,reason:reason,seconds:count,noiseG:rms,driftG:drift,
+    cached={time:ms,start:(sec-60)*1000,state:state,reason:reason,seconds:count,shortSeconds:shortN,noiseG:rms,driftG:drift,
       hrSeconds:hr,goodSeconds:good,ratio:hr?good/hr:-1,stationary:still,shortStill:shortStill,
       temperature:reading?reading.c:undefined,tempAt:reading?reading.ms:undefined,tempRate:trend.slope(),
       offReason:known==="off"?offReason:undefined,delta:phase?phase.delta:undefined,allowTemp:!charging&&ms>=ignoreUntil,motionEdge:movingFrom===ms,fastTemp:fast||trend.inspecting(ms),needsProbe:needsProbe,episode:phase?phase.at:-1};
@@ -319,14 +333,21 @@ function create(options){
   var wakeG2=Math.pow(Math.max(0.15,5*tracker.config.noiseG),2);
   function updateWear(ms) {
     var tick=Math.floor(ms/10000);
-    if(lastWindow&&tick===wearAt)return lastWindow;
-    var d=tracker.result(ms);lastWindow=d;
-    if(tick!==wearAt) {
-      var dt=wearAt>=0?Math.max(0,Math.min(10000,(tick-wearAt)*10000)):0;
-      if(d.seconds>=54) {wearSeen+=dt;if(d.state==="off_candidate"){wearOff+=dt;if(!wearReason||d.reason!=="nonwear_held_window")wearReason=d.offReason||d.reason;}if(d.state==="hr_error")wearError+=dt;}
-      wearAt=tick;
+    if(!lastWindow||tick!==wearAt){
+      lastWindow=tracker.result(ms);wearAt=tick;
     }
-    return d;
+    return lastWindow;
+  }
+  function addCoverage(dt,window){
+    covered+=dt;
+    if(!wearEnabled||!window)return;
+    if(window.state==="off_candidate"){
+      wearOff+=dt;wearSeen+=dt;
+      wearReason=window.offReason||wearReason||window.reason;
+    }else if(window.seconds>=54){
+      wearSeen+=dt;
+      if(window.state==="hr_error")wearError+=dt;
+    }
   }
   function wearLevel(ok,percent) {
     if(!ok)return NO_DATA;
@@ -451,17 +472,17 @@ function create(options){
     if(!continuous){
       // Equal timestamps are possible when a boundary timer and accelerometer
       // event coincide; only a genuine gap/rewind invalidates the held state.
-      if(lastMs!==undefined&&(!valid||dt>MAX_GAP_MS||dt<0)){paused=false;resumeUntil=ms+10000;}
+      if(lastMs!==undefined&&(!valid||dt>MAX_GAP_MS||dt<0)){paused=false;resumeUntil=ms+10000;lastWindow=undefined;}
       if(target!==current)roll(ms);
       resetPeak();
     }else if(target===current){
-      covered+=dt; // Common case: no rollover or extra loop per sensor event.
+      addCoverage(dt,lastWindow);
     }else{
       // A valid interval can cross only one 5-minute boundary (dt<=2.5 s).
-      var boundary=target*SLOT_MS;
-      if(current>=0&&target===current+1)covered+=boundary-lastMs;
+      var boundary=target*SLOT_MS,priorWindow=lastWindow;
+      if(current>=0&&target===current+1)addCoverage(boundary-lastMs,priorWindow);
       roll(ms);
-      covered+=ms-boundary;
+      addCoverage(ms-boundary,priorWindow);
     }
     if(valid){
       tracker.sample(a,ms);var window=updateWear(ms),wasPaused=paused;
@@ -592,22 +613,22 @@ function install(bangle,storage,events,clock,observe,hardware) {
     if(!settings||settings.restDebug===false||!storage.open)return;
     try{
       var ms=clock(),utc=new Date(ms).toISOString(),day=utc.slice(0,10);
-      var name="orbit-debug-"+day+".csv";
+      var name="orbit-debug-"+day+".v2.csv";
       if(!debugFile||day!==debugDay){
         var names=storage.list(/^orbit-debug-/, {sf:true}).filter(function(n){
-          return /^orbit-debug-[0-9]{4}-[0-9]{2}-[0-9]{2}\.csv$/.test(n)&&n!==name;
+          return /^orbit-debug-[0-9]{4}-[0-9]{2}-[0-9]{2}(\.v2)?\.csv$/.test(n)&&n!==name;
         }).sort();
         while(names.length>2)storage.open(names.shift(),"r").erase();
         debugFile=storage.open(name,"a");debugBytes=debugFile.getLength();debugDay=day;
       }
       var w=d&&d.window||{},bin=d||{},code=bin.result;
-      var values=[utc,event,"0.120",d?new Date(d.bucket*SLOT_MS).toISOString():"",
+      var values=[utc,event,"0.121",d?new Date(d.bucket*SLOT_MS).toISOString():"",
         bin.coverageSec,bin.activityCoverageSec,bin.activity,bin.activity300,bin.peaks,
         w.noiseG,w.driftG,w.stationary,w.shortStill,w.temperature,w.tempAt,w.tempRate,w.delta,
         w.hrSeconds,w.goodSeconds,bin.confidence,bin.wearSeconds,w.state,w.reason,
         code,code<=100?stageFor(code):"",bin.reason,lastStatus+(lastOptical?" / "+lastOptical:"")];
-      var line=values.join(",")+","+debugProfile+"\n";
-      if(!debugBytes)line="utc,event,version,bin_start_utc,coverage_s,activity_coverage_s,peak_sum_g,scaled_sum_g,peaks,noise_rms_g,pose_rms_g,still60,still10,case_c,temp_ms,rate_c_min,delta_c,hr_s,good_hr_s,max_conf_pct,off_s,window_state,window_reason,result_code,rest_level,result_reason,last_probe,peak_gate_g,T1,T2,T3,T4,T5,noise_limit_g,pose_limit_g,temp_limit_c,confidence_limit_pct,absent_ratio,probe_s,eco,wear_enabled,hold\n"+line;
+      var line=values.join(",")+","+debugProfile+","+[w.seconds,w.shortSeconds,bin.pausedSec].join(",")+"\n";
+      if(!debugBytes)line="utc,event,version,bin_start_utc,coverage_s,activity_coverage_s,peak_sum_g,scaled_sum_g,peaks,noise_rms_g,pose_rms_g,still60,still10,case_c,temp_ms,rate_c_min,delta_c,hr_s,good_hr_s,max_conf_pct,off_s,window_state,window_reason,result_code,rest_level,result_reason,last_probe,peak_gate_g,T1,T2,T3,T4,T5,noise_limit_g,pose_limit_g,temp_limit_c,confidence_limit_pct,absent_ratio,probe_s,eco,wear_enabled,hold,valid_s60,valid_s10,paused_s\n"+line;
       if(debugBytes+line.length>131072){debugStatus="Daily limit";return;}
       if(storage.getFree()<69632){debugStatus="Low storage";return;}
       debugFile.write(line);debugBytes+=line.length;debugStatus="Recording";
@@ -949,7 +970,8 @@ function restProfile(base,override){
     restWearEnabled:wear.enabled,restWearHold:wear.hold,restWearThreshold:wear.z,
     restProbeSeconds:wear.seconds,restPulseConfidence:wear.confidence,restEco:s.restEco!==false,restPowerVersion:1,restAlgorithmVersion:4,restScaleVersion:6};
   var wc=wearThresholds(s);
-  result.restWearNoiseG=wc.noiseG;result.restWearDriftG=wc.driftG;result.restThermalVersion=1;result.restTempDeltaC=wc.tempDelta;result.restAbsentRatio=wc.absentRatio;
+  result.restWearNoiseG=wc.noiseG;result.restWearDriftG=wc.driftG;result.restThermalVersion=1;result.restSamplingVersion=2;
+  result.restTempDeltaC=wc.tempDelta;result.restAbsentRatio=wc.absentRatio;
   return result;
 }
 

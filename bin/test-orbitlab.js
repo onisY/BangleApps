@@ -90,7 +90,7 @@ function replay(text) {
   const settings=profile ? JSON.parse(decodeURIComponent(profile[2])) : {};
   if(settings.restSleepGuard===undefined)settings.restSleepGuard=false;
   const isThermal=settings.restThermalVersion===1;
-  const e=isThermal?thermal.wearTracker(settings):candidate.create(settings);
+  const e=isThermal?thermal.wearTracker(settings,undefined,settings.restSamplingVersion!==2):candidate.create(settings);
   const ordered = rows.filter(r => ['accel','hrm','charging','temperature','probe','probe_off','hr_error','check'].includes(r[1])).sort((a,b) => +a[0]-b[0]);
   let next = Math.ceil(+ordered[0][0] / 10000) * 10000;
   const results = [];

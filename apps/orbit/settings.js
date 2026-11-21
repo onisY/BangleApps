@@ -2,7 +2,7 @@
 (function(back){
   var Storage=require("Storage");
   // Read-only version display: title is not a selectable button.
-  var VERSION="0.120";
+  var VERSION="0.121";
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
   var REST_ACTIVITY_DEFAULTS=[0.1,3,60,200,500];
   // Bangle.js 2 has a 3-bit colour screen (8 actual dial colours).
@@ -844,6 +844,7 @@
     var win=d&&d.window;
     m["Window"]=readOnly(win?win.state:"--");
     m["Window reason"]=readOnly(win?(reasons[win.reason]||win.reason):"--");
+    m["Valid secs 60/10"]=readOnly(win?win.seconds+"/"+win.shortSeconds:"--");
     m["Case temp"]=readOnly(win&&isFinite(win.temperature)?win.temperature.toFixed(2)+" C":"--");
     m["Temp rate"]=readOnly(win&&isFinite(win.tempRate)?win.tempRate.toFixed(2)+" C/min":"--");
     m["Noise RMS"]=readOnly(win?win.noiseG.toFixed(4)+" g":"--");

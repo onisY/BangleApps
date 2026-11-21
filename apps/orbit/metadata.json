@@ -2,7 +2,7 @@
   "id": "orbit",
   "name": "tenkyu",
   "shortName": "tenkyu",
-  "version": "0.120",
+  "version": "0.121",
   "author": "onisY",
   "description": "Sun-Earth-Moon clock with solar eclipses, motion, pulse and case-temperature wear detection, battery-level charging bars and HRM probe-retry diagnostics.",
   "icon": "app.png",

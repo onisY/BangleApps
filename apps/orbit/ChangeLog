@@ -42,3 +42,4 @@ Pages rebuild after enabling Actions.
 0.118: Retry rest history on each full redraw and recognize brief placement movements between wear checks.
 0.119: Export independent bounded five-minute diagnostic CSV logs and protect unreadable history.
 0.120: Detect a stationary, already-removed watch during an existing HRM probe when optical proximity repeatedly indicates no contact. Show the optical reading in Last check and the diagnostic CSV.
+0.121: Count observed unworn intervals in five-minute history at irregular accelerometer sampling rates.

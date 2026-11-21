@@ -7,7 +7,7 @@ function onInit(){
   const box=document.getElementById("files");
   Puck.eval('require("Storage").list(/^orbit-debug-/, {sf:true})',function(names){
     if(!Array.isArray(names)){box.textContent="時計に接続して開き直してください。";return;}
-    names=names.filter(n=>/^orbit-debug-\d{4}-\d{2}-\d{2}\.csv$/.test(n)).sort().reverse();
+    names=names.filter(n=>/^orbit-debug-\d{4}-\d{2}-\d{2}(\.v2)?\.csv$/.test(n)).sort().reverse();
     box.textContent=names.length?"":"保存済みのログはありません。";
     names.forEach(function(name){
       const button=document.createElement("button");

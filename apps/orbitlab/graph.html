@@ -62,7 +62,7 @@ async function redraw() {
     profile.restTempDeltaC=+tempInput.value;
     // Files before Lab 0.06 used the acceleration/HR classifier at all hours.
     if(!thermal && profile.restSleepGuard===undefined)profile.restSleepGuard=false;
-    const trial=thermal?TenkyuRest.wearTracker(profile):RestLabCandidate.create(profile), comparison=[];
+    const trial=thermal?TenkyuRest.wearTracker(profile,undefined,profile.restSamplingVersion!==2):RestLabCandidate.create(profile), comparison=[];
     const loggedTicks=thermal&&samples.some(r=>r[1]==="check");
     const ordered=samples.filter(r=>["accel","hrm","charging","temperature","probe","probe_off","hr_error","check"].includes(r[1])).sort((a,b)=>+a[0]-b[0]);
     let nextAccel=0;

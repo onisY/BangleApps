@@ -1,6 +1,6 @@
-# tenkyu Rest Lab v0.10
+# tenkyu Rest Lab v0.11
 
-Bangle.js 2の独立診断アプリです。tenkyu v0.120と同じ安静・非装着判定を使います。[自用App Loader](https://onisy.github.io/BangleApps/?id=orbitlab&dev_id=BANGLEJS2)
+Bangle.js 2の独立診断アプリです。tenkyu v0.121と同じ安静・非装着判定を使います。[自用App Loader](https://onisy.github.io/BangleApps/?id=orbitlab&dev_id=BANGLEJS2)
 
 1. Rest Labを開き、HRM continuous、Minutesを選び、Start recordingで開始します。
 2. Stop、時間満了、アプリ終了、空き容量128 KiB未満で停止します。

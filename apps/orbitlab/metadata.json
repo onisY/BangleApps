@@ -2,7 +2,7 @@
   "id": "orbitlab",
   "name": "tenkyu Rest Lab",
   "shortName": "Rest Lab",
-  "version": "0.10",
+  "version": "0.11",
   "author": "onisY",
   "description": "Record acceleration, case temperature, pulse confidence and tenkyu wear decisions for local graphing.",
   "icon": "app.png",

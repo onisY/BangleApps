@@ -4,7 +4,7 @@ const fs = require("fs"), vm = require("vm"), path = require("path");
 const {EventEmitter} = require("events");
 const code = fs.readFileSync(path.join(__dirname,"../apps/orbit/rest.js"),"utf8");
 const start = Date.parse("2026-11-20T03:00:00+09:00");
-function device({origin=start, powerFails=false, noPressure=false, delay=500, profile={}, stored}={}) {
+function device({origin=start, powerFails=false, noPressure=false, delay=500, profile={}, stored, sampleAt=()=>true}={}) {
   let now=origin, clockId=0, charging=false, leases=new Set(), timers=new Map();
   let xyz=()=>({x:0,y:0,z:1}), caseC=()=>30, pulse=()=>false;
   const b=new EventEmitter(), events=new EventEmitter(), records=[], marks=[], reads=[], powers=[];
@@ -46,7 +46,7 @@ function device({origin=start, powerFails=false, noPressure=false, delay=500, pr
     run(end){
       const target=origin+end*1000;
       for(let t=processed+1;t<=end*5;t++){
-        advance(origin+t*200);b.emit("accel",xyz(t/5));
+        advance(origin+t*200);if(sampleAt(t*200))b.emit("accel",xyz(t/5));
         if(t%5===0&&pulse(t/5))b.emit("HRM",{bpm:70,confidence:99});
       }
       processed=end*5;advance(target);
@@ -71,6 +71,29 @@ function optical(sim,chip,mode,detect=true){
 // Start on a stationary surface with ordinary accelerometer noise, no placement
 // event and no temperature change. Exercise both native sensor variants.
 const quiet=t=>({x:.014*Math.sin(10*t),y:.003*Math.cos(t),z:1});
+// A full five-minute bin can have nearly continuous XYZ coverage but fewer
+// than 54 dense one-second summaries. Its last ten seconds can still be quiet.
+function intermittent(ms){
+  if(ms<120000)return true;
+  const slot=ms%300000;
+  if(slot>=36000&&slot<39600)return false;
+  return ms%30000>=20000||ms%800===0;
+}
+const mixedCadence=device({sampleAt:intermittent});
+optical(mixedCadence,0x21,()=>0xc4);mixedCadence.signal(quiet,()=>25,()=>false);
+mixedCadence.run(900);
+const steady=mixedCadence.service.getDiagnostics().recent.slice(1);
+for(const bin of steady){
+  assert(bin.coverageSec>=294&&bin.coverageSec<300);
+  assert.equal(bin.result,254,JSON.stringify({coverage:bin.coverageSec,peakCoverage:bin.activityCoverageSec,
+    off:bin.wearSeconds,reason:bin.reason,window:bin.window.reason}));
+  assert(bin.wearSeconds>=270&&bin.wearSeconds<=bin.coverageSec);
+}
+assert.equal(mixedCadence.powers.filter(p=>p[1]).length,1);
+const markerPixels=[];
+mixedCadence.service.draw({setColor:c=>assert.equal(c,0xffff),setPixel:(x,y)=>markerPixels.push([x,y]),
+  drawLine:()=>assert.fail("only white tip markers expected")},{nowMs:start+900000,radiusPx:60,maxHeightPx:10,cx:88,cy:88,currentAngleRad:0});
+assert.equal(markerPixels.length,8,"two pixels for each of three completed bins and the live marker");
 const unconfirmed=device();unconfirmed.signal(quiet,()=>22,()=>false);unconfirmed.run(300);
 assert.equal(unconfirmed.service.getDiagnostics().recent.at(-1).result,60,"stationary noise alone can produce rest level 3");
 for(const [chip,off,celsius] of [[0x11,0xa3,22],[0x21,0xc4,37]]){
