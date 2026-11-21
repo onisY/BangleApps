@@ -1,4 +1,4 @@
-/* tenkyu 0.121 (orbit storage) */
+/* tenkyu 0.122 (orbit storage) */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbit.json";
@@ -84,7 +84,7 @@
   // Once per 5-minute slot, cache day/night for the 288 recorded bars.
   // One local-day sunrise/sunset estimate; reused for all 288 rest bins.
   var restSunDay=-1,restSunPolar=0;
-  var captureDay,captureSun,captureAttempt=0;
+  var midnightTimer, capturedDay, tipPixels=new Uint16Array(578),tipCount=0;
   var REST_ENABLED=cfg.restEnabled!==false;
   var REST_MAX_HEIGHT=Math.max(1,Math.min(14,isFinite(cfg.restBarHeight)?cfg.restBarHeight|0:10));
   var restService,restRetry=false;
@@ -923,32 +923,35 @@
     return {polar:0,rise:solarNoon-halfDay,set:solarNoon+halfDay};
   }
 
-  // Run only after a complete frame has been flushed. Ordinary full
-  // redraws come every five minutes, so use a five-minute capture window.
-  function captureSolarFrame(){
-    if(selectedDayOffset!==0||typeof g.asBMP!=="function"||!Bangle.isLCDOn())return;
-    var now=Date.now(),dayMs=86400000;
-    // Anchor the cache to the chosen longitude, even when the watch is
-    // set to a time zone far from that location. Use the previous five
-    // minutes to also cover an event just before mean solar midnight.
-    var longitudeOffset=TESTLON*240000;
-    var day=Math.floor((now+longitudeOffset-300000)/dayMs);
-    if(day!==captureDay){
-      captureDay=day;
-      captureSun=sunEvents(day*dayMs+43200000-longitudeOffset);
-      captureAttempt=0;
+  function two(n){return ("0"+n).slice(-2);}
+  function saveFrame(manual){
+    if(typeof g.asBMP!=="function")return;
+    var d=new Date(),day=d.getFullYear()+"-"+two(d.getMonth()+1)+"-"+two(d.getDate());
+    if(!manual&&(d.getHours()!==0||d.getMinutes()!==0||capturedDay===day))return;
+    var stem="orbit-"+day+"-"+(manual?two(d.getHours())+two(d.getMinutes())+two(d.getSeconds()):"midnight");
+    var name=stem+".bmp",i=0;
+    while(Storage.read(name,0,1)!==undefined){
+      if(!manual){capturedDay=day;return;}
+      name=stem+"-"+(++i)+".bmp";
     }
-    if(captureSun.polar)return;
-    var event=now>=captureSun.set&&now-captureSun.set<=300000?2:
-      now>=captureSun.rise&&now-captureSun.rise<=300000?1:0;
-    if(!event||(captureAttempt&event))return;
-    captureAttempt|=event;
-    var name="orbit-"+new Date(day*dayMs).toISOString().substr(0,10)+
-      (event===1?"-rise.bmp":"-set.bmp");
-    // Keep earlier captures and leave room for settings and rest history.
-    if(Storage.read(name)!==undefined)return;
     var bmp=g.asBMP();
-    if(bmp&&Storage.getFree()>=bmp.length+65536)Storage.write(name,bmp);
+    if(bmp&&Storage.getFree()>=bmp.length+65536&&Storage.write(name,bmp)!==false&&!manual)capturedDay=day;
+  }
+  function armMidnight(){
+    var d=new Date();
+    d=new Date(d.getFullYear(),d.getMonth(),d.getDate()+1);
+    midnightTimer=setTimeout(function(){
+      if(killed)return;
+      if(mode==="tenkyu"&&!busy&&selectedDayOffset===0)drawBase();
+      else if(!busy)try{saveFrame(false);}catch(e){perf.captureError=String(e);}
+      armMidnight();
+    },Math.max(1,d.getTime()-Date.now()+25));
+  }
+  function queueTip(x,y){if(x>=0&&x<W&&y>=0&&y<H&&tipCount<tipPixels.length)tipPixels[tipCount++]=(y<<8)|x;}
+  function paintTips(){
+    if(!tipCount)return;
+    g.setColor(WHITE);
+    for(var i=0;i<tipCount;i++)g.setPixel(tipPixels[i]&255,tipPixels[i]>>8);
   }
 
   // Convert the day's sunrise and sunset to absolute five-minute
@@ -981,7 +984,8 @@
   function drawRestHistory(sol){
     var now=Date.now();
     try{restService.sync(now);}catch(e){restRetry=true;perf.restSyncError=String(e);}
-    var args={nowMs:now,radiusPx:MOONORBIT,
+    tipCount=0;
+    var args={queueTip:queueTip,nowMs:now,radiusPx:MOONORBIT,
       maxHeightPx:REST_MAX_HEIGHT,cx:EARTHX,cy:EARTHY,south:VIEW_SOUTH,
       currentAngleRad:SUNANG+(VIEW_SOUTH?sol.ha:-sol.ha),
       dayBuckets:prepareRestDayBuckets(now),perf:perf.restParts};
@@ -1072,7 +1076,7 @@
           drawLocationStatus(moon);drawDateTime(moon);
           paintHeader();
         }
-        try{g.flip();if(step===2)captureSolarFrame();}catch(e){}
+        try{if(step===2)paintTips();g.flip();if(step===2)saveFrame(false);}catch(e){}
         perf.staged["stage"+step]=Date.now()-stageStart;
         step++;
         if(step<3)renderTimer=setTimeout(nextLayer,12);
@@ -1111,7 +1115,7 @@
     var sol=safeSolar();
     var ok=powerDraw.draw(g,chargePatch,function(){drawRest(sol);},function(){
       drawLocationStatus(chargePatch.moon);drawDateTime(chargePatch.moon);
-    },function(){drawTimeOnly();try{Bangle.drawWidgets();}catch(e){}drawHeaderClock();});
+    },function(){drawTimeOnly();try{Bangle.drawWidgets();}catch(e){}drawHeaderClock();paintTips();});
     if(ok)lastClockMinute=Math.floor(Date.now()/60000);
     else chargePatch=undefined;
     return ok;
@@ -1148,7 +1152,7 @@
     drawDateTime(moon);
     try{Bangle.drawWidgets();}catch(e){}
     drawHeaderClock();
-    try{g.flip();captureSolarFrame();}catch(err){}
+    try{paintTips();g.flip();saveFrame(false);}catch(err){}
     endPerf(perf.full,perfStart);
     perf.count++;
   }
@@ -1333,6 +1337,7 @@
 
   function onSwipe(lr,ud){
     if(killed)return;
+    if(ud>0){clearTaps();try{saveFrame(true);}catch(e){perf.captureError=String(e);}return;}
     if(mode==="calendar"&&calendar)calendar.swipe(lr,ud);
   }
 
@@ -1406,7 +1411,7 @@
             if(!drawChargeOnly())drawBase();
           }else if(Math.floor(Date.now()/60000)!==lastClockMinute){
             lastClockMinute=Math.floor(Date.now()/60000);
-            drawTimeOnly();try{g.flip();}catch(e){}
+            drawTimeOnly();paintTips();try{g.flip();}catch(e){}
           }
         }catch(e){recoverFrame(e);}
         armMinute();
@@ -1430,7 +1435,7 @@
 
   function cleanup(){
     if(killed)return;
-    killed=true;clear(restRedrawTimer);chargePatch=undefined;powerDraw=undefined;
+    killed=true;clear(midnightTimer);clear(restRedrawTimer);chargePatch=undefined;powerDraw=undefined;
     clear(transitionTimer);transitionTimer=undefined;
     stopOrbitTimers();cancelProgressive();
     if(eclipseDisplay)eclipseDisplay.reset();
@@ -1464,6 +1469,7 @@
   try{Bangle.setLocked(false);}catch(e){}
   drawProgressively();
   armMinute();
+  armMidnight();
   armIdle(); // Also enforce a finite timeout when the system timeout is zero.
 })();
 

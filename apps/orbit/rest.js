@@ -622,7 +622,7 @@ function install(bangle,storage,events,clock,observe,hardware) {
         debugFile=storage.open(name,"a");debugBytes=debugFile.getLength();debugDay=day;
       }
       var w=d&&d.window||{},bin=d||{},code=bin.result;
-      var values=[utc,event,"0.121",d?new Date(d.bucket*SLOT_MS).toISOString():"",
+      var values=[utc,event,"0.122",d?new Date(d.bucket*SLOT_MS).toISOString():"",
         bin.coverageSec,bin.activityCoverageSec,bin.activity,bin.activity300,bin.peaks,
         w.noiseG,w.driftG,w.stationary,w.shortStill,w.temperature,w.tempAt,w.tempRate,w.delta,
         w.hrSeconds,w.goodSeconds,bin.confidence,bin.wearSeconds,w.state,w.reason,
@@ -875,10 +875,11 @@ function draw(graphics,engine,map){
     var x=Math.round(map.cx+outer*cc),y=Math.round(map.cy+outer*ss);
     if(mode<4)return;
     graphics.setColor(0xFFFF);
-    graphics.setPixel(x,y);
+    var put=map.queueTip||function(px,py){graphics.setPixel(px,py);};
+    put(x,y);
     // Place the adjacent pixel along the orbit, keeping the marker at the tip.
-    if(Math.abs(cc)>=Math.abs(ss))graphics.setPixel(x,y+(cc>=0?1:-1));
-    else graphics.setPixel(x+(ss>=0?-1:1),y);
+    if(Math.abs(cc)>=Math.abs(ss))put(x,y+(cc>=0?1:-1));
+    else put(x+(ss>=0?-1:1),y);
   }
   function drawCharging(cc,ss,pct){
     var outer=r+height*pct/100;

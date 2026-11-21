@@ -109,7 +109,7 @@ function appHarness(enabled,iso,options={}){
       log.push({op:k,args:a,color});return g;
     }});
   class Clock extends Date{constructor(...a){super(...(a.length?a:[now]));}static now(){return now;}}
-  const bangle={orbitRest:options.rest,setGPSPower:()=>{},setUI:()=>{},loadWidgets:()=>{},drawWidgets:()=>{},
+  const bangle={orbitRest:options.rest,setGPSPower:()=>{},setUI:ui=>{if(ui)events.swipe=ui.swipe;},loadWidgets:()=>{},drawWidgets:()=>{},
     setLocked:()=>{},setBacklight:()=>{},isLCDOn:()=>options.lcdOn!==false,on:(n,f)=>events[n]=f,removeListener:()=>{},showLauncher:()=>{}};
   const context={g,Bangle:bangle,Date:Clock,require:n=>{assert(n==="Storage");return storage;},
     E:{on:(n,f)=>events[n]=f,removeListener:()=>{}},setTimeout:(f,ms)=>{timers.set(++nextId,{f,ms});return nextId;},
@@ -174,31 +174,18 @@ for(let i=0;i<2;i++){
 }
 assert.equal(frames,3);
 assert(morningHistory.perf.restParts.bars>=120,"ordinary overnight bars and non-wear history recovered");
-// Tokyo geometric events on March 20, with the test watch running in UTC.
-const tokyo={lat:35.69,lon:139.75};
-const morning="2026-03-19T20:53:00Z",evening="2026-03-20T08:50:00Z";
-const rise=appHarness(false,morning,tokyo);
-assert.deepStrictEqual(Object.keys(rise.captures),["orbit-2026-03-20-rise.bmp"]);
-assert.strictEqual(rise.log.filter(e=>e.op==="asBMP").length,1);
-const bitmapAt=rise.log.findIndex(e=>e.op==="asBMP");
-assert.strictEqual(rise.log[bitmapAt-1].op,"flip");
-assert.strictEqual(rise.log.slice(0,bitmapAt).filter(e=>e.op==="flip").length,4);
-const reopened=appHarness(false,morning,{...tokyo,captures:rise.captures});
-assert(!reopened.log.some(e=>e.op==="asBMP"),"A reload must not overwrite a capture");
-const sunset=appHarness(false,evening,{...tokyo,captures:rise.captures});
-assert.deepStrictEqual(Object.keys(sunset.captures),["orbit-2026-03-20-rise.bmp","orbit-2026-03-20-set.bmp"]);
-const running=appHarness(false,"2026-03-19T20:50:00Z",tokyo);
-assert.deepStrictEqual(running.captures,{});
-const scheduled=[...running.timers].find(([,timer])=>timer.ms>59000);
-assert(scheduled);
-running.timers.delete(scheduled[0]);
-running.advance(5*60000);
-scheduled[1].f();
-assert.deepStrictEqual(Object.keys(running.captures),["orbit-2026-03-20-rise.bmp"]);
-assert.deepStrictEqual(appHarness(false,morning,{...tokyo,free:65000}).captures,{});
-assert.deepStrictEqual(appHarness(false,morning,{...tokyo,lcdOn:false}).captures,{});
-assert.deepStrictEqual(appHarness(false,"2026-03-20T03:00:00Z",tokyo).captures,{});
-assert.deepStrictEqual(appHarness(false,"2026-06-21T12:00:00Z",{lat:90,lon:0}).captures,{});
+const midnight=appHarness(false,"2026-03-20T00:00:00");
+assert.deepEqual(Object.keys(midnight.captures),["orbit-2026-03-20-midnight.bmp"]);
+midnight.events.swipe(0,1);midnight.events.swipe(0,1);
+assert.equal(Object.keys(midnight.captures).length,3);
+const evening=appHarness(false,"2026-03-20T18:00:00");
+assert.deepEqual(evening.captures,{});
+evening.events.swipe(0,-1);assert.deepEqual(evening.captures,{});
+const night=appHarness(false,"2026-03-20T23:59:30",{lcdOn:false});
+night.events.lcdPower(false);
+const daily=[...night.timers.values()].find(t=>t.ms===30025);
+night.advance(30025);daily.f();
+assert.deepEqual(Object.keys(night.captures),["orbit-2026-03-21-midnight.bmp"]);
 const app=appHarness(true,refs[1].date);
 assert(app.timers.size>=2); // Clock timer plus finite idle/backlight timer.
 // Red outer Moon rim must appear while an eclipse is active anywhere on Earth.
@@ -243,10 +230,10 @@ const lastShadow=app.log.reduce((last,x,i)=>x.op==="setPixel"&&x.color===0?i:las
 const red=app.log.findIndex(x=>x.op==="fillCircle"&&x.color===0xF800&&x.args[2]===2);
 assert(lastShadow>=0&&red>lastShadow);
 assert(app.log.slice(lastShadow+1,red).some(x=>x.op==="fillPoly"&&[0x07E0,0xFFE0].includes(x.color)));
-const timer=[...app.timers.values()].find(t=>t.ms>10000);
+const timer=[...app.timers.values()].find(t=>t.ms>10000&&t.ms<=30025);
 assert(timer&&timer.ms<=30025);
 app.timers.clear();app.advance(30000);timer.f();assert(app.timers.size===1);
-app.events.lcdPower(false);assert(app.timers.size===0);
+app.events.lcdPower(false);assert.equal(app.timers.size,0);
 const off=appHarness(false,refs[1].date);assert(!off.reads.some(n=>n.startsWith("orbit.ecl")));
 assert.strictEqual(redMoonRims(off).length,0);
 assert([...off.timers.values()][0].ms>30000);
