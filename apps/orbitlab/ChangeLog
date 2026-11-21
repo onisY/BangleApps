@@ -7,3 +7,4 @@
 0.07: Record case temperatures, signed rates, probe observations and thermal wear decisions. Plot and replay both thermal and historical recordings.
 0.08: Match the clock classifier for short placement movements.
 0.09: Synchronise the shared recorder; lab sessions keep their own output.
+0.10: Record and replay optical no-contact evidence for tenkyu 0.120.

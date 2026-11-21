@@ -58,6 +58,65 @@ function device({origin=start, powerFails=false, noPressure=false, delay=500, pr
 }
 const moving=t=>({x:0.55*Math.sin(t*2),y:0.25*Math.sin(t/3),z:0.9});
 const desk=()=>({x:0,y:0,z:1});
+function optical(sim,chip,mode,detect=true){
+  let reads=0;
+  sim.b.getOptions=()=>({hrmWearDetect:detect});
+  sim.b.hrmRd=reg=>{
+    assert(sim.active(),"optical status requires an existing HRM power request");
+    if(reg===0)return chip;
+    assert.equal(reg,chip===0x11?0x20:0x10);
+    return mode(++reads);
+  };
+}
+// Start on a stationary surface with ordinary accelerometer noise, no placement
+// event and no temperature change. Exercise both native sensor variants.
+const quiet=t=>({x:.014*Math.sin(10*t),y:.003*Math.cos(t),z:1});
+const unconfirmed=device();unconfirmed.signal(quiet,()=>22,()=>false);unconfirmed.run(300);
+assert.equal(unconfirmed.service.getDiagnostics().recent.at(-1).result,60,"stationary noise alone can produce rest level 3");
+for(const [chip,off,celsius] of [[0x11,0xa3,22],[0x21,0xc4,37]]){
+  const sim=device();
+  optical(sim,chip,()=>off);sim.signal(quiet,()=>celsius,()=>false);
+  assert.equal(sim.run(89).state,"wear_uncertain");
+  assert.equal(sim.run(90).reason,"optical_no_contact");
+  assert.deepEqual(sim.marks,[[90,true]]);
+  assert.deepEqual(sim.powers,[[60,1,"orbitrest"],[90,0,"orbitrest"]]);
+  assert(sim.records.some(r=>r[1]==="probe_off"));
+  let color;const dots=[];
+  const graphics={setColor:c=>{color=c;},setPixel:(x,y)=>dots.push([x,y,color]),drawLine:()=>assert.fail("unexpected bar")};
+  const map={nowMs:start+90000,radiusPx:60,maxHeightPx:10,cx:88,cy:88,currentAngleRad:-Math.PI/2};
+  sim.service.draw(graphics,map);
+  assert.deepEqual(dots,[[88,18,65535],[89,18,65535]]);
+  sim.run(300);const bin=sim.service.getDiagnostics().recent.at(-1);
+  assert.equal(bin.result,254);assert.equal(bin.reason,"optical_no_contact");
+  assert(sim.service.getDiagnostics().lastOptical.includes("20s"));
+  dots.length=0;sim.service.draw(graphics,Object.assign({},map,{nowMs:start+300000}));
+  assert.equal(dots.length,4,"two white pixels each for the saved and live intervals");
+  sim.signal(moving,()=>celsius,()=>true);assert.equal(sim.run(340).reason,"sustained_pulse");
+}
+// No usable status, pulse sampling still on, an isolated reading or loss of
+// contact that does not persist through the end of the probe are insufficient.
+for(const [chip,mode,enabled] of [
+  [0x21,()=>0xc5,true],[0x11,()=>0xe3,true],[0x32,()=>0xc4,true],
+  [0x21,()=>0xc4,false],[0x21,()=>0xff,true],[0x21,()=>0x04,true],
+  [0x11,()=>0,true],[0x21,()=>{throw Error("read");},true],
+  [0x21,i=>i===3?0xc4:0xc5,true],[0x21,i=>i===2?0xc5:0xc4,true],
+  [0x21,i=>i===3?0xc5:0xc4,true]
+]){
+  const sim=device();optical(sim,chip,mode,enabled);
+  assert.equal(sim.run(100).state,"wear_uncertain");assert.deepEqual(sim.marks,[]);
+  assert(!sim.records.some(r=>r[1]==="probe_off"));
+}
+for(const t of [42,72]){
+  const conflict=device({profile:{restPulseConfidence:75}});
+  optical(conflict,0x21,()=>0xc4);conflict.run(t);
+  // Two events in one second: a credible pulse before or during the probe vetoes it.
+  conflict.b.emit("HRM",{bpm:64,confidence:80});conflict.b.emit("HRM",{bpm:64,confidence:1});
+  assert.equal(conflict.run(100).state,"wear_uncertain");assert.deepEqual(conflict.marks,[]);
+}
+const interrupted=device();optical(interrupted,0x21,()=>0xc4);
+interrupted.signal(t=>t<75?desk():moving(t),()=>25,()=>false);
+assert.equal(interrupted.run(100).state,"motion");assert.deepEqual(interrupted.marks,[]);
+assert(!interrupted.records.some(r=>r[1]==="probe_off"));
 function scenario(sign,opts={},slope=0.008){
   const sim=device(opts);
   sim.signal(t=>t<140&&t>=60?moving(t):desk(),
@@ -104,11 +163,14 @@ assert.equal(plateau.run(265).state,"off_candidate","a fast metal-surface step c
 const spike=device();
 spike.signal(t=>t>=60&&t<140?moving(t):desk(),t=>t>=150&&t<155?32:30,t=>t<130);
 assert.equal(spike.run(400).state,"wear_held","a bad first burst sample must not set a false baseline");
-let d=scenario(0);assert.equal(d.run(1200).state,"wear_held");assert(!d.marks.some(m=>m[1]));
+let d=scenario(0);optical(d,0x21,()=>0xc4);
+assert.equal(d.run(1200).state,"wear_held");assert(!d.marks.some(m=>m[1]));
 assert(d.reads.length<24,"fast measurements must stop while sleeping");
 assert(d.powers.filter(p=>p[1]).length<=3,"HRM must not run repeatedly for the same quiet sleep episode");
 const snapshot=d.service.getEngine().snapshot();
 let restart=device({origin:start+1201000,stored:snapshot});assert.equal(restart.run(80).state,"wear_held");
+optical(restart,0x21,()=>0xc4);
+assert.equal(restart.run(420).state,"wear_held");assert.deepEqual(restart.marks,[]);
 assert.equal(restart.service.getEngine().getWear(start).state,"wear_held","older diagnostic cannot rewind");
 restart=device({origin:start+3600000,stored:snapshot});assert.equal(restart.run(80).state,"wear_uncertain");
 d=scenario(1,{powerFails:true});assert.equal(d.run(210).state,"hr_error");assert(!d.run(300).reason.startsWith("thermal_warm"));assert.deepEqual(d.marks,[]);

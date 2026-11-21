@@ -91,7 +91,7 @@ function replay(text) {
   if(settings.restSleepGuard===undefined)settings.restSleepGuard=false;
   const isThermal=settings.restThermalVersion===1;
   const e=isThermal?thermal.wearTracker(settings):candidate.create(settings);
-  const ordered = rows.filter(r => ['accel','hrm','charging','temperature','probe','hr_error','check'].includes(r[1])).sort((a,b) => +a[0]-b[0]);
+  const ordered = rows.filter(r => ['accel','hrm','charging','temperature','probe','probe_off','hr_error','check'].includes(r[1])).sort((a,b) => +a[0]-b[0]);
   let next = Math.ceil(+ordered[0][0] / 10000) * 10000;
   const results = [];
   for (const r of ordered) {
@@ -101,7 +101,7 @@ function replay(text) {
     if (r[1] === 'hrm') e.hrm({bpm: +r[5], confidence: +r[6]}, ms);
     if (r[1] === 'charging') e.setCharging(+r[2],ms);
     if(r[1]==='temperature')e.temperature(+r[7],ms);
-    if(r[1]==='probe')e.probeDone(+r[8],ms);
+    if(r[1]==='probe'||r[1]==='probe_off')e.probeDone(+r[8],ms,r[1]==='probe_off');
     if(r[1]==='hr_error')e.setError(+r[8]!==0);
     if(r[1]==='check')results.push(e.result(ms));
   }
@@ -118,7 +118,7 @@ if (process.argv[2]) {
 console.log('Rest Lab synthetic, recorder cleanup, partial logging and replay checks passed.');
 
 // Execute the graph script against a small DOM/canvas adapter, using both CSV formats.
-async function checkGraph(rawText, outText) {
+async function checkGraph(rawText, outText, expectOff) {
   const cell = () => ({append: () => {}});
   const row = () => ({append: () => {}, insertCell: cell});
   const elements = {};
@@ -128,7 +128,11 @@ async function checkGraph(rawText, outText) {
   elements.raw.files = [{name:'test-raw.csv', text:async () => rawText}];
   elements.out.files = [{name:'test-out.csv', text:async () => outText}];
   const paint={};
-  elements.plot.getContext=()=>({fillRect(){paint[this.fillStyle]=(paint[this.fillStyle]||0)+1;},fillText(){}});
+  let replayOff=false;
+  elements.plot.getContext=()=>({fillRect(x,y,w,h){
+    paint[this.fillStyle]=(paint[this.fillStyle]||0)+1;
+    if(this.fillStyle==='#2a57b6'&&y===632&&h===5)replayOff=true;
+  },fillText(){}});
   const context = {document:{getElementById:id => elements[id],createElement:cell}};
   vm.createContext(context);
   for(const name of ['candidate.js','rest.js'])vm.runInContext(fs.readFileSync(path.join(dir,name),'utf8'),context);
@@ -137,6 +141,7 @@ async function checkGraph(rawText, outText) {
   vm.runInContext(script,context);
   await context.redraw();
   assert.equal(elements.plot.hidden,false,elements.status.textContent);
+  if(expectOff!==undefined)assert.equal(replayOff,expectOff);
   assert(elements.status.textContent.includes('判定枠'));
   const profileRow=rawText.split('\n').find(x=>x.includes(',profile,'));
   const profile=profileRow?JSON.parse(decodeURIComponent(profileRow.split(',')[2])):{};
@@ -147,6 +152,18 @@ async function checkGraph(rawText, outText) {
 }
 (async () => {
   await checkGraph(saved('-raw.csv'),saved('-out.csv'));
+  // Keep the same recording times and thermal measurements while removing any
+  // placement or pulse. Only a new-format confirmed optical probe may mark off.
+  const quiet=saved('-raw.csv').trim().split('\n').filter(s=>!s.includes(',hrm,')).map(s=>{
+    const r=s.split(',');
+    if(r[1]==='accel'){r[2]=0;r[3]=0;r[4]=1;}
+    return r.join(',');
+  }).join('\n');
+  const off=quiet.replace(/,probe,/g,',probe_off,');
+  assert.equal(replay(quiet).final.state,'wear_uncertain');
+  assert.equal(replay(off).final.state,'off_candidate');
+  await checkGraph(quiet,saved('-out.csv'),false);
+  await checkGraph(off,saved('-out.csv'),true);
   if(process.argv[2])
     await checkGraph(fs.readFileSync(process.argv[2],'utf8'),
       fs.readFileSync(process.argv[2].replace('-raw.csv','-out.csv'),'utf8'));

@@ -2,7 +2,7 @@
 (function(back){
   var Storage=require("Storage");
   // Read-only version display: title is not a selectable button.
-  var VERSION="0.119";
+  var VERSION="0.120";
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
   var REST_ACTIVITY_DEFAULTS=[0.1,3,60,200,500];
   // Bangle.js 2 has a 3-bit colour screen (8 actual dial colours).
@@ -816,7 +816,7 @@
     var hr=["Pending","Detected","Absent","Failed"];
     var reasons={
       thermal_warming:"Warming on surface",thermal_cooling:"Cooling on surface",thermal_pickup:"Pickup + temperature",
-      thermal_pending:"Checking change",wear_unconfirmed:"Wear uncertain",wear_history:"Wear held",
+      thermal_pending:"Checking change",optical_no_contact:"Optical no contact",wear_unconfirmed:"Wear uncertain",wear_history:"Wear held",
       sustained_pulse:"Pulse confirmed",window_motion:"Moving",accel_missing:"No accel",nonwear_disabled:"Disabled",
       motion:"Motion",pulse_detected_still:"Pulse+still",
       nonwear_hrm_failed:"HRM failed",hrm_retry_wait:"Retry wait",
@@ -857,6 +857,7 @@
     // Distinguish an HRM check that never started from a measurement with
     // low confidence or with no sensor events.
     m["Probe"]=readOnly(d&&d.lastProbeStatus?d.lastProbeStatus:"--");
+    m["Optical mode"]=readOnly(d&&d.lastOptical||"--");
     m["Probe tries"]=readOnly(d?d.probeCount||0:0);
     m["Charging"]=readOnly(d&&d.charging?"Yes":"No");
     if(d&&d.charging)m["Battery"]=readOnly(d.chargePercent+"%");

@@ -64,7 +64,7 @@ async function redraw() {
     if(!thermal && profile.restSleepGuard===undefined)profile.restSleepGuard=false;
     const trial=thermal?TenkyuRest.wearTracker(profile):RestLabCandidate.create(profile), comparison=[];
     const loggedTicks=thermal&&samples.some(r=>r[1]==="check");
-    const ordered=samples.filter(r=>["accel","hrm","charging","temperature","probe","hr_error","check"].includes(r[1])).sort((a,b)=>+a[0]-b[0]);
+    const ordered=samples.filter(r=>["accel","hrm","charging","temperature","probe","probe_off","hr_error","check"].includes(r[1])).sort((a,b)=>+a[0]-b[0]);
     let nextAccel=0;
     let next=ordered.length?Math.ceil(+ordered[0][0]/10000)*10000:0;
     ordered.forEach(r=>{
@@ -78,7 +78,7 @@ async function redraw() {
       if(r[1]==="charging")trial.setCharging(!!(+r[2]),ms);
       if(thermal){
         if(r[1]==="temperature" && r[7])trial.temperature(+r[7],ms);
-        if(r[1]==="probe")trial.probeDone(+r[8],ms);
+        if(r[1]==="probe"||r[1]==="probe_off")trial.probeDone(+r[8],ms,r[1]==="probe_off");
         if(r[1]==="hr_error")trial.setError(+r[8]!==0);
         if(r[1]==="check")comparison.push(trial.result(ms));
       }

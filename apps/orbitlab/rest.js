@@ -89,7 +89,7 @@ function wearTracker(profile,memory) {
   var trend=temperatureTrend(cfg.tempDelta),stamps=new Uint32Array(60),data=new Float32Array(240),
     hrStamps=new Uint32Array(60),hrGood=new Uint8Array(60),sec=-1,n=0,sx,sy,sz,sq,first,last,
     charging=false,powerError=false,cached,at=-1,movingFrom=-1,lastMotion=-1,briefMotion=-1,settled=false,
-    probeStart=-1,probeEnd=-1,known="",offReason="",seen=-1,ignoreUntil=0;
+    probeStart=-1,probeEnd=-1,probeNoContact=false,lastReliable=-1,known="",offReason="",seen=-1,ignoreUntil=0;
   if(memory&&memory.version===1) {
     if(memory.known==="worn"||memory.known==="off")known=memory.known;
     offReason=String(memory.offReason||"");seen=+memory.seen;ignoreUntil=+memory.ignoreUntil||0;charging=!!memory.charging;
@@ -97,7 +97,7 @@ function wearTracker(profile,memory) {
   }
   function clearWindows(){
     stamps.fill(0);hrStamps.fill(0);sec=-1;n=0;cached=undefined;at=-1;
-    movingFrom=lastMotion=briefMotion=probeStart=probeEnd=-1;settled=false;
+    movingFrom=lastMotion=briefMotion=probeStart=probeEnd=lastReliable=-1;probeNoContact=false;settled=false;
   }
   function advance(ms){
     var next=Math.floor(ms/1000);
@@ -131,6 +131,7 @@ function wearTracker(profile,memory) {
     if(!h||!isFinite(h.bpm)||!isFinite(h.confidence)||!isFinite(ms))return;
     advance(ms);var i=sec%60;hrStamps[i]=sec+1;
     hrGood[i]=h.bpm>0&&h.confidence>cfg.confidence?1:0;
+    if(hrGood[i])lastReliable=ms;
   }
   function pose(count,x,y,z,q){
     return count?Math.sqrt(Math.max(0,q/count-(x*x+y*y+z*z)/(count*count))):0;
@@ -208,6 +209,10 @@ function wearTracker(profile,memory) {
           (afterGood===0||(afterHR>=20&&afterGood<=cfg.absentRatio*afterHR))){
         known="off";state="off_candidate";offReason=reason=phase.sign>0?"thermal_warming":"thermal_cooling";
         trend.changed();phase=undefined;
+      }else if(!known&&still&&shortStill&&!powerError&&probeNoContact&&ms===probeEnd&&
+          (lastReliable<0||lastReliable<Math.min(probeStart,ms-60000))){
+        known="off";state="off_candidate";offReason=reason="optical_no_contact";
+        trend.changed();phase=undefined;
       }else if(known==="off"&&(shortValid||ignoreUntil>ms&&ignoreUntil-ms>580000)&&(movingFrom<0||ms-movingFrom<30000)){
         state="off_candidate";reason="nonwear_held_window";
       }else if(!shortValid||count<54){state="insufficient";reason="accel_missing";}
@@ -228,7 +233,11 @@ function wearTracker(profile,memory) {
   }
   return {sample:sample,hrm:hrm,result:result,config:cfg,
     temperature:function(c,ms){if(!charging&&trend.add(c,ms)){cached=undefined;return true;}return false;},
-    probeDone:function(start,end){if(!charging&&start>=0&&end-start>=30000){probeStart=start;probeEnd=end;cached=undefined;}},
+    probeDone:function(start,end,noContact){
+      if(!charging&&start>=0&&end-start>=30000){
+        probeStart=start;probeEnd=end;probeNoContact=noContact===true;cached=undefined;
+      }
+    },
     setError:function(v){powerError=!!v;cached=undefined;},
     memory:function(){return {version:1,known:known,offReason:known==="off"?offReason:undefined,seen:seen,ignoreUntil:ignoreUntil,charging:charging};},
     setCharging:function(v,ms){
@@ -561,7 +570,7 @@ function install(bangle,storage,events,clock,observe,hardware) {
   if(bangle.orbitRest)return bangle.orbitRest;
   var engine,enabled=false,settings,key,probe,timer,chargeTimer,nextProbeAt=0,
     nextBattery=0,nextSample=0,nextControl=0,failures=0,probeCount=0,lastStatus="Not started",lastAt=-1,
-    charging=false,chargePercent=0;
+    charging=false,chargePercent=0,lastOptical="";
   var HR_ID="orbitrest", generation=0, lastTempRequest=-Infinity, lastEpisode=-1, liveOff=false, lastEventTime=-1;
   hardware=hardware||bangle;
   function log(kind,value,ms){if(observe)observe(kind,value,ms);}
@@ -592,11 +601,11 @@ function install(bangle,storage,events,clock,observe,hardware) {
         debugFile=storage.open(name,"a");debugBytes=debugFile.getLength();debugDay=day;
       }
       var w=d&&d.window||{},bin=d||{},code=bin.result;
-      var values=[utc,event,"0.119",d?new Date(d.bucket*SLOT_MS).toISOString():"",
+      var values=[utc,event,"0.120",d?new Date(d.bucket*SLOT_MS).toISOString():"",
         bin.coverageSec,bin.activityCoverageSec,bin.activity,bin.activity300,bin.peaks,
         w.noiseG,w.driftG,w.stationary,w.shortStill,w.temperature,w.tempAt,w.tempRate,w.delta,
         w.hrSeconds,w.goodSeconds,bin.confidence,bin.wearSeconds,w.state,w.reason,
-        code,code<=100?stageFor(code):"",bin.reason,lastStatus];
+        code,code<=100?stageFor(code):"",bin.reason,lastStatus+(lastOptical?" / "+lastOptical:"")];
       var line=values.join(",")+","+debugProfile+"\n";
       if(!debugBytes)line="utc,event,version,bin_start_utc,coverage_s,activity_coverage_s,peak_sum_g,scaled_sum_g,peaks,noise_rms_g,pose_rms_g,still60,still10,case_c,temp_ms,rate_c_min,delta_c,hr_s,good_hr_s,max_conf_pct,off_s,window_state,window_reason,result_code,rest_level,result_reason,last_probe,peak_gate_g,T1,T2,T3,T4,T5,noise_limit_g,pose_limit_g,temp_limit_c,confidence_limit_pct,absent_ratio,probe_s,eco,wear_enabled,hold\n"+line;
       if(debugBytes+line.length>131072){debugStatus="Daily limit";return;}
@@ -630,6 +639,30 @@ function install(bangle,storage,events,clock,observe,hardware) {
     probe=undefined;
   }
   function stopCharge(){if(chargeTimer!==undefined){clearTimeout(chargeTimer);chargeTimer=undefined;}}
+  // Espruino libs/misc/hrm_vc31.c: native wear detection keeps proximity
+  // running and disables pulse sampling after it detects loss of contact.
+  function readOpticalMode(p){
+    try{
+      if(!bangle.isHRMOn()||!hardware.hrmRd||hardware.getOptions().hrmWearDetect!==true)return "unavailable";
+      if(p.chip===undefined)p.chip=hardware.hrmRd(0);
+      var vc31a=p.chip===0x11;
+      if(!vc31a&&p.chip!==0x21)return "unavailable";
+      var control=hardware.hrmRd(vc31a?0x20:0x10),runningWithProximity=vc31a?0xa0:0x84;
+      if(typeof control!=="number"||control!==Math.floor(control)||control<=0||control>=255||
+          (control&runningWithProximity)!==runningWithProximity)return "unavailable";
+      return (control&(vc31a?0x40:0x03))?"pulse mode":"no contact";
+    }catch(e){return "unavailable";}
+  }
+  function observeContact(p,now){
+    var mode=readOpticalMode(p);
+    if(mode==="no contact"){
+      if(p.offSince===undefined)p.offSince=now;
+      lastOptical="no contact "+Math.floor((now-p.offSince)/1000)+"s";
+    }else{
+      p.offSince=undefined;lastOptical=mode;
+    }
+    return p.offSince!==undefined&&now-p.offSince>=10000;
+  }
   function verdict(now) {
     var d=engine.getWear(now),bucket=Math.floor(now/SLOT_MS);
     if(d.state==="off_candidate")engine.absentPulse(bucket);
@@ -647,9 +680,12 @@ function install(bangle,storage,events,clock,observe,hardware) {
     if(!p||!enabled)return;
     var powered=true;
     try{if(bangle.isHRMOn)powered=!!bangle.isHRMOn();}catch(e){powered=false;}
+    var complete=powered&&now-p.at>=30000;
+    var noContact=complete&&observeContact(p,now);
+    if(!powered)lastOptical="unavailable";
     stopProbe();
-    if(powered&&now-p.at>=30000){
-      engine.probeDone(p.at,now);log("probe",p.at,now);
+    if(complete){
+      engine.probeDone(p.at,now,noContact);log(noContact?"probe_off":"probe",p.at,now);
     }else if(!powered){
       engine.setWearError(true);log("hr_error",1,now);
     }
@@ -663,7 +699,7 @@ function install(bangle,storage,events,clock,observe,hardware) {
     }
   }
   function beginProbe(now) {
-    probe={at:now,ownsPower:true,events:0};probeCount++;lastAt=now;lastStatus="Measuring";
+    probe={at:now,ownsPower:true,events:0};probeCount++;lastAt=now;lastStatus="Measuring";lastOptical="";
     // Reference-counted ID keeps the LED powered if another user finishes early.
     try{
       if(bangle.setHRMPower(1,HR_ID)===false)throw new Error("HRM unavailable");
@@ -704,7 +740,10 @@ function install(bangle,storage,events,clock,observe,hardware) {
       if(probe){lastStatus=d.reason;stopProbe();}
       return;
     }
-    if(!probe&&now>=nextProbeAt)beginProbe(now);
+    if(probe){
+      if(d.stationary&&d.shortStill)observeContact(probe,now);
+      else probe.offSince=undefined;
+    }else if(now>=nextProbeAt)beginProbe(now);
   }
   function onHRM(h) {
     if(!enabled||charging||!settings.restWearEnabled)return;
@@ -735,7 +774,7 @@ function install(bangle,storage,events,clock,observe,hardware) {
     if(enabled===on&&key===newKey){if(settings)settings.restDebug=s.restDebug;return;}
     generation++;stopProbe();stopCharge();
     if(enabled){bangle.removeListener("accel",onAccel);bangle.removeListener("HRM",onHRM);bangle.removeListener("charging",onCharging);persist();}
-    enabled=on;key=newKey;settings=s;
+    enabled=on;key=newKey;settings=s;lastOptical="";
     settings.restWearEnabled=s.restWearEnabled!==false;
     settings.restProbeSeconds=limit(s.restProbeSeconds,30,60,30);
     nextProbeAt=clock();nextBattery=0;nextSample=0;nextControl=0;failures=0;charging=false;
@@ -760,7 +799,7 @@ function install(bangle,storage,events,clock,observe,hardware) {
       var d=engine?engine.getDiagnostics():{disabled:true};
       if(engine)d.window=engine.getWear(clock());
       d.debugStatus=settings&&settings.restDebug===false?"Off":debugStatus;d.charging=charging;d.chargePercent=chargePercent;d.probeCount=probeCount;
-      d.lastProbeStatus=lastStatus;d.lastProbeAt=lastAt;d.sharedPulseCount=0;return d;
+      d.lastProbeStatus=lastStatus;d.lastOptical=lastOptical;d.lastProbeAt=lastAt;d.sharedPulseCount=0;return d;
     }};
   bangle.orbitRest=api;
   if(events)events.on("kill",function(){
