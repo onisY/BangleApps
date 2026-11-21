@@ -40,3 +40,4 @@ Pages rebuild after enabling Actions.
 0.116: Reduce duplicate work, pause peaks while unworn, calibrate default 5 Hz processing and crop charging redraws.
 0.117: Replace the time-of-day guard with motion, intermittent case-temperature trends and measured HR windows. Refresh the live non-wear marker on changes. Paint the header on the first frame, defer the calendar and recover the clock timer after render errors.
 0.118: Retry rest history on each full redraw and recognize brief placement movements between wear checks.
+0.119: Export independent bounded five-minute diagnostic CSV logs and protect unreadable history.

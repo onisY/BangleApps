@@ -2,7 +2,7 @@
 (function(back){
   var Storage=require("Storage");
   // Read-only version display: title is not a selectable button.
-  var VERSION="0.118";
+  var VERSION="0.119";
   var REST_THRESHOLDS=[0.001,0.003,0.009,0.027,0.081,0.243,0.729];
   var REST_ACTIVITY_DEFAULTS=[0.1,3,60,200,500];
   // Bangle.js 2 has a 3-bit colour screen (8 actual dial colours).
@@ -834,6 +834,7 @@
     }
     var m={"":{title:"Last check"},"< Back":function(){restMenu(s);}};
     if(!last)m["Status"]=readOnly("No 5-min bin");
+    m["Debug CSV"]=readOnly(d&&d.debugStatus||"--");
     m["Result"]=readOnly(!last?"--":last.result>=101&&last.result<=201?
       "Charge "+(last.result-101)+"%":last.result===254?"Unworn":
       last.result===253?"HRM failed":
@@ -977,6 +978,7 @@
         var cfg=re.restProfile(s,p);Object.keys(cfg).forEach(function(k){s[k]=cfg[k];});
         applyRest(s);E.showAlert("Profile imported","tenkyu").then(function(){restMenu(s);});
       },
+      "Debug CSV":{value:s.restDebug!==false,onchange:function(v){s.restDebug=!!v;applyRest(s);}},
       "Last check":function(){showRestDiagnostics(s);},
       "Draw timing":function(){showRenderDiagnostics(s);}
     });

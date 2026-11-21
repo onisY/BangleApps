@@ -378,7 +378,7 @@ function create(options){
     if(isFinite(confidence)&&confidence>=0)pulseConfidence=confidence;
   }
   function roll(ms){
-    var target=Math.floor(ms/SLOT_MS),changed=false;
+    var previous=current,target=Math.floor(ms/SLOT_MS),changed=false;
     if(target===current)return false;
     if(current>=0&&target>current){
 
@@ -413,7 +413,7 @@ function create(options){
     chargedThisBucket=charging?chargePercent:-1;
     // No persistent gap-failure flag: covered duration is authoritative.
     pulseState=HR_PENDING;pulseConfidence=-1;
-    if(changed&&save)save();
+    if(changed&&save)save(target>previous?diag[diag.length-1]:undefined);
     return changed;
   }
   function detectPeak(a,dt){
@@ -578,7 +578,50 @@ function install(bangle,storage,events,clock,observe,hardware) {
       },function(){});
     }catch(e){/* No usable temperature: retain the previous wear state. */}
   }
-  function persist(){if(engine)try{storage.writeJSON("orbit.rest.json",engine.snapshot());}catch(e){}}
+  var debugFile,debugDay,debugBytes,debugProfile,debugStatus="Ready",historyBlocked=false;
+  function debugRow(event,d) {
+    if(!settings||settings.restDebug===false||!storage.open)return;
+    try{
+      var ms=clock(),utc=new Date(ms).toISOString(),day=utc.slice(0,10);
+      var name="orbit-debug-"+day+".csv";
+      if(!debugFile||day!==debugDay){
+        var names=storage.list(/^orbit-debug-/, {sf:true}).filter(function(n){
+          return /^orbit-debug-[0-9]{4}-[0-9]{2}-[0-9]{2}\.csv$/.test(n)&&n!==name;
+        }).sort();
+        while(names.length>2)storage.open(names.shift(),"r").erase();
+        debugFile=storage.open(name,"a");debugBytes=debugFile.getLength();debugDay=day;
+      }
+      var w=d&&d.window||{},bin=d||{},code=bin.result;
+      var values=[utc,event,"0.119",d?new Date(d.bucket*SLOT_MS).toISOString():"",
+        bin.coverageSec,bin.activityCoverageSec,bin.activity,bin.activity300,bin.peaks,
+        w.noiseG,w.driftG,w.stationary,w.shortStill,w.temperature,w.tempAt,w.tempRate,w.delta,
+        w.hrSeconds,w.goodSeconds,bin.confidence,bin.wearSeconds,w.state,w.reason,
+        code,code<=100?stageFor(code):"",bin.reason,lastStatus];
+      var line=values.join(",")+","+debugProfile+"\n";
+      if(!debugBytes)line="utc,event,version,bin_start_utc,coverage_s,activity_coverage_s,peak_sum_g,scaled_sum_g,peaks,noise_rms_g,pose_rms_g,still60,still10,case_c,temp_ms,rate_c_min,delta_c,hr_s,good_hr_s,max_conf_pct,off_s,window_state,window_reason,result_code,rest_level,result_reason,last_probe,peak_gate_g,T1,T2,T3,T4,T5,noise_limit_g,pose_limit_g,temp_limit_c,confidence_limit_pct,absent_ratio,probe_s,eco,wear_enabled,hold\n"+line;
+      if(debugBytes+line.length>131072){debugStatus="Daily limit";return;}
+      if(storage.getFree()<69632){debugStatus="Low storage";return;}
+      debugFile.write(line);debugBytes+=line.length;debugStatus="Recording";
+    }catch(e){debugFile=undefined;debugStatus="Write failed";}
+  }
+  function readHistory(){
+    var name="orbit.rest.json";
+    function read(){try{return storage.readJSON(name,1);}catch(e){}}
+    function valid(h){return h&&h.v>=2&&h.v<=5&&isFinite(h.end)&&typeof h.levels==="string"&&h.levels.length===COUNT*2&&/^[0-9a-f]+$/i.test(h.levels);}
+    var h=read();
+    if(valid(h)){historyBlocked=false;return h;}
+    try{if(!historyBlocked&&h===undefined&&(!storage.read||storage.read(name,0,1)===undefined)){debugRow("history_new");return;}}catch(e){}
+    h=read();historyBlocked=!valid(h);
+    debugRow(historyBlocked?"history_read_failed":"history_read_recovered");
+    if(!historyBlocked)return h;
+  }
+  function persist(entry){
+    if(!engine)return;
+    var event=historyBlocked?"history_protected":"saved";
+    if(!historyBlocked)try{if(storage.writeJSON("orbit.rest.json",engine.snapshot())===false)event="history_write_failed";}
+    catch(e){event="history_write_failed";}
+    if(entry||event!=="saved")debugRow(event,entry);
+  }
   function battery(){try{return batteryPercent(events&&events.getBattery?events.getBattery():chargePercent);}catch(e){return 0;}}
   function isCharging(){try{return !!bangle.isCharging();}catch(e){return false;}}
   function stopProbe() {
@@ -689,7 +732,7 @@ function install(bangle,storage,events,clock,observe,hardware) {
     var original=storage.readJSON("orbit.json",1)||{};
     var s=migrateSettings(Object.assign({},original,input||{})),newKey=JSON.stringify(restProfile(s)),on=s.restEnabled!==false;
     if(original.restAlgorithmVersion!==4||original.restScaleVersion!==6||original.restPowerVersion!==1)try{storage.writeJSON("orbit.json",s);}catch(e){}
-    if(enabled===on&&key===newKey)return;
+    if(enabled===on&&key===newKey){if(settings)settings.restDebug=s.restDebug;return;}
     generation++;stopProbe();stopCharge();
     if(enabled){bangle.removeListener("accel",onAccel);bangle.removeListener("HRM",onHRM);bangle.removeListener("charging",onCharging);persist();}
     enabled=on;key=newKey;settings=s;
@@ -697,11 +740,15 @@ function install(bangle,storage,events,clock,observe,hardware) {
     settings.restProbeSeconds=limit(s.restProbeSeconds,30,60,30);
     nextProbeAt=clock();nextBattery=0;nextSample=0;nextControl=0;failures=0;charging=false;
     if(enabled) {
+      var profile=JSON.parse(newKey);
+      debugProfile=[profile.restThreshold,profile.restActivityT1,profile.restActivityT2,profile.restActivityT3,
+        profile.restActivityT4,profile.restActivityT5,profile.restWearNoiseG,profile.restWearDriftG,profile.restTempDeltaC,
+        profile.restPulseConfidence,profile.restAbsentRatio,profile.restProbeSeconds,profile.restEco,profile.restWearEnabled,profile.restWearHold].join(",");
       engine=create({thresholdG:s.restThreshold,
         activityThresholds:[s.restActivityT1,s.restActivityT2,s.restActivityT3,s.restActivityT4,s.restActivityT5],
         activityScale:s.restEco?1.65:1,wearThresholdG:s.restWearThreshold,wearEnabled:s.restWearEnabled,
         holdEnabled:s.restWearHold!==false,wearProfile:s,nowMs:clock(),
-        saved:storage.readJSON("orbit.rest.json",1),onCommit:persist});
+        saved:readHistory(),onCommit:persist});
       bangle.on("accel",onAccel);bangle.on("HRM",onHRM);bangle.on("charging",onCharging);
       onCharging(isCharging());
     }else engine=undefined;
@@ -712,7 +759,7 @@ function install(bangle,storage,events,clock,observe,hardware) {
     getDiagnostics:function(){
       var d=engine?engine.getDiagnostics():{disabled:true};
       if(engine)d.window=engine.getWear(clock());
-      d.charging=charging;d.chargePercent=chargePercent;d.probeCount=probeCount;
+      d.debugStatus=settings&&settings.restDebug===false?"Off":debugStatus;d.charging=charging;d.chargePercent=chargePercent;d.probeCount=probeCount;
       d.lastProbeStatus=lastStatus;d.lastProbeAt=lastAt;d.sharedPulseCount=0;return d;
     }};
   bangle.orbitRest=api;

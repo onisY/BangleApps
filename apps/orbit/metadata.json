@@ -2,7 +2,7 @@
   "id": "orbit",
   "name": "tenkyu",
   "shortName": "tenkyu",
-  "version": "0.118",
+  "version": "0.119",
   "author": "onisY",
   "description": "Sun-Earth-Moon clock with solar eclipses, motion, pulse and case-temperature wear detection, battery-level charging bars and HRM probe-retry diagnostics.",
   "icon": "app.png",
@@ -99,6 +99,11 @@
     },
     {
       "wildcard": "orbit-????-??-??-*.bmp"
+    },
+    {
+      "wildcard": "orbit-debug-*.csv",
+      "storageFile": true
     }
-  ]
+  ],
+  "interface": "interface.html"
 }

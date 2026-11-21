@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ja"><meta charset="utf-8"><link rel="stylesheet" href="../../css/spectre.min.css">
+<h3>安静判定の診断ログ</h3><div id="files">時計のログを確認中…</div>
+<script src="../../core/lib/interface.js"></script>
+<script>
+function onInit(){
+  const box=document.getElementById("files");
+  Puck.eval('require("Storage").list(/^orbit-debug-/, {sf:true})',function(names){
+    if(!Array.isArray(names)){box.textContent="時計に接続して開き直してください。";return;}
+    names=names.filter(n=>/^orbit-debug-\d{4}-\d{2}-\d{2}\.csv$/.test(n)).sort().reverse();
+    box.textContent=names.length?"":"保存済みのログはありません。";
+    names.forEach(function(name){
+      const button=document.createElement("button");
+      button.className="btn";button.textContent=name+" を保存";
+      button.onclick=function(){Util.readStorageFile(name,function(data){
+        if(data)Util.saveFile(name,"text/csv",data);
+      });};
+      box.appendChild(button);
+    });
+  });
+}
+</script></html>
