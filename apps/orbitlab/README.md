@@ -1,4 +1,4 @@
-# tenkyu Rest Lab v0.07
+# tenkyu Rest Lab v0.08
 
 Bangle.js 2の独立診断アプリです。[自用App Loader](https://onisy.github.io/BangleApps/?id=orbitlab&dev_id=BANGLEJS2)からインストールできます。tenkyu v0.117と同じ安静・非装着判定を使います。
 

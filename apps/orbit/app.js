@@ -1,4 +1,4 @@
-/* tenkyu 0.117 (orbit storage) */
+/* tenkyu 0.118 (orbit storage) */
 (function(){
   var W=g.getWidth(),H=g.getHeight();
   var Storage=require("Storage"),CFGFILE="orbit.json";
@@ -87,9 +87,9 @@
   var captureDay,captureSun,captureAttempt=0;
   var REST_ENABLED=cfg.restEnabled!==false;
   var REST_MAX_HEIGHT=Math.max(1,Math.min(14,isFinite(cfg.restBarHeight)?cfg.restBarHeight|0:10));
-  var restService;
+  var restService,restRetry=false;
   var busy=false,killed=false,minuteTimer,idleTimer,tapTimer,transitionTimer;
-  var renderTimer,renderGeneration=0,earthCacheReady=false,moonCacheReady=false,restReady=false;
+  var renderTimer,renderGeneration=0,earthCacheReady=false,moonCacheReady=false;
   // Volatile, low-overhead profiler: no flash writes and no extra redraws.
   // Date.now() has 1 ms resolution; values below 1 ms round to zero.
   var perf={full:{},staged:{},restParts:{},count:0};
@@ -972,11 +972,15 @@
   }
   // Diagnostic comparison is run on demand, never during routine redraw.
   function drawRest(sol){
-    if(!restService||selectedDayOffset!==0)return;
-    try{drawRestHistory(sol);}catch(e){perf.restError=String(e);restService=undefined;}
+    if(!REST_ENABLED||selectedDayOffset!==0)return;
+    restRetry=false;
+    if(!restService)initRest();
+    if(!restService){restRetry=true;return;}
+    try{drawRestHistory(sol);}catch(e){restRetry=true;perf.restError=String(e);}
   }
   function drawRestHistory(sol){
-    var now=Date.now();restService.sync(now);
+    var now=Date.now();
+    try{restService.sync(now);}catch(e){restRetry=true;perf.restSyncError=String(e);}
     var args={nowMs:now,radiusPx:MOONORBIT,
       maxHeightPx:REST_MAX_HEIGHT,cx:EARTHX,cy:EARTHY,south:VIEW_SOUTH,
       currentAngleRad:SUNANG+(VIEW_SOUTH?sol.ha:-sol.ha),
@@ -1061,7 +1065,6 @@
           timed(perf.staged,"dial",function(){drawOrbitHours(sol);});
         }else{
           // Final pass restores the widget/header area below.
-          if(!restReady){initRest();restReady=true;}
           // The yellow/green observer zenith line stays beneath rest history.
           drawObserver(sol);
           rememberChargeBackground(sol,moon);
@@ -1126,7 +1129,6 @@
     // completed; build any missing caches only in that exceptional path.
     if(!earthCacheReady){earthCacheReady=true;}
     if(!moonCacheReady){buildMoonCache();moonCacheReady=true;}
-    if(!restReady){initRest();restReady=true;}
     TIMEBOX=undefined;
     eclipseActive=updateEclipse();
     lastClockMinute=Math.floor(Date.now()/60000);
@@ -1398,7 +1400,7 @@
           if(ECLIPSE_ENABLED&&Date.now()>=nextEclipseCheck)eclipseActive=updateEclipse();
           /* Rebuild Earth when shadow moves/disappears: no accumulated black trail.
              Far from eclipse, keep the original five-minute base refresh. */
-          if(wasActive||eclipseActive||Math.floor(Date.now()/300000)!==lastBaseBucket||
+          if(restRetry||wasActive||eclipseActive||Math.floor(Date.now()/300000)!==lastBaseBucket||
              (safeSolar().el>=0)!==lastObserverDay)drawBase();
           else if(REST_ENABLED&&Bangle.isCharging&&Bangle.isCharging()){
             if(!drawChargeOnly())drawBase();

@@ -139,7 +139,7 @@ function appHarness(enabled,iso,options={}){
 const brokenRest=appHarness(false,"2026-03-20T03:00:00Z",{rest:{
   sync(){throw new Error("test recorder failure");}
 }});
-assert(/test recorder failure/.test(brokenRest.perf.restError));
+assert(/test recorder failure/.test(brokenRest.perf.restSyncError));
 const minuteEntry=[...brokenRest.timers].find(([,t])=>t.ms>59000);
 brokenRest.timers.delete(minuteEntry[0]);
 brokenRest.advance(60000);
@@ -147,6 +147,33 @@ const afterStartup=brokenRest.log.length;
 minuteEntry[1].f();
 assert(brokenRest.log.slice(afterStartup).some(x=>x.op==="drawString"&&x.args[0].endsWith(":1")));
 assert([...brokenRest.timers.values()].some(t=>t.ms>59000));
+// One failed full redraw at 08:30 must not detach the overnight history.
+const restModule=require("./rest.js");
+const at0825=Date.parse("2026-11-21T08:25:00+09:00"),slot=300000;
+const history=restModule.create({nowMs:at0825,wearEnabled:true,
+  saved:{v:5,end:at0825/slot-1,levels:"ff".repeat(168)+"64fe".repeat(60)}});
+let frames=0;
+const morningHistory=appHarness(false,new Date(at0825).toISOString(),{rest:{
+  sync(ms){history.sync(ms);},
+  draw(g,args){
+    if(++frames===2)throw Error("injected 08:30 render fault");
+    restModule.draw(g,history,args);
+  }
+}});
+function countRestPoints(start){
+  return morningHistory.log.slice(start).filter(x=>x.op==="setPixel"&&x.color===65535).length;
+}
+const whiteBefore=countRestPoints(0);
+assert(whiteBefore>=120);
+for(let i=0;i<2;i++){
+  const [id,timer]=[...morningHistory.timers].find(([,t])=>t.ms>59000);
+  morningHistory.timers.delete(id);morningHistory.advance(i===0?slot:60000);
+  const from=morningHistory.log.length;
+  timer.f();
+  if(i===1)assert(countRestPoints(from)>=120,"overnight non-wear dots return at 08:31");
+}
+assert.equal(frames,3);
+assert(morningHistory.perf.restParts.bars>=120,"ordinary overnight bars and non-wear history recovered");
 // Tokyo geometric events on March 20, with the test watch running in UTC.
 const tokyo={lat:35.69,lon:139.75};
 const morning="2026-03-19T20:53:00Z",evening="2026-03-20T08:50:00Z";

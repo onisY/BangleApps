@@ -580,9 +580,3 @@
       text-shadow: none;
       animation: blink_webcam 1s step-end 0s infinite;
     }
-
-/* The thermal tenkyu build replaces a published clock with the same version.
-   Expose its standard single-app Update action when tenkyu is installed. */
-.pill-container:has(> button[appid="orbit"][title="Remove App"]:not(.d-hide)) > button[appid="orbit"][title="Update App"].d-hide {
-  display: inline-block !important;
-}

@@ -79,6 +79,15 @@ for(const hour of [0,12])for(const sign of [-1,1]){
   assert.equal(sim.run(500).state,"off_candidate");
   assert.equal(sim.marks.filter(m=>!m[1]).length,0);
 }
+// A quick flip onto the desk exactly between consecutive control windows.
+for(const heat of [-1,0,1]){
+  const sim=device();
+  sim.signal(t=>({x:0,y:0,z:t<140?1:-1}),
+    t=>30+heat*Math.min(2,Math.max(0,t-140)*0.01),t=>t<140);
+  const result=sim.run(450);
+  assert.equal(result.state,heat?"off_candidate":"wear_held");
+  assert.equal(sim.marks.some(m=>m[1]),!!heat);
+}
 // A small initial response can become measurable after the high-rate burst.
 const slow=scenario(-1,{},0.0007);
 assert.notEqual(slow.run(270).state,"off_candidate");

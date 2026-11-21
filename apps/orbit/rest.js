@@ -88,7 +88,7 @@ function wearTracker(profile,memory) {
   var cfg=wearThresholds(profile);
   var trend=temperatureTrend(cfg.tempDelta),stamps=new Uint32Array(60),data=new Float32Array(240),
     hrStamps=new Uint32Array(60),hrGood=new Uint8Array(60),sec=-1,n=0,sx,sy,sz,sq,first,last,
-    charging=false,powerError=false,cached,at=-1,movingFrom=-1,lastMotion=-1,settled=false,
+    charging=false,powerError=false,cached,at=-1,movingFrom=-1,lastMotion=-1,briefMotion=-1,settled=false,
     probeStart=-1,probeEnd=-1,known="",offReason="",seen=-1,ignoreUntil=0;
   if(memory&&memory.version===1) {
     if(memory.known==="worn"||memory.known==="off")known=memory.known;
@@ -97,7 +97,7 @@ function wearTracker(profile,memory) {
   }
   function clearWindows(){
     stamps.fill(0);hrStamps.fill(0);sec=-1;n=0;cached=undefined;at=-1;
-    movingFrom=lastMotion=probeStart=probeEnd=-1;settled=false;
+    movingFrom=lastMotion=briefMotion=probeStart=probeEnd=-1;settled=false;
   }
   function advance(ms){
     var next=Math.floor(ms/1000);
@@ -111,6 +111,12 @@ function wearTracker(profile,memory) {
     if(next===sec)return;
     if(sec>=0&&n>=3&&last-first>=500){
       var i=sec%60,k=i*4,x=sx/n,y=sy/n,z=sz/n;
+      // A short lift or flip can fall entirely between two ten-second checks.
+      var prev=((sec+59)%60)*4;
+      if(stamps[prev/4]===sec){
+        var dx=x-data[prev],dy=y-data[prev+1],dz=z-data[prev+2];
+        if(dx*dx+dy*dy+dz*dz>0.0225)briefMotion=sec*1000;
+      }
       stamps[i]=sec+1;data[k]=x;data[k+1]=y;data[k+2]=z;
       data[k+3]=Math.sqrt(Math.max(0,sq/n-x*x-y*y-z*z));
     }
@@ -162,6 +168,11 @@ function wearTracker(profile,memory) {
     var state="insufficient",reason="accel_missing",needsProbe=false, fast=false;
     if(charging){state="charging";reason="charging";}
     else {
+      if(shortStill&&settled&&known!=="off"&&briefMotion>=0&&ms-briefMotion<=10000){
+        lastMotion=movingFrom=briefMotion;
+        settled=false;
+      }
+      briefMotion=-1;
       if(shortValid&&!shortStill){
         if(movingFrom<0)movingFrom=ms;
         lastMotion=ms;
